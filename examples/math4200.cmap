@@ -1,5 +1,5 @@
 # MATH 4200 Exam 2 concept map (cyclic groups, permutations, cosets, isomorphisms).
-title MATH 4200 Exam 2
+title "MATH 4200 Exam 2"
 root core
 
 node core "Groups"
@@ -179,26 +179,26 @@ node cayley "Cayley's Theorem"
 | Every group ≅ a group of
 | permutations, via g ↦ (x ↦ gx).
 
-edge core -> num sub cyc perm cos iso
-edge num -> divalg zn
-edge divalg -> bezout
-edge zn -> phi
-edge bezout -> primes
-edge sub -> tests basic normal
-edge tests -> gen inter
-edge cyc -> elord abel roots
-edge elord -> gens ftcg
-edge perm -> sn dih
-edge sn -> parity count
-edge parity -> an
-edge cos -> cosets
-edge cosets -> crit lagr
-edge lagr -> corr euler conv
-edge iso -> isodef prod
-edge isodef -> invar classif cayley
-edge prod -> units
+core -> num sub cyc perm cos iso
+num -> divalg zn
+divalg -> bezout
+zn -> phi
+bezout -> primes
+sub -> tests basic normal
+tests -> gen inter
+cyc -> elord abel roots
+elord -> gens ftcg
+perm -> sn dih
+sn -> parity count
+parity -> an
+cos -> cosets
+cosets -> crit lagr
+lagr -> corr euler conv
+iso -> isodef prod
+isodef -> invar classif cayley
+prod -> units
 
-link gen -> elord "cyclic case"
-link corr -> classif "|G| = p"
-link conv -> an "counterexample"
-link zn -> units "structure"
+gen ..> elord "cyclic case"
+corr ..> classif "|G| = p"
+conv ..> an "counterexample"
+zn ..> units "structure"

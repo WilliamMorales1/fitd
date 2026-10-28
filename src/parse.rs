@@ -157,19 +157,13 @@ impl Parser<'_> {
         }
         let kw = self.name("a statement")?;
         Ok(match kw.text.as_str() {
-            "title" => {
-                if let Tok::Str(s) = self.peek().clone() {
+            "title" => match self.peek().clone() {
+                Tok::Str(s) => {
                     self.bump();
                     StmtKind::Title(s)
-                } else {
-                    let lo = self.span().lo;
-                    let mut hi = lo;
-                    while !self.at_end() {
-                        hi = self.bump().span.hi;
-                    }
-                    StmtKind::Title(self.text[lo..hi].to_string())
                 }
-            }
+                _ => return Err(self.unexpected("a quoted title")),
+            },
             "root" => StmtKind::Root(self.name("a node name")?),
             "layout" => StmtKind::Layout { kind: self.name("a layout like `radial`")?, attrs: self.attrs()? },
             "page" => {
@@ -201,10 +195,6 @@ impl Parser<'_> {
                 }
                 StmtKind::Node { id, title, classes, attrs }
             }
-            "edge" | "link" => match self.edge()? {
-                StmtKind::Edge { from, to, label, .. } => StmtKind::Edge { from, link: kw.text == "link", to, label },
-                _ => unreachable!(),
-            },
             "require" | "prefer" => StmtKind::Constraint { hard: kw.text == "require", rel: self.rel()?, attrs: self.attrs()? },
             _ => {
                 let d = Diag::error("E0002", format!("unknown statement `{}`", kw.text)).primary(kw.span, "not a statement");
@@ -247,7 +237,7 @@ mod tests {
 
     #[test]
     fn parses_every_statement() {
-        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em\nstyle hub shape=circle\nnode a \"A\" .hub color=#123456\n| body\na -> b, c \"why\"\nedge a -> b c\nlink a -> b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\n";
+        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em\nstyle hub shape=circle\nnode a \"A\" .hub color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\n";
         let (stmts, errs) = parse(src);
         assert!(errs.is_empty(), "{:?}", errs.iter().map(|d| &d.msg).collect::<Vec<_>>());
         assert_eq!(stmts.len(), 13);

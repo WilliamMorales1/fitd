@@ -2,17 +2,16 @@
 
 ## Status (2026-10-28)
 
-Done: the language front end (lexer, parser with recovery, two-pass semantic analysis, typed units, static contradiction check), the generic CSP engine (BT/CBJ/FC/FC-CBJ/MAC, dom and dom/wdeg, branch and bound, min-conflicts), `require`/`prefer` constraints, the layered strategy, QuickXplain unsat cores, and `cmapc bench`. See `LANGUAGE.md` and `SOLVER.md`.
+Priority is real use: anything kept only for demonstration is removed.
 
-Next candidates:
+Done: language front end, FC-CBJ engine with spatial-index pruning and branch and bound, `require`/`prefer`, radial and layered strategies, QuickXplain unsat cores. Tried and removed because they did not help real diagrams: alternative search algorithms (BT, MAC, dom/wdeg ordering, nogood learning, restarts, min-conflicts) and the `bench` command; see git history (commit d474132) for code and measurements.
 
-- **Labels as variables.** Edge labels are placed after solving (slid along the edge to clear boxes). Making their positions CSP variables would let `Apart` cover them.
-- ~~**Nogood learning.**~~ Done (`+learn`, `+restart`); see `SOLVER.md`. Reuse across font probes is unsound because candidate sets change with the font. It wins on coloring and loses on pigeonhole and on diagrams, where conflict sets are too wide to store.
-- **Global propagators.** FC on `Apart` checks every candidate one by one. A propagator over candidates sorted by x could skip whole runs of them. The learning results suggest this is where diagram speed is.
-- **Language:** `group` blocks (a box around nodes, a containment constraint), edge styles, and `prefer` on layout-wide objectives (for example `prefer few crossings weight=3`).
-- **LSP / watch mode** for live diagnostics.
+Next:
 
-The core idea is general. Content is measured exactly, placed by a constraint solver that maximizes readability on a fixed canvas, and verified by an independent checker before output. Concept maps are one *layout strategy* over that core.
+- **Speed.** About 4 s for a 39-node map. Fewer font probes (start the binary search from a size estimate), and cheaper `Clear`/`NoCross` pruning.
+- **Labels as variables**, so edge labels never collide.
+- **Groups**: `group` blocks with a containment constraint.
+- **Watch mode** for live diagnostics.
 
 ## 1. Split the core from the strategy
 

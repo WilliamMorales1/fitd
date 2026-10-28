@@ -1,41 +1,20 @@
 # Solver
 
-Layout is a finite-domain CSP. `src/csp.rs` is a generic solver that knows nothing about diagrams; `src/layout.rs` turns a diagram into a `csp::Problem`.
+Layout is a finite-domain CSP. `src/csp.rs` is a small solver that knows nothing about diagrams; `src/layout.rs` turns a diagram into a `csp::Problem`.
 
-## The engine
+## Engine
 
-A problem has variables `0..n`, each with domain `0..k` in preference order, and constraints given as a scope (any arity) plus a predicate. A constraint is hard (weight 0) or soft (weight > 0).
+Variables `0..n` are assigned in order; each has domain `0..k` in preference order. Constraints have any arity and are hard (weight 0) or soft (weight > 0).
 
-Search is recursive labeling with three independent knobs, selected by `--algo`:
+- **Forward checking.** After each assignment, every hard constraint left with one unassigned variable prunes that variable's domain. A problem may supply `filter` to do this faster than one check per value.
+- **Conflict-directed backjumping** (Prosser 1993). Each prune records which assigned variables caused it. When a domain empties, search backs up straight to the deepest variable responsible instead of the previous one.
+- **Branch and bound** for `prefer`. After the font is fixed, search continues past the first solution, minimizing the total weight of unmet soft constraints until it proves optimality or the budget runs out (then it keeps the best found).
 
-| Knob | Options |
-|---|---|
-| Lookahead | none (`bt`, `cbj`); forward checking (`fc`), which prunes a variable once it is the last unassigned one in some scope, so n-ary constraints propagate; MAC (`mac`), which also maintains arc consistency over binary constraints between unassigned variables (AC-3 queue). |
-| Lookback | chronological, or conflict-directed backjumping (`-cbj`, Prosser 1993). With lookahead this is FC-CBJ: every prune records its culprits, and a wipeout adds the wiped variable's culprits to the current conflict set. |
-| Variable order | static (strategy order), `+dom` (smallest live domain), `+wdeg` (domain over weighted degree, Boussemart et al. 2004; a constraint's weight grows each time it fails or wipes out a domain). |
-| Learning | `+learn` (nogood recording), `+restart` (restarts with nogoods). Needs a `-cbj` base. |
-
-Conflict sets are bitsets. A failure returns the set of assigned variables that caused it; each level either jumps past itself (its variable is not in the set) or merges the set into its own and tries its next value. Chronological search uses the same code with the conflict set "everything assigned", so it always stops at the parent.
-
-**Branch and bound** (`csp::optimize`) adds soft constraints. Lookahead ignores them. When a soft constraint becomes fully assigned and fails, its weight is added to the path cost; a path whose cost already reaches the best solution's cost fails with conflict set "everything assigned", which keeps backjumping sound. Each solution tightens the bound; the search is anytime and returns the best solution found when its budget runs out.
-
-**Nogood learning** (`+learn`, Dechter 1990). When a variable runs out of values, its conflict set C is a proof that the current values of C cannot all hold, so the partial assignment `{v = val[v] : v in C}` is recorded as a nogood. Nogoods are indexed by literal: assigning `x = a` visits only nogoods containing `x = a`. A fully matched nogood is a conflict (culprits: its variables); under lookahead, a nogood with one unassigned literal prunes that value, and the prune is explained like any other. Nogoods longer than 10 literals are not stored. Learning requires a `-cbj` base, since chronological search has no conflict sets, only the whole path; `bt+learn` would record useless full-path nogoods and pay to check them.
-
-**Restarts** (`+restart`, implies learning). After a cutoff of failures (100, growing by 1.5x), search unwinds and starts over, keeping nogoods and wdeg weights. Learned nogoods stop the restarted search from re-entering refuted subtrees, and the growing cutoff keeps search complete.
-
-**Min-conflicts** (Minton et al. 1992) is local search: start from the preferred values and repeatedly move a variable in a violated constraint to its least-conflicting value, with 10% random walk.
-
-Budgets count constraint checks, so the same input gives the same output on any machine.
+Budgets count constraint checks, so the same input gives the same output on any machine. `--budget` raises it when a large diagram stops short of the font it could reach.
 
 ## Diagrams as CSPs
 
-A strategy (`radial.rs`, `layered.rs`) measures every box at the trial font and proposes:
-
-- candidate centers per node, ordered by a preference cost (the value ordering);
-- structural constraints over nodes;
-- the edges to draw.
-
-`layout.rs` adds the user's `require`/`prefer` constraints and hands the result to the engine.
+A strategy (`radial.rs`, `layered.rs`) measures every box at the trial font and proposes candidate centers per node (ordered by preference), structural constraints, and the edges to draw. `layout.rs` adds the user's `require`/`prefer` constraints.
 
 | Constraint | Arity | Where |
 |---|---|---|
@@ -43,98 +22,32 @@ A strategy (`radial.rs`, `layered.rs`) measures every box at the trial font and 
 | `Outward`: child farther out than parent | 2 | radial tree edges |
 | `Clear`: edge misses a third box | 3 | every straight edge and every other node in range |
 | `NoCross`: two edges do not cross | 4 | hard (radial tree), soft weight 1 (layered) |
-| user `Rel` | k | one constraint per `require`/`prefer` |
-| user `Aligned` | 2 | hard alignments split into pairs, which propagate better |
+| user relation | k | one per `require`/`prefer`; hard alignments split into pairs |
 
-**Radial.** Variables in BFS order. A node's candidates are (angle, radius) points on stretched polar rays inside its wedge (sized by leaf count) plus up to ±30° of nudging, about 3000 per node. Cost is distance from an ideal ring for its depth plus an angle penalty.
+**Radial.** Nodes in BFS order. Candidates are points on stretched polar rays inside the node's wedge (sized by leaf count) plus up to ±30° of nudging, about 3000 per node. Preference: distance from an ideal ring for the node's depth, plus an angle penalty.
 
-**Layered.** Sugiyama's pipeline with the final step replaced: DFS back edges are excluded from layering; longest-path layering; eight barycenter sweeps order each layer. The order only sets value preference. Candidates are cross-axis positions on one grid shared by all nodes (so centers can line up exactly), about 200 per node. Crossings are soft, so after the font is fixed branch and bound minimizes them along with user preferences.
+**Layered.** Back edges found by DFS are left out of layering and drawn as links; longest-path layering; barycenter sweeps order each layer, which only sets preference. Candidates are positions on one grid shared by all nodes, so centers can line up exactly. Crossings are soft.
 
-**Outer search.** Binary search on the body font: each probe is one CSP. Then branch and bound at the best font with a quarter of the budget.
+**Fast pruning.** Every candidate of a node has the same box, so "this candidate's box meets region R" is "its center lies in R grown by half the box", a range query. Each variable's candidates are bucketed in a grid, and `Apart` and `Clear` (when the box is the open variable) prune through it. On the MATH 4200 map this makes the same search 40% cheaper; a full build drops from 7.0 s to 4.1 s.
 
-**Unsat cores.** If the smallest font fails, the solver checks whether it still fails with no user constraints (then the page is simply too small). Otherwise QuickXplain (Junker 2004) finds a minimal subset of `require` constraints that is infeasible, using "probe at the minimum font" as the oracle. A core of size k among n constraints takes O(k log(n/k)) probes. Budget exhaustion counts as infeasible, so minimality is relative to the budget.
+## Outer search
 
-```
-error[E0110]: these 2 constraints cannot all hold at 7pt on this page
-  --> core.cmap:11:1
-   |
-11 | require c at left
-   | ^^^^^^^^^^^^^^^^^
-   ...
-13 | require b left-of c gap=20em
-   | ----------------------------
-   |
-   = note: drop any one of them and the rest can be satisfied (within the search budget)
-```
+1. Binary search on the body font; each probe is one CSP with every `require`.
+2. At the best font, branch and bound over `prefer` constraints and soft crossings with a quarter of the budget.
+3. If even `--min-font` fails: probe again without user constraints. If that also fails, the page is too small. Otherwise QuickXplain (Junker 2004) finds a minimal set of `require`s that cannot hold together (E0110), in O(k log(n/k)) probes for a core of k out of n. Running out of budget counts as failure, so minimality is relative to the budget.
 
-**Verification.** `check.rs` recomputes overlaps, edge clearance, crossings, page bounds, text fit, and every user constraint from the finished layout. Any error stops output. User relations share one predicate (`layout::relation_holds`) between solver and checker; geometry checks are written separately.
+## Checking
 
-## Benchmarks
+`check.rs` recomputes overlaps, edge clearance, crossings, page bounds, text fit, and every user constraint from the finished layout; any error stops output. User relations share one predicate (`layout::relation_holds`) with the solver; the geometric checks are written separately.
 
-`cmapc bench` (50M-check budget, i7-8650U, release build). Nodes are assignments tried.
+## When a build fails or the font is small
 
-| problem | algorithm | result | nodes | checks | ms |
-|---|---|---|---:|---:|---:|
-| queens-28 | bt | budget | 6012171 | 50000001 | 588 |
-| queens-28 | cbj | budget | 5984913 | 50000001 | 566 |
-| queens-28 | fc | sat | 2042129 | 48544537 | 2143 |
-| queens-28 | mac | budget | 65584 | 50000001 | 1973 |
-| queens-28 | fc+dom | sat | 28 | 5665 | 0.1 |
-| queens-28 | min-conflicts | sat | 43 | 46116 | 0.2 |
-| pigeons-8 | bt | unsat | 876808 | 3781240 | 71 |
-| pigeons-8 | cbj | unsat | 876808 | 3781240 | 68 |
-| pigeons-8 | fc | unsat | 109600 | 547912 | 31 |
-| pigeons-8 | mac | unsat | 69280 | 1481880 | 53 |
-| color-60x3 | bt | budget | 23738908 | 50000001 | 3299 |
-| color-60x3 | cbj | unsat | 17459789 | 36140529 | 1665 |
-| color-60x3 | fc | budget | 11260228 | 50000001 | 2998 |
-| color-60x3 | fc-cbj | unsat | 276404 | 1466749 | 88 |
-| color-60x3 | mac | unsat | 777 | 424848 | 11 |
-| color-60x3 | fc-cbj+wdeg | unsat | 115 | 1287 | 0.5 |
-
-- **Queens:** variable ordering dominates. With static order every method thrashes; `dom` solves 28-queens almost without backtracking.
-- **Pigeonhole:** every conflict involves every pigeon, so backjumping never skips a level (CBJ = BT). Lookahead cuts nodes 8x. All methods stay exponential, as theory says.
-- **3-coloring at the phase transition** (60 vertices, average degree 4.6, unsatisfiable): structure matters. CBJ beats BT, FC-CBJ beats both FC and CBJ by 40x or more, and dom/wdeg learns which constraints are hard, finishing in 115 nodes.
-
-Nogood learning, same budget:
-
-| problem | algorithm | result | nodes | checks | ms |
-|---|---|---|---:|---:|---:|
-| color-60x3 | fc-cbj | unsat | 276404 | 1466749 | 88 |
-| color-60x3 | fc-cbj+learn | unsat | 9428 | 575644 | 11 |
-| color-60x3 | fc-cbj+restart | unsat | 9465 | 583188 | 11 |
-| color-60x3 | fc-cbj+wdeg+restart | unsat | 112 | 1402 | 0.5 |
-| pigeons-8 | fc-cbj | unsat | 109600 | 547912 | 27 |
-| pigeons-8 | fc-cbj+learn | budget | 52139 | 50000001 | 344 |
-| queens-28 | fc-cbj+wdeg+restart | sat | 28 | 5665 | 0.2 |
-
-- **Coloring:** learning cuts FC-CBJ's nodes 29x and its time 8x; the refuted subproblems recur under different ancestors, which is exactly what nogoods catch. Indexing by literal rather than by variable cut the nogood-check overhead 2.5x.
-- **Pigeonhole:** learning makes it worse. Every pigeonhole refutation by resolution is exponential (Haken 1985), and nogood learning is a form of resolution, so nogoods never generalize; the store grows and checking it dominates.
-- **Restarts** add little over learning alone here, because static ordering replays the same path until a nogood cuts it. They matter with dom/wdeg, whose weights need several runs to settle.
-
-The diagram (`examples/math4200.cmap` on 2296x1524pt, 20M-check budget):
-
-| font | bt | cbj | fc | fc-cbj | mac | fc+dom | fc-cbj+wdeg |
-|---|---|---|---|---|---|---|---|
-| 18pt | sat, 14 ms | sat, 15 ms | sat, 64 ms | sat, 64 ms | budget | budget | sat, 265 ms |
-| 19.8pt | budget | budget | budget | **sat, 121 ms** | budget | budget | budget |
-
-- Far from the threshold, plain backtracking is fastest: checks are cheap and the value ordering is good.
-- At the threshold (the largest font that fits), only FC-CBJ finishes. That is why it is the default.
-- MAC never finishes: one arc revision between two ~3000-value domains is up to 9M checks. Arc consistency pays off for small domains (coloring), not dense geometric ones.
-- `dom` misleads: a geometric domain's size measures how much page room a node has, not how constrained it is.
-- Learning does not help diagrams. At 19.85pt, FC-CBJ fails roughly 87,000 times in 300M checks, yet only 214 conflict sets are short enough (10 literals or fewer) to store: one `Apart` or `Clear` constraint ties a node to almost every other node, so explanations are wide. Neither `+learn` nor `+restart` decides 19.85pt within 300M checks. Cheaper propagation (a sweep-line `Apart` propagator) looks like the better lever for geometry.
-- Difficulty spikes at the satisfiability threshold, the same phase-transition behavior as random CSPs: 19.8pt solves in 4.9M checks, 19.85pt exhausts 20M.
+- **E0110:** drop one listed constraint or make it `prefer`. In radial layout, branches stay within 30° of their wedge, so left/right relations between distant branches may be impossible; `layout layered` places nodes freely within layers.
+- **Page too small:** larger `page`, lower `font` minimum, or narrower `wrap`.
+- **Font lower than expected:** near the largest font that fits, search gets much harder; `--budget 100000000` sometimes finds a slightly larger font. Layered layouts of long chains are limited by the number of layers; try `dir=right` or `page ... portrait`.
 
 ## References
 
 - P. Prosser. Hybrid algorithms for the constraint satisfaction problem. *Computational Intelligence* 9(3), 1993.
-- D. Sabin, E. Freuder. Contradicting conventional wisdom in constraint satisfaction. ECAI 1994.
-- F. Boussemart, F. Hemery, C. Lecoutre, L. Sais. Boosting systematic search by weighting constraints. ECAI 2004.
-- S. Minton, M. Johnston, A. Philips, P. Laird. Minimizing conflicts: a heuristic repair method. *Artificial Intelligence* 58, 1992.
 - U. Junker. QuickXplain: preferred explanations and relaxations for over-constrained problems. AAAI 2004.
 - K. Sugiyama, S. Tagawa, M. Toda. Methods for visual understanding of hierarchical system structures. *IEEE SMC* 11(2), 1981.
-- R. Dechter. Enhancement schemes for constraint processing: backjumping, learning, and cutset decomposition. *Artificial Intelligence* 41(3), 1990.
-- C. Lecoutre, L. Sais, S. Tabary, V. Vidal. Recording and minimizing nogoods from restarts. *JSAT* 1, 2007.
-- A. Haken. The intractability of resolution. *Theoretical Computer Science* 39, 1985.
-- P. Cheeseman, B. Kanefsky, W. Taylor. Where the really hard problems are. IJCAI 1991.

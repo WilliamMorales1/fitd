@@ -11,7 +11,7 @@ use crate::layout::{Config, EdgeStyle, Layout, Shape, line_height, relation_hold
 use crate::metrics::Fonts;
 
 pub const EXPLAIN: &[(&str, &str)] = &[
-    ("E0001", "An edge, link, or `root` names a node id that is never declared with `node`."),
+    ("E0001", "An edge, constraint, or `root` names a node id that is never declared with `node`."),
     ("E0002", "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered`, `page`, `font`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"]`, `A ..> B`, `require REL`, `prefer REL [weight=N]`."),
     ("E0003", "Two `node` (or `style`) statements declare the same name."),
     ("E0004", "A node uses `.name` but no `style name` is declared."),

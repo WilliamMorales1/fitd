@@ -26,7 +26,7 @@ prefer emit at bottom-right
 
 ```ebnf
 file      = { [ stmt ] NEWLINE } EOF .
-stmt      = "title" ( STRING | { word } )
+stmt      = "title" STRING
           | "root" NAME
           | "layout" NAME { attr }
           | "page" value { NAME } { attr }
@@ -34,7 +34,7 @@ stmt      = "title" ( STRING | { word } )
           | "style" NAME { attr }
           | "node" NAME [ STRING ] { "." NAME | attr }
           | "|" REST_OF_LINE
-          | [ "edge" | "link" ] NAME edgeop targets [ STRING ]
+          | NAME edgeop targets [ STRING ]
           | ( "require" | "prefer" ) rel { attr } .
 edgeop    = "->" | "--" | "..>" | ".." .
 targets   = NAME { [ "," ] NAME } .
@@ -45,7 +45,7 @@ attr      = NAME "=" value .
 value     = NAME | STRING | NUMBER | COLOR .
 ```
 
-`NUMBER` is a digit run with an attached unit or size suffix (`12pt`, `2em`, `594x420mm`); semantic analysis gives it a type. The `edge`/`link` keyword forms and bare-word `title` exist so the original `.cmap` files still parse.
+`NUMBER` is a digit run with an attached unit or size suffix (`12pt`, `2em`, `594x420mm`); semantic analysis gives it a type.
 
 A statement that fails to parse is reported and skipped to the end of its line, so one typo never hides the errors after it.
 

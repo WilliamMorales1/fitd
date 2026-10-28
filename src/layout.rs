@@ -5,13 +5,14 @@
 //! on soft preferences. When even the smallest font fails, it extracts a minimal set of
 //! conflicting user constraints (QuickXplain).
 
-use crate::csp::{self, Algo, Outcome, Problem};
+use crate::csp::{self, Outcome, Problem};
 use crate::geom::{P, Rect, segment_hits_rect, segments_cross};
 pub use crate::graph::Shape;
 use crate::graph::{Graph, LayoutKind, Relation, Side};
 use crate::metrics::{Fonts, Run};
 use crate::tree::Tree;
 use crate::{layered, radial};
+use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
 pub struct Config {
@@ -26,7 +27,6 @@ pub struct Config {
     pub budget: u64,
     /// Constraint checks spent improving soft preferences once the font is fixed.
     pub opt_budget: u64,
-    pub algo: Algo,
 }
 
 impl Config {
@@ -333,6 +333,52 @@ pub fn relation_holds(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64, p
     }
 }
 
+/// Grid buckets one variable's candidate centers. Every candidate of a node has the same box,
+/// so "its box meets region R" is "its center lies in R grown by half the box": a range query.
+struct Grid {
+    cell: f64,
+    buckets: HashMap<(i64, i64), Vec<u32>>,
+}
+
+impl Grid {
+    fn new(at: &[P]) -> Grid {
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for p in at {
+            (x0, y0, x1, y1) = (x0.min(p.0), y0.min(p.1), x1.max(p.0), y1.max(p.1));
+        }
+        // About sixteen candidates per bucket.
+        let cell = (((x1 - x0) * (y1 - y0)).max(1.0) * 16.0 / at.len().max(1) as f64).sqrt().max(1.0);
+        let mut buckets: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
+        for (i, p) in at.iter().enumerate() {
+            buckets.entry(((p.0 / cell).floor() as i64, (p.1 / cell).floor() as i64)).or_default().push(i as u32);
+        }
+        Grid { cell, buckets }
+    }
+
+    /// near calls `f` with every candidate whose center may lie in `r` (and some that do not).
+    fn near(&self, r: &Rect, f: &mut dyn FnMut(u32)) -> u64 {
+        let (cx0, cx1) = ((r.x0 / self.cell).floor() as i64, (r.x1 / self.cell).floor() as i64);
+        let (cy0, cy1) = ((r.y0 / self.cell).floor() as i64, (r.y1 / self.cell).floor() as i64);
+        let mut n = 0;
+        if (cx1 - cx0 + 1) * (cy1 - cy0 + 1) > self.buckets.len() as i64 {
+            for b in self.buckets.values() {
+                n += b.len() as u64;
+                b.iter().for_each(|&i| f(i));
+            }
+            return n;
+        }
+        for cx in cx0..=cx1 {
+            for cy in cy0..=cy1 {
+                if let Some(b) = self.buckets.get(&(cx, cy)) {
+                    n += b.len() as u64;
+                    b.iter().for_each(|&i| f(i));
+                }
+            }
+        }
+        n
+    }
+}
+
 /// Scene is a plan plus user constraints, as a `csp::Problem` over variables in plan order.
 struct Scene<'a> {
     g: &'a Graph,
@@ -348,6 +394,9 @@ struct Scene<'a> {
     scopes: Vec<Vec<usize>>,
     kinds: Vec<Kind>,
     weights: Vec<u64>,
+    /// Candidate box size per variable, and a spatial index when the fast path is on.
+    size: Vec<(f64, f64)>,
+    grids: Vec<Grid>,
 }
 
 impl Problem for Scene<'_> {
@@ -365,6 +414,35 @@ impl Problem for Scene<'_> {
 
     fn weight(&self, c: usize) -> u64 {
         self.weights[c]
+    }
+
+    fn filter(&self, c: usize, val: &[u32], y: usize, bad: &mut dyn FnMut(usize)) -> Option<u64> {
+        if self.grids.is_empty() {
+            return None;
+        }
+        let s = &self.scopes[c];
+        let (w, h) = self.size[y];
+        let mut test = |region: Rect, hit: &dyn Fn(usize) -> bool| {
+            let grown = Rect { x0: region.x0 - w / 2.0, y0: region.y0 - h / 2.0, x1: region.x1 + w / 2.0, y1: region.y1 + h / 2.0 };
+            self.grids[y].near(&grown, &mut |a| {
+                if hit(a as usize) {
+                    bad(a as usize);
+                }
+            })
+        };
+        match self.kinds[c] {
+            Kind::Apart(gap) => {
+                let other = if s[0] == y { s[1] } else { s[0] };
+                let r = self.rects[other][val[other] as usize].inflate(gap);
+                Some(test(r, &|a| r.intersects(&self.rects[y][a])))
+            }
+            Kind::Clear(thin) if s[2] == y => {
+                let (p, q) = (self.at[s[0]][val[s[0]] as usize], self.at[s[1]][val[s[1]] as usize]);
+                let span = Rect { x0: p.0.min(q.0) - thin, y0: p.1.min(q.1) - thin, x1: p.0.max(q.0) + thin, y1: p.1.max(q.1) + thin };
+                Some(test(span, &|a| segment_hits_rect(p, q, &self.rects[y][a].inflate(thin))))
+            }
+            _ => None,
+        }
     }
 
     fn holds(&self, c: usize, val: &[u32]) -> bool {
@@ -423,9 +501,12 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         scopes: Vec::new(),
         kinds: Vec::new(),
         weights: Vec::new(),
+        size: Vec::new(),
+        grids: Vec::new(),
     };
     for &v in &plan.order {
         let c = &plan.cands[v];
+        sc.size.push((boxes[v].w, boxes[v].h));
         sc.at.push(c.iter().map(|c| c.at).collect());
         sc.r.push(c.iter().map(|c| c.r).collect());
         sc.rects.push(c.iter().map(|c| Rect::centered(c.at, boxes[v].w, boxes[v].h)).collect());
@@ -451,6 +532,7 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
             rel => cons.push((rel.nodes(), Kind::Rel(ci), w)),
         }
     }
+    sc.grids = sc.at.iter().map(|a| Grid::new(a)).collect();
     let optimizing = matches!(users, Users::All);
     for (nodes, kind, w) in cons {
         if w > 0 && !optimizing {
@@ -461,9 +543,9 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         sc.weights.push(w);
     }
     let (out, cost, st) = if optimizing {
-        csp::optimize(&sc, cfg.algo, cfg.opt_budget)
+        csp::optimize(&sc, cfg.opt_budget)
     } else {
-        let (out, st) = csp::solve(&sc, cfg.algo, cfg.budget);
+        let (out, st) = csp::solve(&sc, cfg.budget);
         (out, 0, st)
     };
     stats.search += st;
@@ -485,12 +567,6 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         pos[v] = sc.at[i][val[i] as usize];
     }
     Some(Layout { kind, body: b, boxes, pos, edges: plan.edges, kx: plan.kx, ky: plan.ky, tol: plan.tol, stats: *stats })
-}
-
-/// probe reports whether every hard constraint can hold at body font `b`.
-pub fn probe(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, stats: &mut Stats) -> bool {
-    let hard: Vec<usize> = (0..g.constraints.len()).filter(|&i| g.constraints[i].hard).collect();
-    attempt(g, t, fonts, cfg, b, Users::Hard(&hard), stats).is_some()
 }
 
 pub enum Failure {
@@ -521,31 +597,40 @@ fn quickxplain(feasible: &mut dyn FnMut(&[usize]) -> bool, base: &[usize], added
 pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout, Failure> {
     let mut stats = Stats::default();
     let hard: Vec<usize> = (0..g.constraints.len()).filter(|&i| g.constraints[i].hard).collect();
-    let probe = |b: f64, set: &[usize], stats: &mut Stats| attempt(g, t, fonts, cfg, b, Users::Hard(set), stats);
-    let Some(mut best) = probe(cfg.min_font, &hard, &mut stats) else {
-        if hard.is_empty() || probe(cfg.min_font, &[], &mut stats).is_none() {
-            return Err(Failure::NoRoom);
-        }
-        let mut feasible = |set: &[usize]| probe(cfg.min_font, set, &mut stats).is_some();
-        let mut core = quickxplain(&mut feasible, &[], false, &hard);
-        core.sort();
-        return Err(Failure::Core(core));
-    };
+    let probe = |b: f64, set: &[usize], budget: u64, stats: &mut Stats| attempt(g, t, fonts, &Config { budget, ..*cfg }, b, Users::Hard(set), stats);
+
+    // Near the largest font that fits, a probe either succeeds quickly or runs until the
+    // budget is gone. So once a probe succeeds, later probes get a few times its cost.
     let (mut lo, mut hi) = (cfg.min_font, cfg.max_font);
-    if let Some(l) = probe(hi, &hard, &mut stats) {
-        best = l;
-        lo = hi;
-    }
-    while hi - lo > 0.05 {
-        let mid = (lo + hi) / 2.0;
-        match probe(mid, &hard, &mut stats) {
+    let (mut found, mut next, mut cap) = (None, hi, cfg.budget / 4);
+    loop {
+        let before = stats.search.checks;
+        match probe(next, &hard, cap, &mut stats) {
             Some(l) => {
-                best = l;
-                lo = mid;
+                cap = ((stats.search.checks - before) * 4).clamp(1_000_000, cfg.budget);
+                lo = next;
+                found = Some(l);
             }
-            None => hi = mid,
+            None => hi = next,
         }
+        // One percent of the font size is below what anyone can see.
+        if hi - lo <= 0.01 * lo {
+            break;
+        }
+        next = (lo + hi) / 2.0;
     }
+    let mut best = match found.or_else(|| probe(cfg.min_font, &hard, cfg.budget, &mut stats)) {
+        Some(l) => l,
+        None => {
+            if hard.is_empty() || probe(cfg.min_font, &[], cfg.budget, &mut stats).is_none() {
+                return Err(Failure::NoRoom);
+            }
+            let mut feasible = |set: &[usize]| probe(cfg.min_font, set, cfg.budget, &mut stats).is_some();
+            let mut core = quickxplain(&mut feasible, &[], false, &hard);
+            core.sort();
+            return Err(Failure::Core(core));
+        }
+    };
     let has_soft = g.constraints.iter().any(|c| !c.hard) || matches!(best.kind, LayoutKind::Layered(_));
     if has_soft {
         if let Some(l) = attempt(g, t, fonts, cfg, best.body, Users::All, &mut stats) {
@@ -559,6 +644,70 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::Settings;
+
+    /// scene builds random candidates for `n` boxes with every `Apart` pair and some `Clear`s.
+    fn scene(g: &Graph, n: usize, seed: u64) -> Scene<'_> {
+        let mut x = seed;
+        let mut rnd = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            (x % 10_000) as f64 / 10.0 - 500.0
+        };
+        let mut sc = Scene {
+            g,
+            page: Rect::centered((0.0, 0.0), 1000.0, 1000.0),
+            body: 10.0,
+            tol: 1.0,
+            node: (0..n).collect(),
+            var: (0..n).collect(),
+            at: Vec::new(),
+            r: Vec::new(),
+            rects: Vec::new(),
+            scopes: Vec::new(),
+            kinds: Vec::new(),
+            weights: Vec::new(),
+            size: Vec::new(),
+            grids: Vec::new(),
+        };
+        for _ in 0..n {
+            let (w, h) = (60.0 + rnd().abs() / 5.0, 30.0 + rnd().abs() / 10.0);
+            let at: Vec<P> = (0..300).map(|_| (rnd(), rnd())).collect();
+            sc.rects.push(at.iter().map(|&p| Rect::centered(p, w, h)).collect());
+            sc.r.push(vec![0.0; at.len()]);
+            sc.at.push(at);
+            sc.size.push((w, h));
+        }
+        for i in 0..n {
+            for j in i + 1..n {
+                sc.scopes.push(vec![i, j]);
+                sc.kinds.push(Kind::Apart(5.0));
+                sc.weights.push(0);
+            }
+            if i + 1 < n {
+                for u in (0..n).filter(|&u| u != i && u != i + 1) {
+                    sc.scopes.push(vec![i, i + 1, u]);
+                    sc.kinds.push(Kind::Clear(1.0));
+                    sc.weights.push(0);
+                }
+            }
+        }
+        sc
+    }
+
+    #[test]
+    fn grid_filter_matches_plain_checks() {
+        let g = Graph { title: None, root: None, nodes: vec![], edges: vec![], constraints: vec![], settings: Settings::default() };
+        for seed in 1..40 {
+            let mut sc = scene(&g, 7, seed * 7919);
+            let (plain, ps) = csp::solve(&sc, u64::MAX);
+            sc.grids = sc.at.iter().map(|a| Grid::new(a)).collect();
+            let (fast, fs) = csp::solve(&sc, u64::MAX);
+            assert_eq!(plain, fast, "seed {seed}");
+            assert_eq!((ps.nodes, ps.backjumps), (fs.nodes, fs.backjumps), "seed {seed}");
+        }
+    }
 
     #[test]
     fn quickxplain_finds_minimal_core() {
