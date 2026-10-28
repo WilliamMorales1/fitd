@@ -1,7 +1,7 @@
-//! SVG and TikZ backends. Both draw from the same solved geometry; neither re-flows text.
+//! SVG, PNG and TikZ backends. All draw from the same solved geometry; none re-flows text.
 
 use crate::graph::Graph;
-use crate::geom::P;
+use crate::geom::{P, Rect};
 use crate::layout::{Drawn, EdgeStyle, Layout, Role, Shape, TextLine};
 use crate::metrics::{Fonts, Script};
 use crate::tree::Tree;
@@ -49,6 +49,24 @@ fn edge_points(lay: &Layout, e: &Drawn) -> Vec<P> {
     }
 }
 
+/// bounds is the smallest rectangle, in layout coordinates, holding every node, edge and label.
+pub fn bounds(lay: &Layout) -> Rect {
+    let mut r = Rect { x0: f64::MAX, y0: f64::MAX, x1: f64::MIN, y1: f64::MIN };
+    let mut add = |b: Rect| r = Rect { x0: r.x0.min(b.x0), y0: r.y0.min(b.y0), x1: r.x1.max(b.x1), y1: r.y1.max(b.y1) };
+    for (v, bx) in lay.boxes.iter().enumerate() {
+        add(Rect::centered(lay.pos[v], bx.w, bx.h));
+    }
+    for e in &lay.edges {
+        for p in edge_points(lay, e) {
+            add(Rect::centered(p, 0.0, 0.0));
+        }
+        if let Some(l) = lay.label_rect(e) {
+            add(l);
+        }
+    }
+    r
+}
+
 fn xml(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
@@ -73,10 +91,12 @@ fn svg_line(out: &mut String, fonts: &Fonts, l: &TextLine, x: f64, y: f64, fill:
     out.push_str("</text>\n");
 }
 
-pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64) -> String {
+/// svg draws the part of the layout inside `view`, which becomes the whole image.
+pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect) -> String {
     let col = colors(g, t);
     let b = lay.body;
-    let tx = |p: (f64, f64)| (w / 2.0 + p.0, h / 2.0 - p.1);
+    let (w, h) = (view.x1 - view.x0, view.y1 - view.y0);
+    let tx = |p: (f64, f64)| (p.0 - view.x0, view.y1 - p.1);
     let mut o = String::new();
     let _ = writeln!(o, r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}pt" height="{h}pt" viewBox="0 0 {w} {h}">"#);
     if let Some(title) = &g.title {
@@ -134,6 +154,22 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64) -> 
     }
     o.push_str("</svg>\n");
     o
+}
+
+/// png rasterizes an SVG from `svg` at `scale` pixels per point, using the measuring fonts.
+pub fn png(svg: &str, fonts: &Fonts, scale: f64) -> Result<Vec<u8>, String> {
+    let mut opt = resvg::usvg::Options::default();
+    for f in fonts.regular.iter().chain(&fonts.bold) {
+        opt.fontdb_mut().load_font_data(f.data.clone());
+    }
+    let tree = resvg::usvg::Tree::from_str(svg, &opt).map_err(|e| e.to_string())?;
+    let size = tree.size();
+    // usvg reads `pt` as 4/3 px, so scale from its pixel size back to points.
+    let k = (scale * 0.75) as f32;
+    let (pw, ph) = ((size.width() * k).ceil() as u32, (size.height() * k).ceil() as u32);
+    let mut pix = resvg::tiny_skia::Pixmap::new(pw, ph).ok_or(format!("image too large: {pw}x{ph}px"))?;
+    resvg::render(&tree, resvg::tiny_skia::Transform::from_scale(k, k), &mut pix.as_mut());
+    pix.encode_png().map_err(|e| e.to_string())
 }
 
 fn tex(s: &str) -> String {

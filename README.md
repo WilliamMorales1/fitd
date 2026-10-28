@@ -58,6 +58,8 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 
 ## Options
 
+`-o out.svg` writes a page-sized SVG; `-o out.png` writes a PNG cropped to the drawing plus `--margin` of padding, at `--scale PX` pixels per point (default 2).
+
 `--page a0..a4 | WxH[pt|mm]`, `--portrait`, `--margin PT`, `--min-font PT`, `--max-font PT`, `--wrap EM`, `--budget CHECKS` (default 20M per probe), `--force` (write output despite checker errors). Flags override settings in the file. `CMAPC_DEBUG=1` traces each probe.
 
 ## Tests

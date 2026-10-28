@@ -28,7 +28,7 @@ pub struct Font {
     pub family: String,
     pub bold: bool,
     pub path: String,
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 #[derive(Clone, Debug)]

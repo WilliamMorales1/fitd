@@ -5,6 +5,7 @@ edition = "2024"
 description = "Concept map compiler: constraint-solved radial layout with a borrow-checker-style verifier"
 
 [dependencies]
+resvg = { version = "0.49.0", default-features = false, features = ["text"] }
 ttf-parser = "0.25"
 
 [profile.dev]

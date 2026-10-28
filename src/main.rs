@@ -15,14 +15,15 @@ mod sema;
 mod tree;
 
 use diag::{Diag, Level, Source};
+use geom::Rect;
 use graph::LayoutKind;
 use layout::{Config, Failure};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
-  cmapc build <input.cmap> [-o out.svg] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
+  cmapc build <input.cmap> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
               [--portrait] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force]
-              [--budget CHECKS]
+              [--budget CHECKS] [--scale PX]
   cmapc explain <CODE>";
 
 fn page(spec: &str, portrait: bool) -> Result<(f64, f64), String> {
@@ -49,6 +50,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     let (mut page_spec, mut portrait, mut force) = (None, false, false);
     let (mut margin, mut min_font, mut max_font, mut wrap) = (None, None, None, None);
     let mut budget = 20_000_000;
+    let mut scale = 2.0;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut val = || it.next().cloned().ok_or(format!("{a} needs a value"));
@@ -64,6 +66,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             "--max-font" => max_font = Some(num(val()?)?),
             "--wrap" => wrap = Some(num(val()?)?),
             "--budget" => budget = num(val()?)? as u64,
+            "--scale" => scale = num(val()?)?,
             s if !s.starts_with('-') && input.is_none() => input = Some(s.to_string()),
             s => return Err(format!("unknown argument `{s}`\n{USAGE}")),
         }
@@ -160,9 +163,16 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         return Ok(ExitCode::FAILURE);
     }
     let stem = input.strip_suffix(".cmap").unwrap_or(&input).to_string();
-    let svg_path = svg_out.unwrap_or(format!("{stem}.svg"));
-    std::fs::write(&svg_path, emit::svg(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h)).map_err(|e| format!("{svg_path}: {e}"))?;
-    eprintln!("wrote {svg_path}");
+    let out = svg_out.unwrap_or(format!("{stem}.svg"));
+    let bytes = if out.to_ascii_lowercase().ends_with(".png") {
+        // A PNG is cropped to the drawing, with the margin as padding, not sized to the page.
+        let svg = emit::svg(&g, &t, &fonts, &lay, emit::bounds(&lay).inflate(cfg.margin));
+        emit::png(&svg, &fonts, scale)?
+    } else {
+        emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h)).into_bytes()
+    };
+    std::fs::write(&out, bytes).map_err(|e| format!("{out}: {e}"))?;
+    eprintln!("wrote {out}");
     if let Some(p) = tikz_out {
         std::fs::write(&p, emit::tikz(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h)).map_err(|e| format!("{p}: {e}"))?;
         eprintln!("wrote {p}");

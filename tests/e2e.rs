@@ -88,3 +88,15 @@ fn contradictory_orderings_fail_before_search() {
     assert!(log.contains("error[E0008]: contradictory horizontal constraints"), "{log}");
     assert!(!log.contains("body font"), "search should not run\n{log}");
 }
+
+#[test]
+fn png_is_cropped_to_drawing() {
+    let png = tmp("compiler.png");
+    let (ok, log) = cmapc(&["build", "examples/compiler.cmap", "-o", png.to_str().unwrap(), "--page", "a3", "--scale", "1"]);
+    assert!(ok, "{log}");
+    let b = std::fs::read(&png).unwrap();
+    assert_eq!(&b[..8], b"\x89PNG\r\n\x1a\n");
+    let (w, h) = (u32::from_be_bytes(b[16..20].try_into().unwrap()), u32::from_be_bytes(b[20..24].try_into().unwrap()));
+    // An A3 page is 1191x842pt; the layered example is a narrow column well inside it.
+    assert!(w > 100 && h > 100 && w < 1191 && (w as f64) < 0.8 * h as f64, "{w}x{h}");
+}
