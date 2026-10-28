@@ -97,7 +97,7 @@ impl Problem for Coloring {
     }
 }
 
-pub const ALGOS: &[&str] = &["bt", "cbj", "fc", "fc-cbj", "mac", "fc+dom", "fc+wdeg", "fc-cbj+wdeg", "mac+wdeg"];
+pub const ALGOS: &[&str] = &["bt", "cbj", "fc", "fc-cbj", "mac", "fc+dom", "fc+wdeg", "fc-cbj+wdeg", "mac+wdeg", "cbj+learn", "fc-cbj+learn", "fc-cbj+restart", "fc-cbj+wdeg+restart"];
 
 pub struct Row {
     pub problem: String,

@@ -38,7 +38,7 @@ cargo build --release
 | Parse | `parse.rs`, `ast.rs` | Recursive descent; a bad line is reported and skipped, so later errors still show. |
 | Analyze | `sema.rs` | Two passes: declarations, then references. Styles, typed values, units (`pt mm cm in em`), "did you mean" suggestions, and a static check that hard orderings and alignments do not contradict (union-find plus cycle search). |
 | Plan | `radial.rs`, `layered.rs` | Measure every box with real font metrics, propose candidate positions and structural constraints. |
-| Solve | `csp.rs`, `layout.rs` | Generic CSP engine (BT, CBJ, FC, FC-CBJ, MAC; static, dom, dom/wdeg ordering; branch and bound; min-conflicts). Binary search on the font, then soft-constraint optimization. If nothing fits, QuickXplain extracts a minimal set of conflicting `require`s. |
+| Solve | `csp.rs`, `layout.rs` | Generic CSP engine (BT, CBJ, FC, FC-CBJ, MAC; static, dom, dom/wdeg ordering; nogood learning and restarts; branch and bound; min-conflicts). Binary search on the font, then soft-constraint optimization. If nothing fits, QuickXplain extracts a minimal set of conflicting `require`s. |
 | Check | `check.rs` | Recompute every property from the finished layout. Any error stops output. |
 | Emit | `emit.rs` | SVG and TikZ with absolute positions; neither re-flows text. |
 
@@ -59,7 +59,7 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 
 ## Options
 
-`--page a0..a4 | WxH[pt|mm]`, `--portrait`, `--margin PT`, `--min-font PT`, `--max-font PT`, `--wrap EM`, `--algo bt|cbj|fc|fc-cbj|mac|mac-cbj[+dom|+wdeg]` (default `fc-cbj`), `--budget CHECKS` (default 20M per probe), `--force` (write output despite checker errors). Flags override settings in the file. `CMAPC_DEBUG=1` traces each probe.
+`--page a0..a4 | WxH[pt|mm]`, `--portrait`, `--margin PT`, `--min-font PT`, `--max-font PT`, `--wrap EM`, `--algo bt|cbj|fc|fc-cbj|mac|mac-cbj[+dom|+wdeg][+learn|+restart]` (default `fc-cbj`), `--budget CHECKS` (default 20M per probe), `--force` (write output despite checker errors). Flags override settings in the file. `CMAPC_DEBUG=1` traces each probe.
 
 ## Tests
 

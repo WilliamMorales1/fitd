@@ -13,10 +13,15 @@ Search is recursive labeling with three independent knobs, selected by `--algo`:
 | Lookahead | none (`bt`, `cbj`); forward checking (`fc`), which prunes a variable once it is the last unassigned one in some scope, so n-ary constraints propagate; MAC (`mac`), which also maintains arc consistency over binary constraints between unassigned variables (AC-3 queue). |
 | Lookback | chronological, or conflict-directed backjumping (`-cbj`, Prosser 1993). With lookahead this is FC-CBJ: every prune records its culprits, and a wipeout adds the wiped variable's culprits to the current conflict set. |
 | Variable order | static (strategy order), `+dom` (smallest live domain), `+wdeg` (domain over weighted degree, Boussemart et al. 2004; a constraint's weight grows each time it fails or wipes out a domain). |
+| Learning | `+learn` (nogood recording), `+restart` (restarts with nogoods). Needs a `-cbj` base. |
 
 Conflict sets are bitsets. A failure returns the set of assigned variables that caused it; each level either jumps past itself (its variable is not in the set) or merges the set into its own and tries its next value. Chronological search uses the same code with the conflict set "everything assigned", so it always stops at the parent.
 
 **Branch and bound** (`csp::optimize`) adds soft constraints. Lookahead ignores them. When a soft constraint becomes fully assigned and fails, its weight is added to the path cost; a path whose cost already reaches the best solution's cost fails with conflict set "everything assigned", which keeps backjumping sound. Each solution tightens the bound; the search is anytime and returns the best solution found when its budget runs out.
+
+**Nogood learning** (`+learn`, Dechter 1990). When a variable runs out of values, its conflict set C is a proof that the current values of C cannot all hold, so the partial assignment `{v = val[v] : v in C}` is recorded as a nogood. Nogoods are indexed by literal: assigning `x = a` visits only nogoods containing `x = a`. A fully matched nogood is a conflict (culprits: its variables); under lookahead, a nogood with one unassigned literal prunes that value, and the prune is explained like any other. Nogoods longer than 10 literals are not stored. Learning requires a `-cbj` base, since chronological search has no conflict sets, only the whole path; `bt+learn` would record useless full-path nogoods and pay to check them.
+
+**Restarts** (`+restart`, implies learning). After a cutoff of failures (100, growing by 1.5x), search unwinds and starts over, keeping nogoods and wdeg weights. Learned nogoods stop the restarted search from re-entering refuted subtrees, and the growing cutoff keeps search complete.
 
 **Min-conflicts** (Minton et al. 1992) is local search: start from the preferred values and repeatedly move a variable in a violated constraint to its least-conflicting value, with 10% random walk.
 
@@ -91,6 +96,22 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 - **Pigeonhole:** every conflict involves every pigeon, so backjumping never skips a level (CBJ = BT). Lookahead cuts nodes 8x. All methods stay exponential, as theory says.
 - **3-coloring at the phase transition** (60 vertices, average degree 4.6, unsatisfiable): structure matters. CBJ beats BT, FC-CBJ beats both FC and CBJ by 40x or more, and dom/wdeg learns which constraints are hard, finishing in 115 nodes.
 
+Nogood learning, same budget:
+
+| problem | algorithm | result | nodes | checks | ms |
+|---|---|---|---:|---:|---:|
+| color-60x3 | fc-cbj | unsat | 276404 | 1466749 | 88 |
+| color-60x3 | fc-cbj+learn | unsat | 9428 | 575644 | 11 |
+| color-60x3 | fc-cbj+restart | unsat | 9465 | 583188 | 11 |
+| color-60x3 | fc-cbj+wdeg+restart | unsat | 112 | 1402 | 0.5 |
+| pigeons-8 | fc-cbj | unsat | 109600 | 547912 | 27 |
+| pigeons-8 | fc-cbj+learn | budget | 52139 | 50000001 | 344 |
+| queens-28 | fc-cbj+wdeg+restart | sat | 28 | 5665 | 0.2 |
+
+- **Coloring:** learning cuts FC-CBJ's nodes 29x and its time 8x; the refuted subproblems recur under different ancestors, which is exactly what nogoods catch. Indexing by literal rather than by variable cut the nogood-check overhead 2.5x.
+- **Pigeonhole:** learning makes it worse. Every pigeonhole refutation by resolution is exponential (Haken 1985), and nogood learning is a form of resolution, so nogoods never generalize; the store grows and checking it dominates.
+- **Restarts** add little over learning alone here, because static ordering replays the same path until a nogood cuts it. They matter with dom/wdeg, whose weights need several runs to settle.
+
 The diagram (`examples/math4200.cmap` on 2296x1524pt, 20M-check budget):
 
 | font | bt | cbj | fc | fc-cbj | mac | fc+dom | fc-cbj+wdeg |
@@ -102,6 +123,7 @@ The diagram (`examples/math4200.cmap` on 2296x1524pt, 20M-check budget):
 - At the threshold (the largest font that fits), only FC-CBJ finishes. That is why it is the default.
 - MAC never finishes: one arc revision between two ~3000-value domains is up to 9M checks. Arc consistency pays off for small domains (coloring), not dense geometric ones.
 - `dom` misleads: a geometric domain's size measures how much page room a node has, not how constrained it is.
+- Learning does not help diagrams. At 19.85pt, FC-CBJ fails roughly 87,000 times in 300M checks, yet only 214 conflict sets are short enough (10 literals or fewer) to store: one `Apart` or `Clear` constraint ties a node to almost every other node, so explanations are wide. Neither `+learn` nor `+restart` decides 19.85pt within 300M checks. Cheaper propagation (a sweep-line `Apart` propagator) looks like the better lever for geometry.
 - Difficulty spikes at the satisfiability threshold, the same phase-transition behavior as random CSPs: 19.8pt solves in 4.9M checks, 19.85pt exhausts 20M.
 
 ## References
@@ -112,4 +134,7 @@ The diagram (`examples/math4200.cmap` on 2296x1524pt, 20M-check budget):
 - S. Minton, M. Johnston, A. Philips, P. Laird. Minimizing conflicts: a heuristic repair method. *Artificial Intelligence* 58, 1992.
 - U. Junker. QuickXplain: preferred explanations and relaxations for over-constrained problems. AAAI 2004.
 - K. Sugiyama, S. Tagawa, M. Toda. Methods for visual understanding of hierarchical system structures. *IEEE SMC* 11(2), 1981.
+- R. Dechter. Enhancement schemes for constraint processing: backjumping, learning, and cutset decomposition. *Artificial Intelligence* 41(3), 1990.
+- C. Lecoutre, L. Sais, S. Tabary, V. Vidal. Recording and minimizing nogoods from restarts. *JSAT* 1, 2007.
+- A. Haken. The intractability of resolution. *Theoretical Computer Science* 39, 1985.
 - P. Cheeseman, B. Kanefsky, W. Taylor. Where the really hard problems are. IJCAI 1991.

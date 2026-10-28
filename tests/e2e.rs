@@ -93,5 +93,5 @@ fn contradictory_orderings_fail_before_search() {
 fn bench_runs_every_algorithm_on_a_diagram() {
     let out = Command::new(env!("CARGO_BIN_EXE_cmapc")).args(["bench", "examples/compiler.cmap", "--font", "8"]).output().unwrap();
     let table = String::from_utf8_lossy(&out.stdout);
-    assert_eq!(table.matches("| sat |").count(), 9, "{table}");
+    assert_eq!(table.matches("| sat |").count(), table.lines().count() - 2, "{table}");
 }

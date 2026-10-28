@@ -5,8 +5,12 @@
 //! a lookahead (none, forward checking, maintained arc consistency), a lookback
 //! (chronological or conflict-directed backjumping), and a variable ordering heuristic.
 //!
+//! Optional nogood learning records each conflict set as a forbidden partial assignment, and
+//! optional restarts rerun search with a growing failure cutoff, keeping nogoods and weights.
+//!
 //! References: Prosser 1993 (CBJ, FC-CBJ), Sabin & Freuder 1994 (MAC), Boussemart et al.
-//! 2004 (dom/wdeg), Minton et al. 1992 (min-conflicts).
+//! 2004 (dom/wdeg), Minton et al. 1992 (min-conflicts), Dechter 1990 (learning while
+//! searching), Lecoutre et al. 2007 (nogood recording from restarts).
 
 pub const UNSET: u32 = u32::MAX;
 
@@ -46,14 +50,18 @@ pub struct Algo {
     pub lookahead: Lookahead,
     pub backjump: bool,
     pub order: VarOrder,
+    /// Record conflict sets as nogoods; needs `backjump`, since that computes them.
+    pub learn: bool,
+    /// Restart with a geometrically growing failure cutoff (implies `learn`).
+    pub restarts: bool,
 }
 
 impl Algo {
-    pub const BT: Algo = Algo { lookahead: Lookahead::None, backjump: false, order: VarOrder::Static };
-    pub const CBJ: Algo = Algo { lookahead: Lookahead::None, backjump: true, order: VarOrder::Static };
-    pub const FC: Algo = Algo { lookahead: Lookahead::Fc, backjump: false, order: VarOrder::Static };
-    pub const FC_CBJ: Algo = Algo { lookahead: Lookahead::Fc, backjump: true, order: VarOrder::Static };
-    pub const MAC: Algo = Algo { lookahead: Lookahead::Mac, backjump: false, order: VarOrder::Static };
+    pub const BT: Algo = Algo { lookahead: Lookahead::None, backjump: false, order: VarOrder::Static, learn: false, restarts: false };
+    pub const CBJ: Algo = Algo { backjump: true, ..Algo::BT };
+    pub const FC: Algo = Algo { lookahead: Lookahead::Fc, ..Algo::BT };
+    pub const FC_CBJ: Algo = Algo { lookahead: Lookahead::Fc, ..Algo::CBJ };
+    pub const MAC: Algo = Algo { lookahead: Lookahead::Mac, ..Algo::BT };
 
     pub fn name(&self) -> String {
         let la = match self.lookahead {
@@ -68,13 +76,14 @@ impl Algo {
             VarOrder::Dom => "+dom",
             VarOrder::DomWdeg => "+wdeg",
         };
-        format!("{la}{bj}{ord}")
+        let extra = if self.restarts { "+restart" } else if self.learn { "+learn" } else { "" };
+        format!("{la}{bj}{ord}{extra}")
     }
 
-    /// parse reads names like `bt`, `cbj`, `fc-cbj+wdeg`, or `mac+dom`.
+    /// parse reads names like `bt`, `cbj`, `fc-cbj+wdeg`, `mac+dom`, or `fc-cbj+wdeg+restart`.
     pub fn parse(s: &str) -> Option<Algo> {
-        let (base, ord) = s.split_once('+').unwrap_or((s, ""));
-        let mut a = match base {
+        let mut parts = s.split('+');
+        let mut a = match parts.next()? {
             "bt" => Algo::BT,
             "cbj" => Algo::CBJ,
             "fc" => Algo::FC,
@@ -83,12 +92,19 @@ impl Algo {
             "mac-cbj" => Algo { backjump: true, ..Algo::MAC },
             _ => return None,
         };
-        a.order = match ord {
-            "" => VarOrder::Static,
-            "dom" => VarOrder::Dom,
-            "wdeg" => VarOrder::DomWdeg,
-            _ => return None,
-        };
+        for p in parts {
+            match p {
+                "dom" => a.order = VarOrder::Dom,
+                "wdeg" => a.order = VarOrder::DomWdeg,
+                "learn" => a.learn = true,
+                "restart" => (a.learn, a.restarts) = (true, true),
+                _ => return None,
+            }
+        }
+        // Nogoods are conflict sets; chronological search has none, only the whole path.
+        if a.learn && !a.backjump {
+            return None;
+        }
         Some(a)
     }
 }
@@ -102,6 +118,8 @@ pub struct Stats {
     pub backjumps: u64,
     /// Values removed by lookahead.
     pub prunes: u64,
+    pub nogoods: u64,
+    pub restarts: u64,
 }
 
 impl std::ops::AddAssign for Stats {
@@ -110,6 +128,8 @@ impl std::ops::AddAssign for Stats {
         self.checks += o.checks;
         self.backjumps += o.backjumps;
         self.prunes += o.prunes;
+        self.nogoods += o.nogoods;
+        self.restarts += o.restarts;
     }
 }
 
@@ -148,7 +168,13 @@ enum Fail {
     /// The variables whose current values caused the failure; search backs up to the deepest.
     Conflict(VarSet),
     Abort,
+    /// The failure cutoff was hit; unwind everything and start over.
+    Restart,
 }
+
+/// Nogoods longer than this are rarely matched again and cost a check on every visit.
+const MAX_NOGOOD: usize = 10;
+const MAX_NOGOODS: usize = 200_000;
 
 struct Search<'a, P: Problem> {
     p: &'a P,
@@ -170,6 +196,11 @@ struct Search<'a, P: Problem> {
     optimize: bool,
     cost: u64,
     best: Option<(u64, Vec<u32>)>,
+    /// Learned nogoods as (variable, value) literals, indexed by literal.
+    nogoods: Vec<Vec<(usize, u32)>>,
+    ng_by_lit: Vec<std::collections::HashMap<u32, Vec<usize>>>,
+    failures: u64,
+    cutoff: u64,
 }
 
 impl<P: Problem> Search<'_, P> {
@@ -346,6 +377,61 @@ impl<P: Problem> Search<'_, P> {
         Ok(d)
     }
 
+    fn learn(&mut self, conf: &VarSet) {
+        let lits: Vec<(usize, u32)> = (0..self.n).filter(|&v| conf.contains(v)).map(|v| (v, self.val[v])).collect();
+        if lits.is_empty() || lits.len() > MAX_NOGOOD || self.nogoods.len() >= MAX_NOGOODS {
+            return;
+        }
+        for &(v, a) in &lits {
+            self.ng_by_lit[v].entry(a).or_default().push(self.nogoods.len());
+        }
+        self.nogoods.push(lits);
+        self.stats.nogoods += 1;
+    }
+
+    /// nogood_check tests nogoods mentioning the just-assigned `x`: a fully matched one is a
+    /// conflict; with lookahead, one missing a single literal prunes that literal's value.
+    fn nogood_check(&mut self, x: usize, depth: u32) -> Result<Option<VarSet>, Fail> {
+        let ids = self.ng_by_lit[x].get(&self.val[x]).cloned().unwrap_or_default();
+        for id in ids {
+            self.stats.checks += 1;
+            if self.stats.checks > self.budget {
+                return Err(Fail::Abort);
+            }
+            let mut open = None;
+            let mut matched = true;
+            for &(v, a) in &self.nogoods[id] {
+                if self.val[v] == UNSET {
+                    if open.is_some() {
+                        matched = false;
+                        break;
+                    }
+                    open = Some((v, a));
+                } else if self.val[v] != a {
+                    matched = false;
+                    break;
+                }
+            }
+            if !matched {
+                continue;
+            }
+            let mut why = VarSet::new(self.n);
+            self.nogoods[id].iter().filter(|l| Some(**l) != open).for_each(|&(v, _)| why.insert(v));
+            match open {
+                None => return Ok(Some(why)),
+                Some((y, b)) if self.algo.lookahead != Lookahead::None && self.removed[y][b as usize] == UNSET => {
+                    self.prune(y, b as usize, depth);
+                    self.pruned_by[y].push((depth, why));
+                    if self.size[y] == 0 {
+                        return Ok(Some(self.past_fc(y)));
+                    }
+                }
+                Some(_) => {}
+            }
+        }
+        Ok(None)
+    }
+
     fn label(&mut self, depth: u32) -> Result<(), Fail> {
         let Some(x) = self.select() else {
             if !self.optimize {
@@ -363,7 +449,14 @@ impl<P: Problem> Search<'_, P> {
             self.stats.nodes += 1;
             self.val[x] = a as u32;
             let mut ok = true;
-            if self.algo.lookahead == Lookahead::None {
+            if self.algo.learn {
+                if let Some(cs) = self.nogood_check(x, depth)? {
+                    conf.union(&cs);
+                    ok = false;
+                }
+            }
+            if !ok {
+            } else if self.algo.lookahead == Lookahead::None {
                 for i in 0..self.var_cons[x].len() {
                     let c = self.var_cons[x][i];
                     if self.unassigned_in(c) == 0 && !self.check(c)? {
@@ -393,6 +486,11 @@ impl<P: Problem> Search<'_, P> {
                 match res {
                     Ok(()) => return Ok(()),
                     Err(Fail::Abort) => return Err(Fail::Abort),
+                    Err(Fail::Restart) => {
+                        self.undo(depth);
+                        self.val[x] = UNSET;
+                        return Err(Fail::Restart);
+                    }
                     Err(Fail::Conflict(cs)) => {
                         if self.algo.backjump && !cs.contains(x) {
                             self.stats.backjumps += 1;
@@ -412,6 +510,14 @@ impl<P: Problem> Search<'_, P> {
             // Chronological: blame everything assigned, so the parent always retries.
             conf = self.everyone();
             conf.remove(x);
+        }
+        // Bound failures make conflict sets depend on the incumbent, so learn only when satisfying.
+        if self.algo.learn && !self.optimize {
+            self.learn(&conf);
+        }
+        self.failures += 1;
+        if self.algo.restarts && self.failures >= self.cutoff {
+            return Err(Fail::Restart);
         }
         Err(Fail::Conflict(conf))
     }
@@ -461,6 +567,10 @@ fn run<P: Problem>(p: &P, algo: Algo, budget: u64, optimize: bool) -> (Outcome, 
         optimize,
         cost: 0,
         best: None,
+        nogoods: Vec::new(),
+        ng_by_lit: vec![std::collections::HashMap::new(); n],
+        failures: 0,
+        cutoff: 100,
     };
     if s.size.contains(&0) {
         return (Outcome::Unsat, 0, s.stats);
@@ -477,13 +587,22 @@ fn run<P: Problem>(p: &P, algo: Algo, budget: u64, optimize: bool) -> (Outcome, 
             }
         }
     }
-    let res = s.label(1);
+    let res = loop {
+        match s.label(1) {
+            Err(Fail::Restart) => {
+                s.stats.restarts += 1;
+                s.failures = 0;
+                s.cutoff += s.cutoff / 2;
+            }
+            r => break r,
+        }
+    };
     let stats = s.stats;
     match (res, s.best) {
         (_, Some((cost, val))) => (Outcome::Sat(val), cost, stats),
         (Ok(()), None) => (Outcome::Sat(s.val), 0, stats),
         (Err(Fail::Conflict(_)), None) => (Outcome::Unsat, 0, stats),
-        (Err(Fail::Abort), None) => (Outcome::Unknown, 0, stats),
+        (Err(Fail::Abort | Fail::Restart), None) => (Outcome::Unknown, 0, stats),
     }
 }
 
@@ -549,7 +668,7 @@ mod tests {
     use super::*;
     use crate::bench::{Pigeons, Queens};
 
-    const ALL: [&str; 9] = ["bt", "cbj", "fc", "fc-cbj", "mac", "mac-cbj", "fc+dom", "fc-cbj+wdeg", "mac+wdeg"];
+    const ALL: [&str; 13] = ["bt", "cbj", "fc", "fc-cbj", "mac", "mac-cbj", "fc+dom", "fc-cbj+wdeg", "mac+wdeg", "cbj+learn", "fc-cbj+learn", "fc-cbj+wdeg+restart", "cbj+restart"];
 
     #[test]
     fn every_algorithm_solves_queens() {
@@ -611,12 +730,27 @@ mod tests {
     #[test]
     fn branch_and_bound_minimizes_soft_cost() {
         let p = Chain { scopes: vec![vec![0, 1], vec![1, 2], vec![0], vec![2]] };
-        for name in ["bt", "cbj", "fc-cbj", "mac+wdeg"] {
+        for name in ["bt", "cbj", "fc-cbj", "mac+wdeg", "fc-cbj+learn"] {
             let (out, cost, _) = optimize(&p, Algo::parse(name).unwrap(), u64::MAX);
             // a=1 forces b=0, c=1: pay 1 for c rather than 5 for a.
             assert_eq!((out, cost), (Outcome::Sat(vec![1, 0, 1]), 1), "{name}");
         }
         assert_eq!(solve(&p, Algo::BT, u64::MAX).0, Outcome::Sat(vec![0, 1, 0]));
+    }
+
+    #[test]
+    fn learning_and_restarts_agree_with_plain_search_on_random_coloring() {
+        for seed in 1..30 {
+            let p = crate::bench::Coloring::random(25, 55, 3, seed);
+            let plain = matches!(solve(&p, Algo::FC_CBJ, u64::MAX).0, Outcome::Sat(_));
+            for name in ["cbj+learn", "fc-cbj+learn", "fc-cbj+wdeg+restart", "cbj+restart"] {
+                let (out, _) = solve(&p, Algo::parse(name).unwrap(), u64::MAX);
+                if let Outcome::Sat(v) = &out {
+                    assert!((0..p.scopes().len()).all(|c| p.holds(c, v)), "{name} seed {seed}: bad solution");
+                }
+                assert_eq!(matches!(out, Outcome::Sat(_)), plain, "{name} seed {seed}");
+            }
+        }
     }
 
     #[test]

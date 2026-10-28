@@ -23,7 +23,7 @@ use std::process::ExitCode;
 const USAGE: &str = "usage:
   cmapc build <input.cmap> [-o out.svg] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
               [--portrait] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force]
-              [--algo bt|cbj|fc|fc-cbj|mac|mac-cbj[+dom|+wdeg]] [--budget CHECKS]
+              [--algo bt|cbj|fc|fc-cbj|mac|mac-cbj[+dom|+wdeg][+learn|+restart]] [--budget CHECKS]
   cmapc bench [--budget CHECKS]                 every algorithm on classic CSPs
   cmapc bench <input.cmap> --font PT [flags]    every algorithm on one diagram at one font
   cmapc explain <CODE>";
@@ -78,7 +78,7 @@ fn build(args: &[String], bench: bool) -> Result<ExitCode, String> {
             "--wrap" => wrap = Some(num(val()?)?),
             "--algo" => {
                 let v = val()?;
-                algo = csp::Algo::parse(&v).ok_or(format!("unknown --algo `{v}` (bt, cbj, fc, fc-cbj, mac, mac-cbj, optionally +dom or +wdeg)"))?;
+                algo = csp::Algo::parse(&v).ok_or(format!("unknown --algo `{v}` (bt, cbj, fc, fc-cbj, mac, mac-cbj, then optionally +dom or +wdeg, then +learn or +restart on a -cbj base)"))?;
             }
             "--budget" => budget = num(val()?)? as u64,
             "--font" if bench => bench_font = Some(num(val()?)?),

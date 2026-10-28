@@ -7,8 +7,8 @@ Done: the language front end (lexer, parser with recovery, two-pass semantic ana
 Next candidates:
 
 - **Labels as variables.** Edge labels are placed after solving (slid along the edge to clear boxes). Making their positions CSP variables would let `Apart` cover them.
-- **Nogood learning.** Record conflict sets from CBJ as nogoods and reuse them across binary-search probes, which share most constraints.
-- **Global propagators.** FC on `Apart` checks every candidate; a sweep over sorted candidate rectangles would prune in O(k log k) instead of O(k) per check with a large constant.
+- ~~**Nogood learning.**~~ Done (`+learn`, `+restart`); see `SOLVER.md`. Reuse across font probes is unsound because candidate sets change with the font. It wins on coloring and loses on pigeonhole and on diagrams, where conflict sets are too wide to store.
+- **Global propagators.** FC on `Apart` checks every candidate one by one. A propagator over candidates sorted by x could skip whole runs of them. The learning results suggest this is where diagram speed is.
 - **Language:** `group` blocks (a box around nodes, a containment constraint), edge styles, and `prefer` on layout-wide objectives (for example `prefer few crossings weight=3`).
 - **LSP / watch mode** for live diagnostics.
 
