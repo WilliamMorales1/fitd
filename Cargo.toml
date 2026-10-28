@@ -1,0 +1,11 @@
+[package]
+name = "cmapc"
+version = "0.1.0"
+edition = "2024"
+description = "Concept map compiler: constraint-solved radial layout with a borrow-checker-style verifier"
+
+[dependencies]
+ttf-parser = "0.25"
+
+[profile.dev]
+opt-level = 1

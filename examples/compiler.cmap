@@ -1,0 +1,45 @@
+# The cmapc pipeline itself, as a layered flowchart with layout constraints.
+title "How cmapc compiles a diagram"
+layout layered dir=down
+page a3
+font 7pt..40pt wrap=16em
+
+style stage color=#1565C0
+style check color=#C62828
+
+node src "Source .cmap" .stage
+| one statement per line
+node lex "Lexer" .stage
+| tokens with byte spans
+node parse "Parser" .stage
+| recursive descent
+| skips a bad line, keeps going
+node sema "Semantic analysis" .stage
+| names, styles, units
+| ordering cycles (E0008)
+node plan "Strategy" .stage
+| radial or layered candidates
+node csp "CSP search"
+| FC-CBJ, binary search on font
+node bnb "Branch and bound"
+| soft `prefer` constraints
+node core "QuickXplain"
+| minimal unsat core (E0110)
+node checker "Checker" .check
+| recomputes every constraint
+node emit "SVG / TikZ"
+
+src -> lex
+lex -> parse
+parse -> sema
+sema -> plan
+plan -> csp
+csp -> bnb, core
+bnb -> checker
+checker -> emit
+core ..> sema "points back at source"
+
+require bnb left-of core
+require align row(bnb, core)
+prefer checker near bnb weight=2
+prefer emit at bottom-right

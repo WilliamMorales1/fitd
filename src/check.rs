@@ -1,0 +1,131 @@
+//! Borrow-checker-style verifier, independent of the solver.
+//!
+//! Every node owns its region of the page; tree edges and links borrow a corridor through the
+//! page. The checker recomputes everything from the finished layout, so a solver bug surfaces
+//! as a diagnostic instead of a broken picture.
+
+use crate::diag::Diag;
+use crate::geom::{segment_hits_rect, segments_cross};
+use crate::graph::{Graph, LayoutKind};
+use crate::layout::{Config, EdgeStyle, Layout, Shape, line_height, relation_holds};
+use crate::metrics::Fonts;
+
+pub const EXPLAIN: &[(&str, &str)] = &[
+    ("E0001", "An edge, link, or `root` names a node id that is never declared with `node`."),
+    ("E0002", "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered`, `page`, `font`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"]`, `A ..> B`, `require REL`, `prefer REL [weight=N]`."),
+    ("E0003", "Two `node` (or `style`) statements declare the same name."),
+    ("E0004", "A node uses `.name` but no `style name` is declared."),
+    ("E0005", "An attribute is not valid on this statement, such as `weight=` on `require`."),
+    ("E0006", "An attribute value has the wrong type or unit. Lengths need a unit: pt, mm, cm, in, or em."),
+    ("E0007", "A constraint names the same node twice, or an alignment lists fewer than two nodes."),
+    ("E0008", "Hard constraints contradict each other on one axis: orderings (`left-of`, `above`) form a cycle, possibly through alignments. Found before search; no layout can satisfy them."),
+    ("E0009", "An unknown keyword value: layout, relation, alignment side, place, shape, or page flag."),
+    ("E0101", "Two nodes claim overlapping regions. Each node owns its box exclusively, like a mutable borrow."),
+    ("E0102", "An edge passes through a node that is neither of its endpoints, so a reader cannot tell where it goes."),
+    ("E0103", "Two tree edges cross. Radial trees must stay planar so each branch reads as one direction."),
+    ("E0104", "A node extends past the page margin."),
+    ("E0105", "A text line is wider than the box (or circle) that owns it."),
+    ("E0106", "The body font is below --min-font, so the map is not readable at the target size."),
+    ("E0108", "The finished layout breaks a `require` constraint. The solver should never produce this; it indicates a solver bug."),
+    ("E0110", "Even at --min-font, the listed `require` constraints cannot all hold together on this page. The set is minimal: drop any one and the rest fit (QuickXplain over the search budget)."),
+    ("E0107", "A child sits closer to the center than its parent, breaking the general-to-specific direction."),
+    ("W0201", "A cross link passes through an unrelated node. Allowed, but harder to follow."),
+    ("W0202", "A character has no glyph in any fallback font and will render as a box."),
+    ("W0203", "A style is declared but no node uses it."),
+    ("W0205", "A `prefer` constraint is not met in the final layout; its weight was traded for others."),
+    ("W0206", "Two edges cross in a layered layout. Crossings are soft (cost 1 each) there, since many graphs cannot be drawn without them."),
+    ("W0204", "A setting (title, root, layout, page, font) appears twice; the last one wins."),
+];
+
+pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> {
+    let mut d = Vec::new();
+    let n = g.nodes.len();
+    let id = |v: usize| format!("`{}`", g.nodes[v].id);
+    let at = |v: Option<usize>| v.map(|v| g.nodes[v].span);
+    let mut push = |err: bool, code, node: Option<usize>, msg: String, notes: Vec<String>| {
+        let mut x = if err { Diag::error(code, msg) } else { Diag::warning(code, msg) };
+        if let Some(span) = at(node) {
+            x = x.primary(span, "");
+        }
+        x.notes = notes;
+        d.push(x);
+    };
+
+    if lay.body + 1e-9 < cfg.min_font {
+        push(true, "E0106", None, format!("body font {:.1}pt below minimum {:.1}pt", lay.body, cfg.min_font), vec![]);
+    }
+    let page = crate::geom::Rect::centered((0.0, 0.0), cfg.page_w - 2.0 * cfg.margin, cfg.page_h - 2.0 * cfg.margin);
+    for v in 0..n {
+        if !lay.rect(v).within(&page) {
+            push(true, "E0104", Some(v), format!("{} extends past the page margin", id(v)), vec![]);
+        }
+    }
+    for a in 0..n {
+        for b in a + 1..n {
+            if lay.rect(a).inflate(-0.01).intersects(&lay.rect(b)) {
+                push(true, "E0101", Some(b), format!("{} overlaps the region owned by {}", id(b), id(a)),
+                    vec![format!("{} owns {:?}", id(a), lay.rect(a))]);
+            }
+        }
+    }
+    let radial = lay.kind == LayoutKind::Radial;
+    let straight: Vec<(usize, usize)> = lay.edges.iter().filter(|e| e.style != EdgeStyle::Link).map(|e| (e.a, e.b)).collect();
+    for &(p, v) in &straight {
+        for u in (0..n).filter(|&u| u != p && u != v) {
+            if segment_hits_rect(lay.pos[p], lay.pos[v], &lay.rect(u).inflate(-0.01)) {
+                push(true, "E0102", Some(v), format!("edge {} -> {} passes through {}", id(p), id(v), id(u)), vec![]);
+            }
+        }
+        if radial && lay.radius(v) + 1e-6 < lay.radius(p) {
+            push(true, "E0107", Some(v), format!("{} is nearer the center than its parent {}", id(v), id(p)), vec![]);
+        }
+    }
+    for (i, &(p, v)) in straight.iter().enumerate() {
+        for &(q, w) in &straight[i + 1..] {
+            if segments_cross(lay.pos[p], lay.pos[v], lay.pos[q], lay.pos[w]) {
+                // Radial trees can always be drawn planar; layered graphs in general cannot.
+                let (err, code) = if radial { (true, "E0103") } else { (false, "W0206") };
+                push(err, code, Some(w), format!("edge {} -> {} crosses edge {} -> {}", id(q), id(w), id(p), id(v)), vec![]);
+            }
+        }
+    }
+    for v in 0..n {
+        let b = &lay.boxes[v];
+        for l in &b.lines {
+            let width = fonts.runs_width(&l.runs, l.size, l.bold);
+            let fits = match b.shape {
+                Shape::Rect => l.x + width <= b.w - b.pad + 0.01 && l.baseline - 0.96 * l.size >= 0.0 && l.baseline - 0.96 * l.size + line_height(l.size) <= b.h + 0.01,
+                Shape::Circle => {
+                    let r = b.w / 2.0;
+                    let top = l.baseline - 0.96 * l.size - r;
+                    let far = top.abs().max((top + line_height(l.size)).abs());
+                    (width / 2.0).hypot(far) <= r + 0.01
+                }
+            };
+            if !fits {
+                let text: String = l.runs.iter().map(|r| r.text.as_str()).collect();
+                push(true, "E0105", Some(v), format!("text \"{text}\" overflows {}", id(v)), vec![]);
+            }
+        }
+    }
+    for e in lay.edges.iter().filter(|e| e.style == EdgeStyle::Link) {
+        let path = lay.link_path(e.a, e.b);
+        if let Some(u) = (0..n).find(|&u| u != e.a && u != e.b && path.iter().any(|&p| lay.inside(u, p))) {
+            push(false, "W0201", Some(e.b), format!("link {} -> {} passes through {}", id(e.a), id(e.b), id(u)), vec![]);
+        }
+    }
+    for c in fonts.missing.borrow().iter() {
+        push(false, "W0202", None, format!("no glyph for {c:?} (U+{:04X})", *c as u32), vec![]);
+    }
+    let rect = |v: usize| lay.rect(v);
+    for c in &g.constraints {
+        if !relation_holds(&c.rel, &rect, lay.body, &page, lay.tol) {
+            d.push(if c.hard {
+                Diag::error("E0108", "required constraint does not hold").primary(c.span, "violated by the layout")
+            } else {
+                Diag::warning("W0205", "preference not met").primary(c.span, format!("costs {}", c.weight))
+            });
+        }
+    }
+    d
+}
