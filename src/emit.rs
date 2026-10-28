@@ -40,7 +40,7 @@ fn clipped(lay: &Layout, a: usize, b: usize) -> (P, P) {
 /// link_points returns the drawn polyline of an edge, in layout coordinates.
 fn edge_points(lay: &Layout, e: &Drawn) -> Vec<P> {
     match e.style {
-        EdgeStyle::Link => lay.link_path(e.a, e.b),
+        EdgeStyle::Link => lay.path(e),
         EdgeStyle::Arrow => {
             let (s, t) = clipped(lay, e.a, e.b);
             vec![s, t]
@@ -99,13 +99,6 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64) -> 
                 let _ = writeln!(o, r##"<polyline points="{}" fill="none" stroke="#777" stroke-width="{sw:.2}" stroke-dasharray="{:.1} {:.1}" marker-end="url(#arr)"/>"##, d.join(" "), 0.5 * b, 0.3 * b);
             }
         }
-        if let Some(label) = &e.label {
-            let size = 0.8 * b;
-            let lw = fonts.width(label, size, false);
-            let (x, y) = tx(label_spot(lay, &pts, lw + 4.0, size * 1.3));
-            let _ = writeln!(o, r#"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="white"/>"#, x - lw / 2.0 - 2.0, y - size, lw + 4.0, size * 1.3);
-            let _ = writeln!(o, r##"<text x="{x:.1}" y="{y:.1}" font-size="{size:.2}" font-family="{}" font-style="italic" fill="#555" text-anchor="middle">{}</text>"##, xml(&fonts.regular[0].family), xml(label));
-        }
     }
     for v in 0..lay.pos.len() {
         let bx = &lay.boxes[v];
@@ -130,28 +123,17 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64) -> 
             svg_line(&mut o, fonts, l, left + l.x, top + l.baseline, fill);
         }
     }
+    // Labels last, so nothing is ever drawn over them.
+    for e in &lay.edges {
+        let (Some(label), Some(r)) = (&e.label, lay.label_rect(e)) else { continue };
+        let size = 0.8 * b;
+        let ((x0, y0), (x1, y1)) = (tx((r.x0, r.y1)), tx((r.x1, r.y0)));
+        let _ = writeln!(o, r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" fill="white" fill-opacity="0.9"/>"#, x1 - x0, y1 - y0);
+        let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0 + 0.35 * size);
+        let _ = writeln!(o, r##"<text x="{cx:.1}" y="{cy:.1}" font-size="{size:.2}" font-family="{}" font-style="italic" fill="#555" text-anchor="middle">{}</text>"##, xml(&fonts.regular[0].family), xml(label));
+    }
     o.push_str("</svg>\n");
     o
-}
-
-/// label_spot slides a label along its edge, from the middle outward, to the first place
-/// where its box clears every node; the middle if there is none.
-fn label_spot(lay: &Layout, pts: &[P], w: f64, h: f64) -> P {
-    let at = |t: f64| {
-        let f = t * (pts.len() - 1) as f64;
-        let (i, u) = ((f as usize).min(pts.len() - 2), f.fract());
-        let (a, b) = (pts[i], pts[i + 1]);
-        (a.0 + u * (b.0 - a.0), a.1 + u * (b.1 - a.1))
-    };
-    for k in 0..=20 {
-        let t = 0.5 + if k % 2 == 0 { 1.0 } else { -1.0 } * (k as f64 / 2.0).ceil() * 0.02;
-        let p = at(t);
-        let r = crate::geom::Rect::centered(p, w, h);
-        if (0..lay.pos.len()).all(|v| !lay.rect(v).intersects(&r)) {
-            return p;
-        }
-    }
-    at(0.5)
 }
 
 fn tex(s: &str) -> String {
@@ -233,10 +215,6 @@ pub fn tikz(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64) ->
             EdgeStyle::Link => "black!50, dashed, -{Stealth}".to_string(),
         };
         let _ = writeln!(o, "\\draw[{style}, line width={lw:.2}bp] {};", pts.join(" -- "));
-        if let Some(label) = &e.label {
-            let m = label_spot(lay, &raw, fonts.width(label, 0.8 * b, false) + 4.0, 1.04 * b);
-            let _ = writeln!(o, "\\node[fill=white, inner sep=1bp, text=black!65] at ({:.1},{:.1}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont\\itshape {}}};", m.0, m.1, tex(label), s = 0.8 * b);
-        }
     }
     for v in 0..lay.pos.len() {
         let bx = &lay.boxes[v];
@@ -260,6 +238,11 @@ pub fn tikz(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64) ->
         for l in &bx.lines {
             tikz_line(&mut o, l, cx - bx.w / 2.0 + l.x, cy + bx.h / 2.0 - l.baseline, text);
         }
+    }
+    for e in &lay.edges {
+        let (Some(label), Some(r)) = (&e.label, lay.label_rect(e)) else { continue };
+        let m = ((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0);
+        let _ = writeln!(o, "\\node[fill=white, fill opacity=0.9, text opacity=1, inner sep=1bp, text=black!65] at ({:.1},{:.1}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont\\itshape {}}};", m.0, m.1, tex(label), s = 0.8 * b);
     }
     o += "\\end{tikzpicture}\n\\end{document}\n";
     o

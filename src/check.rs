@@ -7,7 +7,8 @@
 use crate::diag::Diag;
 use crate::geom::{segment_hits_rect, segments_cross};
 use crate::graph::{Graph, LayoutKind};
-use crate::layout::{Config, EdgeStyle, Layout, Shape, line_height, relation_holds};
+use crate::geom::Rect;
+use crate::layout::{Config, Drawn, EdgeStyle, Layout, Shape, line_height, paths_meet, relation_holds};
 use crate::metrics::Fonts;
 
 pub const EXPLAIN: &[(&str, &str)] = &[
@@ -27,6 +28,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ("E0105", "A text line is wider than the box (or circle) that owns it."),
     ("E0106", "The body font is below --min-font, so the map is not readable at the target size."),
     ("E0108", "The finished layout breaks a `require` constraint. The solver should never produce this; it indicates a solver bug."),
+    ("E0109", "An edge label is covered by a node, overlaps another label, or is clipped by the page. The solver should never produce this."),
     ("E0110", "Even at --min-font, the listed `require` constraints cannot all hold together on this page. The set is minimal: drop any one and the rest fit (QuickXplain over the search budget)."),
     ("E0107", "A child sits closer to the center than its parent, breaking the general-to-specific direction."),
     ("W0201", "A cross link passes through an unrelated node. Allowed, but harder to follow."),
@@ -34,6 +36,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ("W0203", "A style is declared but no node uses it."),
     ("W0205", "A `prefer` constraint is not met in the final layout; its weight was traded for others."),
     ("W0206", "Two edges cross in a layered layout. Crossings are soft (cost 1 each) there, since many graphs cannot be drawn without them."),
+    ("W0207", "Two dashed links cross or run close together. Avoided when possible (cost 1 per pair), but not always avoidable."),
     ("W0204", "A setting (title, root, layout, page, font) appears twice; the last one wins."),
 ];
 
@@ -109,13 +112,37 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
         }
     }
     for e in lay.edges.iter().filter(|e| e.style == EdgeStyle::Link) {
-        let path = lay.link_path(e.a, e.b);
+        let path = lay.path(e);
         if let Some(u) = (0..n).find(|&u| u != e.a && u != e.b && path.iter().any(|&p| lay.inside(u, p))) {
             push(false, "W0201", Some(e.b), format!("link {} -> {} passes through {}", id(e.a), id(e.b), id(u)), vec![]);
         }
     }
     for c in fonts.missing.borrow().iter() {
         push(false, "W0202", None, format!("no glyph for {c:?} (U+{:04X})", *c as u32), vec![]);
+    }
+    let labels: Vec<(usize, Rect)> = lay.edges.iter().enumerate().filter_map(|(i, e)| lay.label_rect(e).map(|r| (i, r))).collect();
+    for (k, &(i, r)) in labels.iter().enumerate() {
+        let e = &lay.edges[i];
+        let what = format!("label \"{}\" on {} -> {}", e.label.as_deref().unwrap_or(""), id(e.a), id(e.b));
+        let problem = if !r.within(&page) {
+            Some("is clipped by the page margin".to_string())
+        } else if let Some(u) = (0..n).find(|&u| r.intersects(&lay.rect(u))) {
+            Some(format!("is covered by {}", id(u)))
+        } else {
+            labels[k + 1..].iter().find(|(_, q)| r.intersects(q)).map(|&(j, _)| format!("overlaps the label on {} -> {}", id(lay.edges[j].a), id(lay.edges[j].b)))
+        };
+        if let Some(p) = problem {
+            d.push(Diag::error("E0109", format!("{what} {p}")).primary(g.nodes[e.b].span, ""));
+        }
+    }
+    let links: Vec<&Drawn> = lay.edges.iter().filter(|e| e.style == EdgeStyle::Link).collect();
+    for (k, e) in links.iter().enumerate() {
+        for f in &links[k + 1..] {
+            let skip: Vec<Rect> = [e.a, e.b].into_iter().filter(|u| *u == f.a || *u == f.b).map(|u| lay.rect(u).inflate(1.5 * lay.body)).collect();
+            if paths_meet(&lay.path(e), &lay.path(f), 0.5 * lay.body, &skip) {
+                d.push(Diag::warning("W0207", format!("links {} -> {} and {} -> {} cross or run together", id(e.a), id(e.b), id(f.a), id(f.b))).primary(g.nodes[f.b].span, ""));
+            }
+        }
     }
     let rect = |v: usize| lay.rect(v);
     for c in &g.constraints {

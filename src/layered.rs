@@ -191,10 +191,10 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     let mut edges = Vec::new();
     for (e, is_back) in g.edges.iter().filter(|e| e.kind == EdgeKind::Tree).zip(&back) {
         let style = if *is_back { EdgeStyle::Link } else { EdgeStyle::Arrow };
-        edges.push(Drawn { a: e.a, b: e.b, style, width: 0.12, label: e.label.clone() });
+        edges.push(Drawn::new(e.a, e.b, style, 0.12, e.label.clone()));
     }
     for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Link) {
-        edges.push(Drawn { a: e.a, b: e.b, style: EdgeStyle::Link, width: 0.1, label: e.label.clone() });
+        edges.push(Drawn::new(e.a, e.b, EdgeStyle::Link, 0.1, e.label.clone()));
     }
     let order: Vec<usize> = rows.concat();
     Plan { order, cands, cons, edges, kx: 1.0, ky: 1.0, tol: 0.5 * step }

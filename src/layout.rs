@@ -87,6 +87,84 @@ pub struct Drawn {
     /// Stroke width in ems of the body font.
     pub width: f64,
     pub label: Option<String>,
+    /// Bend of a link (see `curve`) and the label's position along the path, 0 to 1. The
+    /// solver picks both.
+    pub bow: f64,
+    pub t: f64,
+    /// Label box size in points, set once the font is known.
+    pub label_size: (f64, f64),
+}
+
+impl Drawn {
+    pub fn new(a: usize, b: usize, style: EdgeStyle, width: f64, label: Option<String>) -> Drawn {
+        Drawn { a, b, style, width, label, bow: 0.0, t: 0.5, label_size: (0.0, 0.0) }
+    }
+}
+
+/// Bends tried for dashed links, preferred first, and label positions along any edge.
+const BOWS: [f64; 8] = [0.22, -0.22, 0.4, -0.4, 0.1, -0.1, 0.6, -0.6];
+const SPOTS: [f64; 9] = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82];
+
+pub fn label_size(fonts: &Fonts, text: &str, body: f64) -> (f64, f64) {
+    (fonts.width(text, 0.8 * body, false) + 0.4 * body, 1.04 * body)
+}
+
+fn inside_box(c: P, shape: Shape, w: f64, h: f64, p: P) -> bool {
+    match shape {
+        Shape::Circle => (p.0 - c.0).hypot(p.1 - c.1) <= w / 2.0,
+        Shape::Rect => Rect::centered(c, w, h).contains(p),
+    }
+}
+
+/// curve is the path of an edge: a quadratic Bezier from `pa` to `pb` bent by `bow` times its
+/// length away from the page center (0 is straight), trimmed to the part outside both boxes.
+pub fn curve(pa: P, in_a: &dyn Fn(P) -> bool, pb: P, in_b: &dyn Fn(P) -> bool, bow: f64) -> Vec<P> {
+    let m = ((pa.0 + pb.0) / 2.0, (pa.1 + pb.1) / 2.0);
+    let d = (pb.0 - pa.0).hypot(pb.1 - pa.1).max(1e-9);
+    let mut n = (-(pb.1 - pa.1) / d, (pb.0 - pa.0) / d);
+    if n.0 * m.0 + n.1 * m.1 < 0.0 {
+        n = (-n.0, -n.1);
+    }
+    let c = (m.0 + bow * d * n.0, m.1 + bow * d * n.1);
+    let pts: Vec<P> = (0..=60)
+        .map(|i| {
+            let t = i as f64 / 60.0;
+            let (u, w) = ((1.0 - t) * (1.0 - t), 2.0 * (1.0 - t) * t);
+            (u * pa.0 + w * c.0 + t * t * pb.0, u * pa.1 + w * c.1 + t * t * pb.1)
+        })
+        .collect();
+    let s = pts.iter().position(|&p| !in_a(p)).unwrap_or(0);
+    let e = pts.iter().rposition(|&p| !in_b(p)).unwrap_or(pts.len() - 1).max(s);
+    pts[s..=e].to_vec()
+}
+
+/// label_rect is the box of a label centered at fraction `t` of a path.
+pub fn label_rect(path: &[P], t: f64, size: (f64, f64)) -> Rect {
+    let i = ((path.len() - 1) as f64 * t).round() as usize;
+    Rect::centered(path[i], size.0, size.1)
+}
+
+/// paths_meet reports whether two paths cross or run within `d` of each other, ignoring the
+/// parts inside `skip` (around shared endpoints, where links naturally meet).
+pub fn paths_meet(p: &[P], q: &[P], d: f64, skip: &[Rect]) -> bool {
+    let free = |x: P| skip.iter().all(|r| !r.contains(x));
+    for i in 0..p.len() {
+        if !free(p[i]) {
+            continue;
+        }
+        for j in 0..q.len() {
+            if !free(q[j]) {
+                continue;
+            }
+            if (p[i].0 - q[j].0).hypot(p[i].1 - q[j].1) < d {
+                return true;
+            }
+            if i + 1 < p.len() && j + 1 < q.len() && free(p[i + 1]) && free(q[j + 1]) && segments_cross(p[i], p[i + 1], q[j], q[j + 1]) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub struct Layout {
@@ -114,46 +192,16 @@ impl Layout {
     }
 
     pub fn inside(&self, v: usize, p: P) -> bool {
-        let b = &self.boxes[v];
-        match b.shape {
-            Shape::Circle => (p.0 - self.pos[v].0).hypot(p.1 - self.pos[v].1) <= b.w / 2.0,
-            Shape::Rect => self.rect(v).contains(p),
-        }
+        inside_box(self.pos[v], self.boxes[v].shape, self.boxes[v].w, self.boxes[v].h, p)
     }
 
-    /// link_path routes a cross link: the first bow (away from center first) that clears all nodes.
-    pub fn link_path(&self, a: usize, b: usize) -> Vec<P> {
-        let clear = |pts: &[P]| (0..self.pos.len()).all(|u| u == a || u == b || pts.iter().all(|&p| !self.inside(u, p)));
-        let mut first = None;
-        for bow in [0.22, -0.22, 0.4, -0.4, 0.1, -0.1, 0.6, -0.6] {
-            let pts = self.curve(a, b, bow);
-            if clear(&pts) {
-                return pts;
-            }
-            first.get_or_insert(pts);
-        }
-        first.unwrap()
+    /// path is an edge's drawn route with its chosen bend, trimmed to the node borders.
+    pub fn path(&self, e: &Drawn) -> Vec<P> {
+        curve(self.pos[e.a], &|p| self.inside(e.a, p), self.pos[e.b], &|p| self.inside(e.b, p), e.bow)
     }
 
-    fn curve(&self, a: usize, b: usize, bow: f64) -> Vec<P> {
-        let (pa, pb) = (self.pos[a], self.pos[b]);
-        let m = ((pa.0 + pb.0) / 2.0, (pa.1 + pb.1) / 2.0);
-        let d = (pb.0 - pa.0).hypot(pb.1 - pa.1).max(1e-9);
-        let mut n = (-(pb.1 - pa.1) / d, (pb.0 - pa.0) / d);
-        if n.0 * m.0 + n.1 * m.1 < 0.0 {
-            n = (-n.0, -n.1);
-        }
-        let c = (m.0 + bow * d * n.0, m.1 + bow * d * n.1);
-        let pts: Vec<P> = (0..=60)
-            .map(|i| {
-                let t = i as f64 / 60.0;
-                let (u, w) = ((1.0 - t) * (1.0 - t), 2.0 * (1.0 - t) * t);
-                (u * pa.0 + w * c.0 + t * t * pb.0, u * pa.1 + w * c.1 + t * t * pb.1)
-            })
-            .collect();
-        let s = pts.iter().position(|&p| !self.inside(a, p)).unwrap_or(0);
-        let e = pts.iter().rposition(|&p| !self.inside(b, p)).unwrap_or(pts.len() - 1).max(s);
-        pts[s..=e].to_vec()
+    pub fn label_rect(&self, e: &Drawn) -> Option<Rect> {
+        e.label.as_ref().map(|_| label_rect(&self.path(e), e.t, e.label_size))
     }
 }
 
@@ -283,6 +331,27 @@ pub enum Kind {
     Rel(usize),
     /// Two nodes of a hard alignment; pairs propagate better than one wide constraint.
     Aligned(Side),
+    /// Route `0`'s label stays off node `1`.
+    LabelClear(usize, usize),
+    /// Route's label stays on the page.
+    LabelPage(usize),
+    /// Two routes' labels do not overlap.
+    LabelApart(usize, usize),
+    /// Two dashed links neither cross nor run close together (soft).
+    LinkApart(usize, usize),
+    /// A dashed link stays out of node `1` (soft).
+    LinkClear(usize, usize),
+}
+
+/// Route is an edge whose bend or label position the solver chooses. Its variable comes after
+/// every node's, so all positions are known when its values are checked.
+struct Route {
+    edge: usize,
+    a: usize,
+    b: usize,
+    /// (bow, t) pairs in preference order.
+    opts: Vec<(f64, f64)>,
+    label: Option<(f64, f64)>,
 }
 
 /// Plan is what a strategy hands to the core: candidates per node and constraints over nodes.
@@ -355,6 +424,46 @@ impl Grid {
         Grid { cell, buckets }
     }
 
+    /// shadow calls `f` with every candidate whose center may lie in the wedge seen from
+    /// `apex` across the convex hull of `pts` (and some that do not). None when the wedge is
+    /// 180 degrees or wider, which happens when `apex` touches the hull.
+    fn shadow(&self, apex: P, pts: &[P], f: &mut dyn FnMut(u32)) -> Option<u64> {
+        let cross = |a: P, b: P| a.0 * b.1 - a.1 * b.0;
+        let n = pts.len() as f64;
+        let mid = (pts.iter().map(|p| p.0).sum::<f64>() / n - apex.0, pts.iter().map(|p| p.1).sum::<f64>() / n - apex.1);
+        if mid.0.hypot(mid.1) < 1e-9 {
+            return None;
+        }
+        let (mut lo, mut hi) = ((f64::MAX, (0.0, 0.0)), (f64::MIN, (0.0, 0.0)));
+        for p in pts {
+            let d = (p.0 - apex.0, p.1 - apex.1);
+            let ang = cross(mid, d).atan2(mid.0 * d.0 + mid.1 * d.1);
+            if ang < lo.0 {
+                lo = (ang, d);
+            }
+            if ang > hi.0 {
+                hi = (ang, d);
+            }
+        }
+        if hi.0 - lo.0 >= std::f64::consts::PI - 1e-6 {
+            return None;
+        }
+        let (dlo, dhi) = (lo.1, hi.1);
+        let mut n = 0;
+        for (&(cx, cy), b) in &self.buckets {
+            let (x0, y0) = (cx as f64 * self.cell - apex.0, cy as f64 * self.cell - apex.1);
+            let (x1, y1) = (x0 + self.cell, y0 + self.cell);
+            let corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)];
+            // The wedge is left of `dlo` and right of `dhi`; skip cells wholly outside either side.
+            if corners.iter().all(|&c| cross(dlo, c) < 0.0) || corners.iter().all(|&c| cross(dhi, c) > 0.0) {
+                continue;
+            }
+            n += b.len() as u64;
+            b.iter().for_each(|&i| f(i));
+        }
+        Some(n)
+    }
+
     /// near calls `f` with every candidate whose center may lie in `r` (and some that do not).
     fn near(&self, r: &Rect, f: &mut dyn FnMut(u32)) -> u64 {
         let (cx0, cx1) = ((r.x0 / self.cell).floor() as i64, (r.x1 / self.cell).floor() as i64);
@@ -394,18 +503,49 @@ struct Scene<'a> {
     scopes: Vec<Vec<usize>>,
     kinds: Vec<Kind>,
     weights: Vec<u64>,
-    /// Candidate box size per variable, and a spatial index when the fast path is on.
+    /// Candidate box size and shape per node variable, and a spatial index over its candidates.
     size: Vec<(f64, f64)>,
+    shapes: Vec<Shape>,
     grids: Vec<Grid>,
+    routes: Vec<Route>,
+}
+
+impl Scene<'_> {
+    fn center(&self, u: usize, val: &[u32]) -> P {
+        self.at[self.var[u]][val[self.var[u]] as usize]
+    }
+
+    fn node_rect(&self, u: usize, val: &[u32]) -> Rect {
+        self.rects[self.var[u]][val[self.var[u]] as usize]
+    }
+
+    fn route_path(&self, i: usize, val: &[u32]) -> Vec<P> {
+        let r = &self.routes[i];
+        let (bow, _) = r.opts[val[self.node.len() + i] as usize];
+        let inside = |u: usize, p: P| {
+            let (w, h) = self.size[self.var[u]];
+            inside_box(self.center(u, val), self.shapes[self.var[u]], w, h, p)
+        };
+        curve(self.center(r.a, val), &|p| inside(r.a, p), self.center(r.b, val), &|p| inside(r.b, p), bow)
+    }
+
+    fn route_label(&self, i: usize, val: &[u32]) -> Rect {
+        let r = &self.routes[i];
+        let (_, t) = r.opts[val[self.node.len() + i] as usize];
+        label_rect(&self.route_path(i, val), t, r.label.unwrap())
+    }
 }
 
 impl Problem for Scene<'_> {
     fn num_vars(&self) -> usize {
-        self.node.len()
+        self.node.len() + self.routes.len()
     }
 
     fn domain_size(&self, v: usize) -> usize {
-        self.at[v].len()
+        match v.checked_sub(self.node.len()) {
+            Some(i) => self.routes[i].opts.len(),
+            None => self.at[v].len(),
+        }
     }
 
     fn scopes(&self) -> &[Vec<usize>] {
@@ -416,30 +556,68 @@ impl Problem for Scene<'_> {
         self.weights[c]
     }
 
-    fn filter(&self, c: usize, val: &[u32], y: usize, bad: &mut dyn FnMut(usize)) -> Option<u64> {
-        if self.grids.is_empty() {
+    fn filter(&self, c: usize, val: &[u32], y: usize, alive: &dyn Fn(usize) -> bool, bad: &mut dyn FnMut(usize)) -> Option<u64> {
+        if self.grids.is_empty() || y >= self.node.len() {
             return None;
         }
         let s = &self.scopes[c];
         let (w, h) = self.size[y];
-        let mut test = |region: Rect, hit: &dyn Fn(usize) -> bool| {
-            let grown = Rect { x0: region.x0 - w / 2.0, y0: region.y0 - h / 2.0, x1: region.x1 + w / 2.0, y1: region.y1 + h / 2.0 };
-            self.grids[y].near(&grown, &mut |a| {
-                if hit(a as usize) {
-                    bad(a as usize);
+        let mut tests = 0;
+        let mut visit = |a: u32, hit: &dyn Fn(usize) -> bool| {
+            let a = a as usize;
+            if alive(a) {
+                tests += 1;
+                if hit(a) {
+                    bad(a);
                 }
-            })
+            }
         };
         match self.kinds[c] {
             Kind::Apart(gap) => {
                 let other = if s[0] == y { s[1] } else { s[0] };
                 let r = self.rects[other][val[other] as usize].inflate(gap);
-                Some(test(r, &|a| r.intersects(&self.rects[y][a])))
+                let grown = Rect { x0: r.x0 - w / 2.0, y0: r.y0 - h / 2.0, x1: r.x1 + w / 2.0, y1: r.y1 + h / 2.0 };
+                self.grids[y].near(&grown, &mut |a| visit(a, &|a| r.intersects(&self.rects[y][a])));
+                Some(tests)
             }
             Kind::Clear(thin) if s[2] == y => {
                 let (p, q) = (self.at[s[0]][val[s[0]] as usize], self.at[s[1]][val[s[1]] as usize]);
-                let span = Rect { x0: p.0.min(q.0) - thin, y0: p.1.min(q.1) - thin, x1: p.0.max(q.0) + thin, y1: p.1.max(q.1) + thin };
-                Some(test(span, &|a| segment_hits_rect(p, q, &self.rects[y][a].inflate(thin))))
+                let grown = Rect { x0: p.0.min(q.0) - thin - w / 2.0, y0: p.1.min(q.1) - thin - h / 2.0, x1: p.0.max(q.0) + thin + w / 2.0, y1: p.1.max(q.1) + thin + h / 2.0 };
+                self.grids[y].near(&grown, &mut |a| visit(a, &|a| segment_hits_rect(p, q, &self.rects[y][a].inflate(thin))));
+                Some(tests)
+            }
+            Kind::Clear(thin) => {
+                // An endpoint is open: the edge hits the box only from inside the box's shadow.
+                let (apex, open) = if s[0] == y { (self.at[s[1]][val[s[1]] as usize], 0) } else { (self.at[s[0]][val[s[0]] as usize], 1) };
+                let r = self.rects[s[2]][val[s[2]] as usize].inflate(thin);
+                let corners = [(r.x0, r.y0), (r.x1, r.y0), (r.x0, r.y1), (r.x1, r.y1)];
+                let ends = |a: usize| if open == 0 { (self.at[y][a], apex) } else { (apex, self.at[y][a]) };
+                self.grids[y].shadow(apex, &corners, &mut |a| {
+                    visit(a, &|a| {
+                        let (p, q) = ends(a);
+                        segment_hits_rect(p, q, &r)
+                    })
+                })?;
+                Some(tests)
+            }
+            Kind::NoCross => {
+                // The open endpoint's edge crosses the other edge only from inside its shadow.
+                let k = s.iter().position(|&v| v == y).unwrap();
+                let partner = k ^ 1;
+                let (o0, o1) = if k < 2 { (2, 3) } else { (0, 1) };
+                let pos = |i: usize| self.at[s[i]][val[s[i]] as usize];
+                let apex = pos(partner);
+                let other = [pos(o0), pos(o1)];
+                self.grids[y].shadow(apex, &other, &mut |a| {
+                    visit(a, &|a| {
+                        let mut seg = [(0.0, 0.0); 4];
+                        for (i, p) in seg.iter_mut().enumerate() {
+                            *p = if i == k { self.at[y][a] } else { pos(i) };
+                        }
+                        segments_cross(seg[0], seg[1], seg[2], seg[3])
+                    })
+                })?;
+                Some(tests)
             }
             _ => None,
         }
@@ -459,6 +637,24 @@ impl Problem for Scene<'_> {
                 let by_node = |u: usize| self.rects[self.var[u]][val[self.var[u]] as usize];
                 relation_holds(&self.g.constraints[ci].rel, &by_node, self.body, &self.page, self.tol)
             }
+            Kind::LabelClear(i, u) => !self.route_label(i, val).intersects(&self.node_rect(u, val).inflate(0.15 * self.body)),
+            Kind::LabelPage(i) => self.route_label(i, val).within(&self.page),
+            Kind::LabelApart(i, j) => !self.route_label(i, val).inflate(0.15 * self.body).intersects(&self.route_label(j, val)),
+            Kind::LinkApart(i, j) => {
+                let (ri, rj) = (&self.routes[i], &self.routes[j]);
+                let skip: Vec<Rect> = [ri.a, ri.b]
+                    .into_iter()
+                    .filter(|u| *u == rj.a || *u == rj.b)
+                    .map(|u| self.node_rect(u, val).inflate(1.5 * self.body))
+                    .collect();
+                !paths_meet(&self.route_path(i, val), &self.route_path(j, val), 0.5 * self.body, &skip)
+            }
+            Kind::LinkClear(i, u) => {
+                let (w, h) = self.size[self.var[u]];
+                let c = self.center(u, val);
+                let shape = self.shapes[self.var[u]];
+                !self.route_path(i, val).iter().any(|&p| inside_box(c, shape, w, h, p))
+            }
         }
     }
 }
@@ -468,8 +664,10 @@ impl Problem for Scene<'_> {
 enum Users<'a> {
     /// These hard constraints only (indices into `Graph::constraints`).
     Hard(&'a [usize]),
-    /// Every hard constraint plus every soft one.
+    /// Every hard constraint plus `prefer`s and layered crossings.
     All,
+    /// Nodes fixed where this layout put them; only link routes are optimized.
+    Routes(&'a Layout),
 }
 
 fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: Users, stats: &mut Stats) -> Option<Layout> {
@@ -502,11 +700,14 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         kinds: Vec::new(),
         weights: Vec::new(),
         size: Vec::new(),
+        shapes: Vec::new(),
         grids: Vec::new(),
+        routes: Vec::new(),
     };
     for &v in &plan.order {
         let c = &plan.cands[v];
         sc.size.push((boxes[v].w, boxes[v].h));
+        sc.shapes.push(boxes[v].shape);
         sc.at.push(c.iter().map(|c| c.at).collect());
         sc.r.push(c.iter().map(|c| c.r).collect());
         sc.rects.push(c.iter().map(|c| Rect::centered(c.at, boxes[v].w, boxes[v].h)).collect());
@@ -516,6 +717,7 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         let on = match users {
             Users::Hard(set) => c.hard && set.contains(&ci),
             Users::All => true,
+            Users::Routes(_) => c.hard,
         };
         if !on {
             continue;
@@ -534,15 +736,78 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
     }
     sc.grids = sc.at.iter().map(|a| Grid::new(a)).collect();
     let optimizing = matches!(users, Users::All);
-    for (nodes, kind, w) in cons {
-        if w > 0 && !optimizing {
+    let routing = matches!(users, Users::Routes(_));
+    if let Users::Routes(prev) = users {
+        for (i, &v) in sc.node.iter().enumerate() {
+            let k = sc.at[i].iter().position(|&p| p == prev.pos[v]).expect("fixed node keeps its spot");
+            sc.at[i] = vec![sc.at[i][k]];
+            sc.r[i] = vec![sc.r[i][k]];
+            sc.rects[i] = vec![sc.rects[i][k]];
+        }
+    }
+    let mut edges = plan.edges;
+    for (k, e) in edges.iter_mut().enumerate() {
+        let link = e.style == EdgeStyle::Link;
+        if !link && e.label.is_none() {
             continue;
         }
-        sc.scopes.push(nodes.iter().map(|&u| sc.var[u]).collect());
+        let bows: &[f64] = if link { &BOWS } else { &[0.0] };
+        let spots: &[f64] = if e.label.is_some() { &SPOTS } else { &[0.5] };
+        let opts = bows.iter().flat_map(|&bow| spots.iter().map(move |&t| (bow, t))).collect();
+        let label = e.label.as_ref().map(|l| label_size(fonts, l, b));
+        e.label_size = label.unwrap_or((0.0, 0.0));
+        sc.routes.push(Route { edge: k, a: e.a, b: e.b, opts, label });
+    }
+    // Scopes over nodes plus route variables; duplicates are dropped because a route's
+    // endpoints may be the same nodes as the constraint's others.
+    let base = sc.node.len();
+    let push = |sc: &mut Scene, nodes: &[usize], routes: &[usize], kind: Kind, w: u64| {
+        let mut scope: Vec<usize> = nodes.iter().map(|&u| sc.var[u]).collect();
+        for &i in routes {
+            scope.extend([sc.var[sc.routes[i].a], sc.var[sc.routes[i].b], base + i]);
+        }
+        // Keep first occurrences in order: structural kinds read their scope by position.
+        let mut seen = Vec::new();
+        scope.retain(|v| !seen.contains(v) && {
+            seen.push(*v);
+            true
+        });
+        sc.scopes.push(scope);
         sc.kinds.push(kind);
         sc.weights.push(w);
+    };
+    for (nodes, kind, w) in cons {
+        if w == 0 || optimizing {
+            push(&mut sc, &nodes, &[], kind, w);
+        }
     }
-    let (out, cost, st) = if optimizing {
+    let links: Vec<usize> = (0..sc.routes.len()).filter(|&i| edges[sc.routes[i].edge].style == EdgeStyle::Link).collect();
+    for i in 0..sc.routes.len() {
+        if sc.routes[i].label.is_some() {
+            push(&mut sc, &[], &[i], Kind::LabelPage(i), 0);
+            for u in 0..n {
+                push(&mut sc, &[u], &[i], Kind::LabelClear(i, u), 0);
+            }
+            for j in i + 1..sc.routes.len() {
+                if sc.routes[j].label.is_some() {
+                    push(&mut sc, &[], &[i, j], Kind::LabelApart(i, j), 0);
+                }
+            }
+        }
+        if routing && links.contains(&i) {
+            let (a, b2) = (sc.routes[i].a, sc.routes[i].b);
+            for u in (0..n).filter(|&u| u != a && u != b2) {
+                push(&mut sc, &[u], &[i], Kind::LinkClear(i, u), 2);
+            }
+            for &j in links.iter().filter(|&&j| j > i) {
+                push(&mut sc, &[], &[i, j], Kind::LinkApart(i, j), 1);
+            }
+        }
+    }
+    if routing {
+        sc.grids.clear();
+    }
+    let (out, cost, st) = if optimizing || routing {
         csp::optimize(&sc, cfg.opt_budget)
     } else {
         let (out, st) = csp::solve(&sc, cfg.budget);
@@ -558,15 +823,18 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         eprintln!("font {b:.2}{}: {what} after {st:?}", if optimizing { " (optimizing)" } else { "" });
     }
     let Outcome::Sat(val) = out else { return None };
-    if optimizing {
-        stats.soft_cost = cost;
-        stats.soft_total = sc.weights.iter().sum();
+    if optimizing || routing {
+        stats.soft_cost += cost;
+        stats.soft_total += sc.weights.iter().sum::<u64>();
     }
     let mut pos = vec![(0.0, 0.0); n];
     for (i, &v) in sc.node.iter().enumerate() {
         pos[v] = sc.at[i][val[i] as usize];
     }
-    Some(Layout { kind, body: b, boxes, pos, edges: plan.edges, kx: plan.kx, ky: plan.ky, tol: plan.tol, stats: *stats })
+    for (i, r) in sc.routes.iter().enumerate() {
+        (edges[r.edge].bow, edges[r.edge].t) = r.opts[val[base + i] as usize];
+    }
+    Some(Layout { kind, body: b, boxes, pos, edges, kx: plan.kx, ky: plan.ky, tol: plan.tol, stats: *stats })
 }
 
 pub enum Failure {
@@ -631,9 +899,14 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
             return Err(Failure::Core(core));
         }
     };
-    let has_soft = g.constraints.iter().any(|c| !c.hard) || matches!(best.kind, LayoutKind::Layered(_));
-    if has_soft {
+    if g.constraints.iter().any(|c| !c.hard) || matches!(best.kind, LayoutKind::Layered(_)) {
         if let Some(l) = attempt(g, t, fonts, cfg, best.body, Users::All, &mut stats) {
+            best = l;
+        }
+    }
+    // Then, with nodes fixed, pick link routes: few variables, so the search is exhaustive.
+    if best.edges.iter().any(|e| e.style == EdgeStyle::Link) {
+        if let Some(l) = attempt(g, t, fonts, cfg, best.body, Users::Routes(&best), &mut stats) {
             best = l;
         }
     }
@@ -646,8 +919,9 @@ mod tests {
     use super::*;
     use crate::graph::Settings;
 
-    /// scene builds random candidates for `n` boxes with every `Apart` pair and some `Clear`s.
-    fn scene(g: &Graph, n: usize, seed: u64) -> Scene<'_> {
+    /// scene builds `k` random candidates for each of `n` boxes, with every `Apart` pair, a
+    /// path of edges that must clear every box, and crossing-free edge pairs.
+    fn scene(g: &Graph, n: usize, k: usize, seed: u64) -> Scene<'_> {
         let mut x = seed;
         let mut rnd = || {
             x ^= x << 13;
@@ -669,15 +943,18 @@ mod tests {
             kinds: Vec::new(),
             weights: Vec::new(),
             size: Vec::new(),
+            shapes: Vec::new(),
             grids: Vec::new(),
+            routes: Vec::new(),
         };
         for _ in 0..n {
-            let (w, h) = (60.0 + rnd().abs() / 5.0, 30.0 + rnd().abs() / 10.0);
-            let at: Vec<P> = (0..300).map(|_| (rnd(), rnd())).collect();
+            let (w, h) = (300.0 + rnd().abs() / 3.0, 160.0 + rnd().abs() / 4.0);
+            let at: Vec<P> = (0..k).map(|_| (rnd(), rnd())).collect();
             sc.rects.push(at.iter().map(|&p| Rect::centered(p, w, h)).collect());
             sc.r.push(vec![0.0; at.len()]);
             sc.at.push(at);
             sc.size.push((w, h));
+            sc.shapes.push(Shape::Rect);
         }
         for i in 0..n {
             for j in i + 1..n {
@@ -692,6 +969,14 @@ mod tests {
                     sc.weights.push(0);
                 }
             }
+            // Edges 0-1, 2-3, 4-5: pairwise crossing-free.
+            if i % 2 == 0 && i + 1 < n {
+                for j in (i + 2..n - 1).step_by(2) {
+                    sc.scopes.push(vec![i, i + 1, j, j + 1]);
+                    sc.kinds.push(Kind::NoCross);
+                    sc.weights.push(0);
+                }
+            }
         }
         sc
     }
@@ -699,14 +984,24 @@ mod tests {
     #[test]
     fn grid_filter_matches_plain_checks() {
         let g = Graph { title: None, root: None, nodes: vec![], edges: vec![], constraints: vec![], settings: Settings::default() };
-        for seed in 1..40 {
-            let mut sc = scene(&g, 7, seed * 7919);
+        let (mut sat, mut unsat, mut jumps) = (0, 0, 0);
+        // Many candidates: mostly satisfiable after some search. Few: mostly unsatisfiable.
+        let cases = (1..12).map(|seed| (8 + seed as usize % 2, 100, seed)).chain((1..12).map(|seed| (10, 25, seed)));
+        for (n, k, seed) in cases {
+            let mut sc = scene(&g, n, k, seed * 7919);
             let (plain, ps) = csp::solve(&sc, u64::MAX);
             sc.grids = sc.at.iter().map(|a| Grid::new(a)).collect();
             let (fast, fs) = csp::solve(&sc, u64::MAX);
-            assert_eq!(plain, fast, "seed {seed}");
             assert_eq!((ps.nodes, ps.backjumps), (fs.nodes, fs.backjumps), "seed {seed}");
+            match fast {
+                Outcome::Sat(_) => sat += 1,
+                _ => unsat += 1,
+            }
+            assert_eq!(plain, fast, "seed {seed}");
+            jumps += fs.backjumps;
         }
+        // The scenes must be hard enough to exercise pruning, wipeouts, and backjumps.
+        assert!(sat > 0 && unsat > 0 && jumps > 0, "sat {sat} unsat {unsat} backjumps {jumps}");
     }
 
     #[test]

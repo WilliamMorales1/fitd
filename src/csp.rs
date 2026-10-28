@@ -19,10 +19,9 @@ pub trait Problem {
         0
     }
     /// filter is an optional fast path for forward checking. Constraint `c` has `y` as its
-    /// only unassigned variable; call `bad` with every value of `y` that violates `c` (it may
-    /// also name values already pruned). Return the number of elementary tests done, or None
-    /// to fall back to one check per value.
-    fn filter(&self, _c: usize, _val: &[u32], _y: usize, _bad: &mut dyn FnMut(usize)) -> Option<u64> {
+    /// only unassigned variable; call `bad` with every alive value of `y` that violates `c`.
+    /// Return the number of elementary tests done, or None to fall back to one check per value.
+    fn filter(&self, _c: usize, _val: &[u32], _y: usize, _alive: &dyn Fn(usize) -> bool, _bad: &mut dyn FnMut(usize)) -> Option<u64> {
         None
     }
 }
@@ -134,7 +133,8 @@ impl<P: Problem> Search<'_, P> {
     /// revise removes the values of `y` that violate `c`, whose other variables are assigned.
     fn revise(&mut self, c: usize, y: usize, depth: u32) -> Result<(), Fail> {
         let mut bad = Vec::new();
-        match self.p.filter(c, &self.val, y, &mut |a| bad.push(a)) {
+        let removed = &self.removed[y];
+        match self.p.filter(c, &self.val, y, &|a| removed[a] == UNSET, &mut |a| bad.push(a)) {
             Some(tests) => self.spend(tests)?,
             None => {
                 for a in 0..self.p.domain_size(y) {

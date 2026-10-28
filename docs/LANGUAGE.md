@@ -112,5 +112,6 @@ Codes run `E00xx` (front end), `E01xx` (layout), `W02xx` (warnings). `cmapc expl
 | E0009 | unknown layout, relation, side, place, shape, or flag |
 | E0101-E0107 | checker: overlap, edge through node, crossing, off page, text overflow, font too small, child nearer center |
 | E0108 | layout breaks a `require` (a solver bug if it ever appears) |
+| E0109 | an edge label is covered by a node, overlaps another label, or is clipped (a solver bug if it ever appears) |
 | E0110 | minimal set of `require` constraints that cannot hold together |
-| W0201-W0206 | link through node, missing glyph, unused style, repeated setting, unmet preference, layered crossing |
+| W0201-W0207 | link through node, missing glyph, unused style, repeated setting, unmet preference, layered crossing, links crossing or running together |

@@ -31,15 +31,15 @@ cargo build --release
 
 ## Pipeline
 
-| Stage | File | What it does |
-|---|---|---|
-| Lex | `lex.rs` | Tokens with byte spans; newlines are tokens (one statement per line). |
-| Parse | `parse.rs`, `ast.rs` | Recursive descent; a bad line is reported and skipped, so later errors still show. |
-| Analyze | `sema.rs` | Two passes: declarations, then references. Styles, typed values, units (`pt mm cm in em`), "did you mean" suggestions, and a static check that hard orderings and alignments do not contradict (union-find plus cycle search). |
-| Plan | `radial.rs`, `layered.rs` | Measure every box with real font metrics, propose candidate positions and structural constraints. |
-| Solve | `csp.rs`, `layout.rs` | Small CSP engine: forward checking with conflict-directed backjumping, a spatial index for overlap pruning, branch and bound for `prefer`. Binary search on the font, then soft-constraint optimization. If nothing fits, QuickXplain extracts a minimal set of conflicting `require`s. |
-| Check | `check.rs` | Recompute every property from the finished layout. Any error stops output. |
-| Emit | `emit.rs` | SVG and TikZ with absolute positions; neither re-flows text. |
+| Stage   | File                      | What it does                                                                                                                                                                                                                                                                            |
+| ------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Lex     | `lex.rs`                  | Tokens with byte spans; newlines are tokens (one statement per line).                                                                                                                                                                                                                   |
+| Parse   | `parse.rs`, `ast.rs`      | Recursive descent; a bad line is reported and skipped, so later errors still show.                                                                                                                                                                                                      |
+| Analyze | `sema.rs`                 | Two passes: declarations, then references. Styles, typed values, units (`pt mm cm in em`), "did you mean" suggestions, and a static check that hard orderings and alignments do not contradict (union-find plus cycle search).                                                          |
+| Plan    | `radial.rs`, `layered.rs` | Measure every box with real font metrics, propose candidate positions and structural constraints.                                                                                                                                                                                       |
+| Solve   | `csp.rs`, `layout.rs`     | Small CSP engine: forward checking with conflict-directed backjumping, a spatial index for overlap pruning, branch and bound for `prefer`. Binary search on the font, then soft-constraint optimization. If nothing fits, QuickXplain extracts a minimal set of conflicting `require`s. |
+| Check   | `check.rs`                | Recompute every property from the finished layout. Any error stops output.                                                                                                                                                                                                              |
+| Emit    | `emit.rs`                 | SVG and TikZ with absolute positions; neither re-flows text.                                                                                                                                                                                                                            |
 
 Errors point into the source, rustc style:
 
