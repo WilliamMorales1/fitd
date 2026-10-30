@@ -1,6 +1,6 @@
 //! SVG, PNG and TikZ backends. All draw from the same solved geometry; none re-flows text.
 
-use crate::graph::Graph;
+use crate::graph::{Graph, LayoutKind};
 use crate::geom::{P, Rect};
 use crate::layout::{Drawn, EdgeStyle, Layout, Role, Shape, TextLine};
 use crate::metrics::{Fonts, Script};
@@ -18,14 +18,14 @@ struct Paint {
     text: String,
 }
 
-/// accents gives each node its own color, else its branch's, else the theme text color.
-fn accents(g: &Graph, t: &Tree, th: &Theme) -> Vec<String> {
+/// accents gives each node its own color, else its radial branch's, else the theme text color.
+fn accents(g: &Graph, t: &Tree, th: &Theme, radial: bool) -> Vec<String> {
     let mut hub_color = BTreeMap::new();
     for (i, &h) in t.children[t.root].iter().enumerate() {
         hub_color.insert(h, g.nodes[h].color.clone().unwrap_or_else(|| th.palette[i % th.palette.len()].clone()));
     }
     (0..g.nodes.len())
-        .map(|v| match t.branch(v) {
+        .map(|v| match t.branch(v).filter(|_| radial) {
             Some(h) => g.nodes[v].color.clone().unwrap_or_else(|| hub_color[&h].clone()),
             None => g.nodes[v].color.clone().unwrap_or_else(|| th.text.clone()),
         })
@@ -33,7 +33,7 @@ fn accents(g: &Graph, t: &Tree, th: &Theme) -> Vec<String> {
 }
 
 fn paints(g: &Graph, t: &Tree, lay: &Layout, th: &Theme) -> Vec<Paint> {
-    let acc = accents(g, t, th);
+    let acc = accents(g, t, th, lay.kind == LayoutKind::Radial);
     (0..lay.pos.len())
         .map(|v| {
             let n = &g.nodes[v];

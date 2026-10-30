@@ -1,14 +1,15 @@
 //! Layered strategy (Sugiyama-style flowchart): edges point down (or right).
 //!
 //! Classic pipeline, with the last step replaced by the CSP:
-//! 1. break cycles by dropping DFS back edges from the layering (they are drawn as links);
-//! 2. assign layers by longest path, so every edge points forward;
-//! 3. order each layer by barycenter sweeps, which only sets value preference;
-//! 4. let the solver pick each node's cross-axis position from a grid. Same-layer regions stay
+//! 1. merge nodes that a hard `row` (down) or `column` (right) alignment puts on one layer;
+//! 2. break cycles by dropping DFS back edges from the layering (they are drawn as links);
+//! 3. assign layers by longest path, so every edge between layers points forward;
+//! 4. order each layer by barycenter sweeps, which only sets value preference;
+//! 5. let the solver pick each node's cross-axis position from a grid. Same-layer regions stay
 //!    apart and edges miss other nodes (hard); edge crossings cost 1 each (soft).
 
 use crate::geom::Rect;
-use crate::graph::{Dir, EdgeKind, Graph};
+use crate::graph::{Dir, EdgeKind, Graph, Relation, Side};
 use crate::layout::{Boxed, Cand, Config, Drawn, EdgeStyle, Kind, Plan};
 
 /// back_edges returns the indices of tree edges that close a directed cycle in DFS order.
@@ -107,6 +108,32 @@ fn order(n: usize, layer: &[usize], dag: &[(usize, usize)]) -> Vec<Vec<usize>> {
     rows
 }
 
+/// merged maps each node to the representative of its group of nodes forced onto one layer.
+fn merged(g: &Graph, dir: Dir) -> Vec<usize> {
+    let side = match dir {
+        Dir::Down => Side::Row,
+        Dir::Right => Side::Column,
+    };
+    let mut rep: Vec<usize> = (0..g.nodes.len()).collect();
+    fn find(rep: &mut [usize], v: usize) -> usize {
+        if rep[v] != v {
+            rep[v] = find(rep, rep[v]);
+        }
+        rep[v]
+    }
+    for c in g.constraints.iter().filter(|c| c.hard) {
+        if let Relation::Align { side: s, items } = &c.rel
+            && *s == side
+        {
+            for w in items.windows(2) {
+                let (a, b) = (find(&mut rep, w[0]), find(&mut rep, w[1]));
+                rep[a] = b;
+            }
+        }
+    }
+    (0..rep.len()).map(|v| find(&mut rep, v)).collect()
+}
+
 pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan {
     let n = boxes.len();
     let page = cfg.page();
@@ -124,10 +151,24 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
         Dir::Right => (page.x0 + m, -c),
     };
 
+    // Layers are found on the graph with merged nodes contracted; an edge inside a group runs
+    // along its layer and takes no part in layering or ordering.
+    let rep = merged(g, dir);
     let tree: Vec<(usize, usize)> = g.edges.iter().filter(|e| e.kind == EdgeKind::Tree).map(|e| (e.a, e.b)).collect();
-    let back = back_edges(n, &tree);
-    let dag: Vec<(usize, usize)> = tree.iter().zip(&back).filter(|(_, b)| !**b).map(|(e, _)| *e).collect();
-    let layer = layers(n, &dag);
+    let flat: Vec<bool> = tree.iter().map(|&(a, b)| rep[a] == rep[b]).collect();
+    let contracted: Vec<(usize, usize)> = tree.iter().map(|&(a, b)| (rep[a], rep[b])).collect();
+    let mut back = back_edges(n, &contracted);
+    for (bk, f) in back.iter_mut().zip(&flat) {
+        *bk &= !f;
+    }
+    let keep = |i: usize| !back[i] && !flat[i];
+    let dag: Vec<(usize, usize)> = (0..tree.len()).filter(|&i| keep(i)).map(|i| tree[i]).collect();
+    let layer: Vec<usize> = {
+        let up: Vec<(usize, usize)> = (0..tree.len()).filter(|&i| keep(i)).map(|i| contracted[i]).collect();
+        let l = layers(n, &up);
+        (0..n).map(|v| l[rep[v]]).collect()
+    };
+    let along: Vec<(usize, usize)> = (0..tree.len()).filter(|&i| flat[i]).map(|i| tree[i]).collect();
     let rows = order(n, &layer, &dag);
 
     // Spread layers over the page, with at least two ems between them for arrows.
@@ -171,8 +212,15 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     for row in &rows {
         for (i, &u) in row.iter().enumerate() {
             for &v in &row[i + 1..] {
-                cons.push((vec![u, v], Kind::Apart(sep), 0));
+                // An arrow along the layer needs the same room as one between layers.
+                let joined = along.iter().any(|&(p, q)| (p, q) == (u, v) || (q, p) == (u, v));
+                cons.push((vec![u, v], Kind::Apart(if joined { 2.0 * b } else { sep }), 0));
             }
+        }
+    }
+    for &(a, c) in &along {
+        for u in (0..n).filter(|&u| u != a && u != c && layer[u] == layer[a]) {
+            cons.push((vec![a, c, u], Kind::Clear(sep * 0.25), 0));
         }
     }
     for (k, &(a, c)) in dag.iter().enumerate() {

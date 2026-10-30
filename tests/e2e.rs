@@ -130,3 +130,12 @@ fn builds_are_byte_identical() {
         assert!(std::fs::read(o).unwrap() == first, "{} differs from {}", o.display(), outs[0].display());
     }
 }
+
+#[test]
+fn row_alignment_merges_layers_in_flowchart() {
+    let src = tmp("row.cmap");
+    std::fs::write(&src, "layout layered\npage a4\nnode a\nnode b\nnode c\nnode d\na -> b\nb -> c\nc -> d\nrequire align row(b, c, d)\nrequire b left-of c left-of d\n").unwrap();
+    let (ok, log) = cmapc(&["build", src.to_str().unwrap(), "-o", tmp("row.svg").to_str().unwrap()]);
+    assert!(ok, "{log}");
+    assert!(log.contains(" 0 errors"), "{log}");
+}

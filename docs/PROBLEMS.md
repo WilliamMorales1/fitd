@@ -4,12 +4,6 @@ Open problems found by review, most serious first. Measured 2026-10-29 on the `l
 
 **Maintaining this file.** When a problem is fixed, delete its entry; git history keeps the record, so do not mark it done. After that, add any new criticism found along the way, ranked into the list by severity. Keep each entry to the symptom, how to reproduce it, and the likely fix.
 
-## Correctness
-
-### Layered layout and `align` conflict, with a misleading diagnostic
-
-`examples/complex_constraints.cmap` fails with E0110 on `require align row(b, c, d)`, saying it "fails even with every other `require` removed" and suggesting a larger page. The real cause: the edge chain `b -> c -> d` puts the three nodes in different layers, so no page or font can satisfy the row. Either feed `row`/`column` alignments into layer assignment (force equal ranks), or detect the conflict before search and report it as a static error naming the edges.
-
 ## Speed
 
 Builds take 8 to 11 s for 20 to 40 nodes (math4200-v2 8.5 s, astronomy 9.0 s, earth_science 10.8 s), too slow for an edit loop and for the planned watch mode. Costs stack: binary-search probes with four plans each, three trade-off fonts, 150k annealing moves, then an exhaustive route search. Options: start the font search from an area estimate, skip trade-off fonts when the merit gap is small, scale annealing moves with node count, and add a draft mode. The figure in `PLANS.md` (6 to 8 s) is stale.
@@ -47,10 +41,6 @@ The e2e tests build only `math4200.cmap` plus inline sources; fourteen example f
 - `PLANS.md` speed figure is stale (see Speed).
 - The Cargo `description` mentions only radial layout.
 
-## Process
-
-About 400 changed lines across 14 files plus 16 untracked files sit uncommitted. Commit in units (quality and annealing, theme, examples, docs) so the speed regression can be bisected.
-
 ## Minor
 
 - The solver line in the build log is not reproducible (physics: 29512490 then 29504943 checks). `attempt` adds the stats of rotation threads that a lower rotation cancelled mid-search, and how far they get depends on timing. Count only the winner and the plans before it.
@@ -58,4 +48,5 @@ About 400 changed lines across 14 files plus 16 untracked files sit uncommitted.
 - Ten `unwrap()` calls in non-test code; the ones in `metrics.rs` font loading panic on systems without the expected fonts instead of reporting a diagnostic.
 - E0110 says "at 6pt" without pointing at the `font` range that set the floor.
 - E0008 on a chain (`require a left-of b left-of c left-of a`) draws one underline per step, and adjacent steps share a node, so the labels overlap and stack on separate rows. Underline only the relation word of each step.
+- `--scale` has no upper bound: `--scale 600` on an A4 page tries to allocate 720 GB and aborts. Cap the pixel count and report a diagnostic.
 - Language gaps: no `group` blocks, no per-edge style (color, width, arrowhead).
