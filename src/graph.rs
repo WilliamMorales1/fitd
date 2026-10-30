@@ -122,6 +122,8 @@ pub struct Settings {
     pub page: Option<(f64, f64)>,
     pub margin: Option<f64>,
     pub font: Option<(f64, f64)>,
+    /// Span of the `font` statement that set `font`.
+    pub font_span: Option<Span>,
     pub wrap_em: Option<f64>,
     pub family: Option<String>,
     pub theme: Option<String>,

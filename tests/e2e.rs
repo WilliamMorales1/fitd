@@ -77,6 +77,7 @@ fn unsat_constraints_report_minimal_core() {
     assert!(!ok);
     assert!(log.contains("error[E0110]: these 2 constraints"), "{log}");
     assert!(log.contains("11 | require c at left") && log.contains("13 | require b left-of c gap=20em"), "{log}");
+    assert!(log.contains("7pt is the default font floor"), "{log}");
 }
 
 #[test]
@@ -117,18 +118,42 @@ fn theme_colors_reach_svg_and_tikz() {
     assert!(!ok && log.contains("unknown theme `neon`"), "{log}");
 }
 
+/// Every example with the most warnings and seconds it may take on the reference laptop
+/// (ThinkPad X280, release build). Lower a number when a change improves on it.
+const EXAMPLES: [(&str, usize, f64); 5] = [
+    ("cell_biology", 0, 10.0),
+    ("compiler", 0, 10.0),
+    ("earth_science", 8, 20.0),
+    ("math4200", 3, 25.0),
+    ("math4200-v2", 1, 30.0),
+];
+
 #[test]
-fn builds_are_byte_identical() {
-    // Separate processes, so any HashMap iteration order leaking into layout shows up.
-    let outs: Vec<PathBuf> = (0..4).map(|i| tmp(&format!("same{i}.svg"))).collect();
-    let runs: Vec<_> = outs.iter().map(|o| Command::new(env!("CARGO_BIN_EXE_cmapc")).args(["build", "examples/calculus.cmap", "-o", o.to_str().unwrap()]).spawn().unwrap()).collect();
-    for mut r in runs {
-        assert!(r.wait().unwrap().success());
+fn every_example_builds_within_baseline() {
+    for (name, warnings, secs) in EXAMPLES {
+        let src = format!("examples/{name}.cmap");
+        let outs = [tmp(&format!("{name}-a.svg")), tmp(&format!("{name}-b.svg"))];
+        // A second build runs alongside to catch HashMap order or thread timing leaking into
+        // the layout; it shares the CPU, so the time budget allows for it.
+        let twin = Command::new(env!("CARGO_BIN_EXE_cmapc")).args(["build", &src, "-o", outs[1].to_str().unwrap()]).spawn().unwrap();
+        let t = std::time::Instant::now();
+        let (ok, log) = cmapc(&["build", &src, "-o", outs[0].to_str().unwrap()]);
+        let took = t.elapsed().as_secs_f64();
+        assert!(twin.wait_with_output().unwrap().status.success(), "{name}: second build failed");
+        assert!(ok && log.contains(" 0 errors"), "{name}\n{log}");
+        let got: usize = log.split(" errors, ").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap();
+        assert!(got <= warnings, "{name}: {got} warnings, baseline {warnings}\n{log}");
+        assert!(took <= secs, "{name}: took {took:.1}s, budget {secs}s");
+        assert!(std::fs::read(&outs[0]).unwrap() == std::fs::read(&outs[1]).unwrap(), "{name}: two builds differ");
     }
-    let first = std::fs::read(&outs[0]).unwrap();
-    for o in &outs[1..] {
-        assert!(std::fs::read(o).unwrap() == first, "{} differs from {}", o.display(), outs[0].display());
-    }
+}
+
+#[test]
+fn fixtures_fail_or_build_as_designed() {
+    let (ok, log) = cmapc(&["build", "tests/fixtures/stress_test.cmap", "-o", tmp("stress.svg").to_str().unwrap()]);
+    assert!(!ok && log.contains("error[E0008]"), "{log}");
+    let (ok, log) = cmapc(&["build", "tests/fixtures/complex_constraints.cmap", "-o", tmp("complex.svg").to_str().unwrap()]);
+    assert!(ok && log.contains(" 0 errors"), "{log}");
 }
 
 #[test]

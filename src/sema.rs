@@ -248,11 +248,11 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             StmtKind::Theme { .. } => "theme",
             _ => "",
         };
-        if !key.is_empty() {
-            if let Some(prev) = seen_setting.insert(key, st.span) {
-                let d = Diag::warning("W0204", format!("`{key}` set more than once; the last one wins")).primary(st.span, "this one wins");
-                s.diags.push(d.secondary(prev, "earlier setting ignored"));
-            }
+        if !key.is_empty()
+            && let Some(prev) = seen_setting.insert(key, st.span)
+        {
+            let d = Diag::warning("W0204", format!("`{key}` set more than once; the last one wins")).primary(st.span, "this one wins");
+            s.diags.push(d.secondary(prev, "earlier setting ignored"));
         }
         match &st.kind {
             StmtKind::Title(t) => title = Some(t.clone()),
@@ -323,6 +323,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                         s.type_err(size, format!("font range {lo}pt..{hi}pt is empty"));
                     } else {
                         set.font = Some((lo, hi));
+                        set.font_span = Some(st.span);
                     }
                 }
                 for a in attrs {
@@ -491,8 +492,9 @@ fn constraint(s: &mut Sema, hard: bool, rel: &Rel, attrs: &[Attr], span: Span) -
                         continue;
                     }
                 };
-                // A chain link gets its own span so cores and contradictions point at one step.
-                let link = if ops.len() == 1 { span } else { nodes[i].span.to(nodes[i + 1].span) };
+                // A chain step gets its relation word as span: steps share nodes, so spans
+                // covering `a left-of b` would overlap and stack on separate rows.
+                let link = if ops.len() == 1 { span } else { op.span };
                 rels.push((r, link));
             }
             rels

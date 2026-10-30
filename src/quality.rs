@@ -85,21 +85,28 @@ fn link_hits(x: &Input, c: &[P], a: usize, b: usize, bow: f64) -> usize {
         nrm = (-nrm.0, -nrm.1);
     }
     let k = (m.0 + bow * d * nrm.0, m.1 + bow * d * nrm.1);
-    let pts: Vec<P> = (0..=4)
-        .map(|i| {
-            let t = i as f64 / 4.0;
-            let (u, w) = ((1.0 - t) * (1.0 - t), 2.0 * (1.0 - t) * t);
-            (u * pa.0 + w * k.0 + t * t * pb.0, u * pa.1 + w * k.1 + t * t * pb.1)
-        })
-        .collect();
+    let pts: [P; 5] = std::array::from_fn(|i| {
+        let t = i as f64 / 4.0;
+        let (u, w) = ((1.0 - t) * (1.0 - t), 2.0 * (1.0 - t) * t);
+        (u * pa.0 + w * k.0 + t * t * pb.0, u * pa.1 + w * k.1 + t * t * pb.1)
+    });
+    // Most edges and boxes are nowhere near the curve; its bounding box rules them out.
+    let bb = pts.iter().fold(Rect { x0: f64::INFINITY, y0: f64::INFINITY, x1: f64::NEG_INFINITY, y1: f64::NEG_INFINITY }, |r, &(px, py)| Rect {
+        x0: r.x0.min(px),
+        y0: r.y0.min(py),
+        x1: r.x1.max(px),
+        y1: r.y1.max(py),
+    });
     let mut hits = 0;
     for &(p, q) in x.tree.iter().chain(x.links) {
-        if (p, q) != (a, b) && pts.windows(2).any(|s| segments_cross(s[0], s[1], c[p], c[q])) {
+        let (cp, cq) = (c[p], c[q]);
+        let seg = Rect { x0: cp.0.min(cq.0), y0: cp.1.min(cq.1), x1: cp.0.max(cq.0), y1: cp.1.max(cq.1) };
+        if (p, q) != (a, b) && seg.intersects(&bb) && pts.windows(2).any(|s| segments_cross(s[0], s[1], cp, cq)) {
             hits += 1;
         }
     }
     for u in (0..x.rects.len()).filter(|&u| u != a && u != b) {
-        if pts.windows(2).any(|s| segment_hits_rect(s[0], s[1], &x.rects[u])) {
+        if x.rects[u].intersects(&bb) && pts.windows(2).any(|s| segment_hits_rect(s[0], s[1], &x.rects[u])) {
             hits += 1;
         }
     }

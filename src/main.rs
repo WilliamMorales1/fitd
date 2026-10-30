@@ -24,7 +24,7 @@ use std::process::ExitCode;
 
 const USAGE: &str = "usage:
   cmapc build <input.cmap> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
-              [--portrait] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force]
+              [--portrait] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
               [--budget CHECKS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
   cmapc explain <CODE>";
 
@@ -49,7 +49,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
 fn build(args: &[String]) -> Result<ExitCode, String> {
     let mut input = None;
     let (mut svg_out, mut tikz_out) = (None, None);
-    let (mut page_spec, mut portrait, mut force) = (None, false, false);
+    let (mut page_spec, mut portrait, mut force, mut draft) = (None, false, false, false);
     let (mut margin, mut min_font, mut max_font, mut wrap) = (None, None, None, None);
     let mut budget = 20_000_000;
     let mut scale = 2.0;
@@ -64,6 +64,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             "--page" => page_spec = Some(val()?),
             "--portrait" => portrait = true,
             "--force" => force = true,
+            "--draft" => draft = true,
             "--margin" => margin = Some(num(val()?)?),
             "--min-font" => min_font = Some(num(val()?)?),
             "--max-font" => max_font = Some(num(val()?)?),
@@ -108,6 +109,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         budget,
         opt_budget: budget / 16,
         legible: legible(page_w, page_h, min_font.unwrap_or(font.0)),
+        draft,
     };
 
     let t = tree::build(&g);
@@ -133,6 +135,12 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
                 let span = g.constraints[ci].span;
                 d = if k == 0 { d.primary(span, "") } else { d.secondary(span, "") };
             }
+            // Say where the floor came from, since a smaller font is often the easiest fix.
+            let d = match (min_font, g.settings.font_span) {
+                (Some(_), _) => d.note("the font floor is set by `--min-font`"),
+                (None, Some(span)) => d.secondary(span, "the font floor is set here"),
+                (None, None) => d.note(format!("{}pt is the default font floor; a `font` statement can lower it", cfg.min_font)),
+            };
             let d = if core.len() == 1 {
                 d.note("it fails even with every other `require` removed")
             } else {

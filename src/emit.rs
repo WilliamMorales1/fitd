@@ -150,11 +150,10 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
             }
         }
     }
-    for v in 0..lay.pos.len() {
+    for (v, p) in paint.iter().enumerate() {
         let bx = &lay.boxes[v];
         let (cx, cy) = tx(lay.pos[v]);
         let (left, top) = (cx - bx.w / 2.0, cy - bx.h / 2.0);
-        let p = &paint[v];
         match (bx.shape, bx.role) {
             (Shape::Circle, Role::Root) => {
                 let _ = writeln!(o, r#"<circle cx="{cx:.1}" cy="{cy:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#, bx.w / 2.0, p.fill, p.accent, 0.12 * b);
@@ -185,6 +184,8 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
 }
 
 /// png rasterizes an SVG from `svg` at `scale` pixels per point, using the measuring fonts.
+const MAX_PIXELS: u64 = 256_000_000;
+
 pub fn png(svg: &str, fonts: &Fonts, scale: f64) -> Result<Vec<u8>, String> {
     let mut opt = resvg::usvg::Options::default();
     for f in fonts.regular.iter().chain(&fonts.bold) {
@@ -195,6 +196,10 @@ pub fn png(svg: &str, fonts: &Fonts, scale: f64) -> Result<Vec<u8>, String> {
     // usvg reads `pt` as 4/3 px, so scale from its pixel size back to points.
     let k = (scale * 0.75) as f32;
     let (pw, ph) = ((size.width() * k).ceil() as u32, (size.height() * k).ceil() as u32);
+    // tiny-skia accepts far more than memory holds; 256 Mpx is already a 1 GB buffer.
+    if pw as u64 * ph as u64 > MAX_PIXELS {
+        return Err(format!("image too large: {pw}x{ph}px (limit {} Mpx); lower --scale", MAX_PIXELS / 1_000_000));
+    }
     let mut pix = resvg::tiny_skia::Pixmap::new(pw, ph).ok_or(format!("image too large: {pw}x{ph}px"))?;
     resvg::render(&tree, resvg::tiny_skia::Transform::from_scale(k, k), &mut pix.as_mut());
     pix.encode_png().map_err(|e| e.to_string())
@@ -282,10 +287,9 @@ pub fn tikz(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64, th
         };
         let _ = writeln!(o, "\\draw[{style}, line width={lw:.2}bp] {};", pts.join(" -- "));
     }
-    for v in 0..lay.pos.len() {
+    for (v, p) in paint.iter().enumerate() {
         let bx = &lay.boxes[v];
         let (cx, cy) = lay.pos[v];
-        let p = &paint[v];
         let (c, f) = (cname(&p.accent), cname(&p.fill));
         match (bx.shape, bx.role) {
             (Shape::Circle, Role::Root) => {

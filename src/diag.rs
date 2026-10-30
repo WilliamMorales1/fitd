@@ -124,9 +124,18 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
             s += &format!("{pad}--> {}:{line}:{col}\n{pad} |\n", src.path);
         }
         let mut last = 0;
+        // Marks share a row while they do not overlap; a message ends its row.
+        let mut row = String::new();
+        let mut open = false;
         for l in &labels {
             let (line, col) = src.line_col(l.span.lo);
             let text = src.line_text(line);
+            if line != last || !open || col - 1 < row.chars().count() {
+                if !row.is_empty() {
+                    s += &format!("{pad} | {row}\n");
+                    row.clear();
+                }
+            }
             if line != last {
                 if last != 0 && line > last + 1 {
                     s += &format!("{pad} ...\n");
@@ -137,8 +146,15 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
             let end_col = if src.line_col(l.span.hi).0 == line { src.line_col(l.span.hi).1 } else { text.chars().count() + 1 };
             let n = end_col.saturating_sub(col).max(1);
             let mark = if l.primary { "^" } else { "-" };
-            let msg = if l.msg.is_empty() { String::new() } else { format!(" {}", l.msg) };
-            s += &format!("{pad} | {}{}{msg}\n", " ".repeat(col - 1), mark.repeat(n));
+            row += &" ".repeat(col - 1 - row.chars().count());
+            row += &mark.repeat(n);
+            open = l.msg.is_empty();
+            if !open {
+                row += &format!(" {}", l.msg);
+            }
+        }
+        if !row.is_empty() {
+            s += &format!("{pad} | {row}\n");
         }
         if !labels.is_empty() {
             s += &format!("{pad} |\n");
@@ -165,5 +181,13 @@ mod tests {
         let out = render(&src, &[d]);
         assert!(out.contains(" --> t.cmap:2:6"), "{out}");
         assert!(out.contains("2 | a -> bb\n  |      ^^ not declared"), "{out}");
+    }
+
+    #[test]
+    fn unlabeled_marks_share_a_row() {
+        let src = Source::new("t.cmap", "a x b y c\n");
+        let d = Diag::error("E0008", "m").secondary(Span::new(2, 3), "").secondary(Span::new(6, 7), "");
+        let out = render(&src, &[d]);
+        assert!(out.contains("1 | a x b y c\n  |   -   -\n"), "{out}");
     }
 }

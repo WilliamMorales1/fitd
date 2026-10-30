@@ -69,10 +69,10 @@ fn locate(pattern: &str) -> Option<Font> {
 fn chain(patterns: &[&str]) -> Vec<Font> {
     let mut out: Vec<Font> = Vec::new();
     for p in patterns {
-        if let Some(f) = locate(p) {
-            if !out.iter().any(|o| (&o.path, o.index) == (&f.path, f.index)) {
-                out.push(f);
-            }
+        if let Some(f) = locate(p)
+            && !out.iter().any(|o| (&o.path, o.index) == (&f.path, f.index))
+        {
+            out.push(f);
         }
     }
     out
