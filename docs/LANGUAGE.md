@@ -7,6 +7,7 @@ title "How cmapc compiles a diagram"
 layout layered dir=down          # or: layout radial root=core
 page a3 portrait margin=1cm      # a0..a4 or WxH with one unit: 594x420mm, 2296x1524pt
 font 7pt..40pt wrap=16em         # body font range searched; leaf wrap width
+theme dark link=#FFD54F          # color preset plus overrides
 
 style stage color=#1565C0 shape=box
 
@@ -17,6 +18,7 @@ lex -> parse, sema "label"       # hierarchy / flow edges (also `--`)
 core ..> sema "points back"      # cross links, drawn dashed (also `..`)
 
 require bnb left-of core gap=2em # hard constraint
+require a above b above c        # chain: a above b, b above c
 require align row(bnb, core)
 prefer checker near bnb weight=2 # soft constraint, traded off by weight
 prefer emit at bottom-right
@@ -31,6 +33,7 @@ stmt      = "title" STRING
           | "layout" NAME { attr }
           | "page" value { NAME } { attr }
           | "font" value [ ".." value ] { attr }
+          | "theme" [ NAME ] { attr }
           | "style" NAME { attr }
           | "node" NAME [ STRING ] { "." NAME | attr }
           | "|" REST_OF_LINE
@@ -40,7 +43,7 @@ edgeop    = "->" | "--" | "..>" | ".." .
 targets   = NAME { [ "," ] NAME } .
 rel       = "align" NAME "(" NAME { "," NAME } ")"
           | NAME "at" NAME
-          | NAME NAME NAME .
+          | NAME NAME NAME { NAME NAME } .
 attr      = NAME "=" value .
 value     = NAME | STRING | NUMBER | COLOR .
 ```
@@ -58,8 +61,9 @@ Analysis runs in two passes. The first collects `node` and `style` declarations 
 | `layout radial` | `root=NODE` | Default. Root defaults to the graph center (minimum eccentricity). |
 | `layout layered` | `dir=down\|right` | Flowchart. Directed cycles are broken; back edges are drawn as links. |
 | `page` | flags `portrait`, `landscape`; `margin=LEN` | Absolute lengths only. |
-| `font LO..HI` or `font SIZE` | `wrap=EM` | The solver maximizes the body font within the range. |
-| `node`, `style` | `color=#hex`, `shape=circle\|box` | |
+| `font LO..HI` or `font SIZE` | `wrap=EM`, `family="NAME"` | The solver maximizes the body font within the range. `family` must be installed; it is used for measuring and drawing. Default DejaVu Serif. |
+| `theme [light\|dark\|mono]` | `background`, `text`, `edge`, `link`, `label`, `root` (colors); `palette="#hex ..."` | Preset defaults to `light`; each attribute overrides one preset value. |
+| `node`, `style` | `color=#hex`, `fill=#hex`, `text=#hex`, `shape=circle\|box` | `color` is the accent (border, tint, branch); `fill` replaces the tint; `text` defaults to the theme text, or black/white by contrast on a solid fill. |
 | `require`, `prefer` | `gap=LEN` (orderings), `within=LEN` (`near`), `weight=N` (`prefer` only) | |
 
 Lengths need a unit: `pt`, `mm`, `cm`, `in`, or `em`. An `em` is the body font, which is only known once the solver picks it, so `gap=2em` scales with the font. Command-line flags override settings written in the file.
@@ -76,6 +80,8 @@ Coordinates have y pointing up. Each relation is a predicate on the nodes' final
 | `align top\|bottom\|left\|right(a, b, ...)` | that edge is shared, within the strategy's grid tolerance |
 | `align row(a, b, ...)` / `align column(...)` | centers share y / x |
 | `a at top-left\|top\|...\|bottom-right\|center` | a's center lies in that third of the page |
+
+Two-node relations chain: `a left-of b left-of c` means `a left-of b` and `b left-of c`. Steps may mix relations (`a above b near c`). Attributes apply to every step. Each step is its own constraint, so diagnostics point at the step that fails.
 
 `require` is hard: the layout must satisfy it, or compilation fails. `prefer` is soft: the solver minimizes the total weight of unmet preferences after fixing the font, and the checker reports each unmet one as `W0205`.
 

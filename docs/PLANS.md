@@ -8,7 +8,7 @@ Done: language front end, FC-CBJ engine with spatial-index pruning and branch an
 
 Next:
 
-- **Speed.** About 4 s for a 39-node map. Fewer font probes (start the binary search from a size estimate), and cheaper `Clear`/`NoCross` pruning.
+- **Speed.** About 6 to 8 s for a 39-node map (four plans per probe and three trade-off fonts, each in parallel). Fewer font probes (start the binary search from a size estimate), and cheaper `Clear`/`NoCross` pruning.
 - **Obstacle-avoiding link routes.** Links choose among 8 Bezier bends, which in dense maps all cross some box (W0201). Routing around boxes (shortest path on a visibility graph, then smoothing) would clear them without moving nodes.
 - **Groups**: `group` blocks with a containment constraint.
 - **Watch mode** for live diagnostics.
