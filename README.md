@@ -1,6 +1,6 @@
 # cmapc
 
-A small diagram language with a constraint solver for layout. Write nodes, edges, and layout constraints in a plain text file; cmapc finds the largest font that fits a fixed page, satisfies every `require`, trades off every `prefer`, then verifies the result before writing SVG or TikZ.
+A small diagram language with a constraint solver for layout. Write nodes, edges, and layout constraints in a plain text file; cmapc finds the largest font that fits a fixed page, satisfies every `require`, trades off every `prefer`, then verifies the result before writing SVG, PNG, or TikZ.
 
 ```
 title "How cmapc compiles a diagram"
@@ -22,9 +22,12 @@ require align row(bnb, core)
 prefer core at bottom-right weight=2
 ```
 
+![examples/compiler.cmap rendered to PNG](docs/compiler.png)
+
 ```fish
 cargo build --release
 ./target/release/cmapc build examples/compiler.cmap --tikz out/compiler.tex
+./target/release/cmapc build examples/compiler.cmap -o docs/compiler.png
 ./target/release/cmapc build examples/math4200.cmap --page 2296x1524pt
 ./target/release/cmapc explain E0110
 ```
@@ -39,7 +42,7 @@ cargo build --release
 | Plan    | `radial.rs`, `layered.rs` | Measure every box with real font metrics, propose candidate positions and structural constraints.                                                                                                                                                                                       |
 | Solve   | `csp.rs`, `layout.rs`     | Small CSP engine: forward checking with conflict-directed backjumping, a spatial index for overlap pruning, branch and bound for `prefer`. Binary search on the font, then soft-constraint optimization. If nothing fits, QuickXplain extracts a minimal set of conflicting `require`s. |
 | Check   | `check.rs`                | Recompute every property from the finished layout. Any error stops output.                                                                                                                                                                                                              |
-| Emit    | `emit.rs`                 | SVG and TikZ with absolute positions; neither re-flows text.                                                                                                                                                                                                                            |
+| Emit    | `emit.rs`                 | SVG, PNG (via resvg, same font files as measurement), and TikZ with absolute positions; none re-flows text.                                                                                                                                                                             |
 
 Errors point into the source, rustc style:
 
@@ -58,7 +61,7 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 
 ## Options
 
-`-o out.svg` writes a page-sized SVG; `-o out.png` writes a PNG cropped to the drawing plus `--margin` of padding, at `--scale PX` pixels per point (default 2).
+`-o FILE` picks the format by extension: `.svg` (default, `<input>.svg`) is page-sized; `.png` is cropped to the drawing plus `--margin` of padding, at `--scale PX` pixels per point (default 2). `--tikz FILE` also writes a standalone LaTeX file.
 
 `--page a0..a4 | WxH[pt|mm]`, `--portrait`, `--margin PT`, `--min-font PT`, `--max-font PT`, `--wrap EM`, `--budget CHECKS` (default 20M per probe), `--force` (write output despite checker errors). Flags override settings in the file. `CMAPC_DEBUG=1` traces each probe.
 

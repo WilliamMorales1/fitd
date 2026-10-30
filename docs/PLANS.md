@@ -51,7 +51,7 @@ The `.cmap` DSL (now), Markdown outlines (headings become depth, bullets become 
 
 ## 5. Back ends
 
-SVG and TikZ (now), PDF via TikZ or `svg2pdf`/`resvg`, Typst, HTML with hover detail, PPTX for slide strategies. All of them consume the same solved scene, so nothing reflows.
+SVG, PNG via `resvg`, and TikZ (now), PDF via TikZ or `svg2pdf`, Typst, HTML with hover detail, PPTX for slide strategies. All of them consume the same solved scene, so nothing reflows.
 
 ## 6. Readability model
 
