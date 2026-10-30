@@ -26,9 +26,9 @@ prefer core at bottom-right weight=2
 
 ```fish
 cargo build --release
-./target/release/cmapc build examples/compiler.cmap --tikz out/compiler.tex
-./target/release/cmapc build examples/compiler.cmap -o docs/compiler.png
-./target/release/cmapc build examples/math4200.cmap --page 2296x1524pt
+./target/release/cmapc examples/compiler.cmap --tikz out/compiler.tex
+./target/release/cmapc examples/compiler.cmap -o docs/compiler.png
+./target/release/cmapc examples/math4200.cmap --page 2296x1524pt
 ./target/release/cmapc explain E0110
 ```
 

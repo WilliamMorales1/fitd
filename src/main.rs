@@ -23,7 +23,7 @@ use layout::{Config, Failure};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
-  cmapc build <input.cmap> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
+  cmapc <input[.cmap]> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
               [--portrait] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
               [--budget CHECKS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
   cmapc explain <CODE>";
@@ -41,8 +41,8 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             println!("{code}: {text}");
             Ok(ExitCode::SUCCESS)
         }
-        Some("build") => build(&args[1..]),
-        _ => Err(USAGE.into()),
+        Some(_) => build(args),
+        None => Err(USAGE.into()),
     }
 }
 
@@ -77,7 +77,10 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             s => return Err(format!("unknown argument `{s}`\n{USAGE}")),
         }
     }
-    let input = input.ok_or(USAGE)?;
+    let mut input = input.ok_or(USAGE)?;
+    if !std::path::Path::new(&input).exists() && std::path::Path::new(&format!("{input}.cmap")).exists() {
+        input.push_str(".cmap");
+    }
     let text = std::fs::read_to_string(&input).map_err(|e| format!("{input}: {e}"))?;
     let src = Source::new(&input, &text);
     let (stmts, mut diags) = parse::parse(&text);
