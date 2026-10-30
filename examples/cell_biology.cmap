@@ -1,0 +1,67 @@
+title "Cellular respiration"
+layout layered dir=right
+page a2
+font 8pt..34pt wrap=16em
+
+style input color=#1565C0
+style process color=#2E7D32
+style output color=#6A1B9A
+
+node glucose "Glucose" .input
+| C6H12O6; six-carbon fuel
+| energy is stored in reduced carbon bonds
+node glycolysis "Glycolysis" .process
+| cytosol; glucose -> pyruvate
+| net 2 ATP and 2 NADH per glucose
+node pyruvate "Pyruvate oxidation" .process
+| mitochondrion; pyruvate -> acetyl-CoA
+| releases CO2 and produces NADH
+node krebs "Citric acid cycle" .process
+| mitochondrial matrix
+| CO2, NADH, FADH2, and a small ATP yield
+node carriers "Electron carriers" .process
+| NADH and FADH2 carry high-energy electrons
+| oxidation transfers energy to the membrane
+node etc "Electron transport chain" .process
+| inner mitochondrial membrane
+| electron flow powers proton pumping
+node gradient "Proton gradient" .process
+| stored electrochemical potential
+| high H+ outside the matrix
+node atp "ATP synthase" .output
+| chemiosmosis makes ATP
+| proton flow drives phosphorylation of ADP
+node oxygen "Oxygen" .input
+| terminal electron acceptor
+| combines with electrons and H+ to form water
+node water "Water" .output
+| final product of aerobic respiration
+node yield "Energy yield" .output
+| about 30-32 ATP per glucose in eukaryotes
+| yield varies with shuttle and membrane leak
+node anaerobic "Fermentation" .output
+| regenerates NAD+ without an electron chain
+| lower ATP yield; accepts organic electrons
+node regulation "Regulation" .output
+| ATP and NADH inhibit early steps
+| ADP signals energy demand
+
+glucose -> glycolysis
+glycolysis -> pyruvate
+pyruvate -> krebs
+glycolysis -> carriers
+krebs -> etc
+krebs -> carriers
+carriers -> etc
+etc -> gradient
+gradient -> atp
+etc -> oxygen
+oxygen -> water
+atp -> yield
+glycolysis ..> anaerobic "low oxygen"
+atp ..> regulation "feedback"
+
+require glucose at left
+require atp right-of glycolysis
+prefer water near atp within=18em weight=2
+prefer yield near atp within=18em weight=2

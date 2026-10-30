@@ -1,0 +1,28 @@
+# Test complex soft constraints and alignment.
+title "Complex Constraints Test"
+layout layered
+page a4
+
+style highlight color=#FFD700
+
+node a "Start"
+node b "Step 1" .highlight
+node c "Step 2" .highlight
+node d "Step 3" .highlight
+node e "End"
+
+a -> b
+b -> c
+c -> d
+d -> e
+
+# Align the highlighted steps in a row
+require align row(b, c, d)
+require b left-of c left-of d
+
+# Test weights: prefer d at bottom-right strongly, but e at bottom-right weakly
+prefer d at bottom-right weight=10
+prefer e at bottom-right weight=1
+
+# Test gap constraints
+require a left-of b gap=50pt

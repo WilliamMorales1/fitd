@@ -1,0 +1,23 @@
+# Stress test for the CSP solver and QuickXplain.
+title "CSP Stress Test"
+layout layered
+page a4
+
+node a "Node A"
+node b "Node B"
+node c "Node C"
+node d "Node D"
+
+a -> b
+b -> c
+c -> d
+d -> a
+
+# Create a contradiction: a left-of b, b left-of c, c left-of a
+require a left-of b
+require b left-of c
+require c left-of a
+
+# Add some noise
+prefer a at top-left weight=1
+prefer d at bottom-right weight=10

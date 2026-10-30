@@ -1,0 +1,67 @@
+title "Finite automata and regular languages"
+layout layered dir=down
+page a3
+font 8pt..36pt wrap=17em
+
+style language color=#1565C0
+style machine color=#2E7D32
+style result color=#6A1B9A
+
+node alphabet "Alphabet Sigma" .language
+| finite set of input symbols
+| an alphabet contains no words, only symbols
+node string "Input string" .language
+| a finite sequence over Sigma
+| empty string epsilon has length zero
+node language "Language L" .language
+| any set of finite strings over Sigma
+| complement depends on the chosen alphabet
+node nfa "Nondeterministic FA" .machine
+| may branch or use epsilon moves
+| accepts if at least one run succeeds
+node dfa "Deterministic FA" .machine
+| exactly one next state per symbol
+| transition function is total after adding a sink
+node subset "Subset construction" .machine
+| each DFA state represents a set of NFA states
+| preserves acceptance by reachable subsets
+node run "State transition run" .machine
+| consume one symbol at a time
+| run length equals input length
+node accept "Accept or reject" .result
+| final state determines membership
+| acceptance means the whole string was consumed
+node regular "Regular language" .result
+| recognized by a finite automaton
+| closed under union, intersection, and complement
+node regex "Regular expression" .language
+| equivalent description of the same language
+| union, concatenation, and Kleene star
+node closure "Closure proof" .result
+| product construction gives intersection
+| De Morgan gives complement
+node minimize "DFA minimization" .result
+| merge states with identical future behavior
+| Myhill-Nerode classes are the canonical answer
+node limit "Expressive limit" .result
+| regular languages cannot count arbitrary nesting
+| balanced parentheses are not regular
+
+alphabet -> string
+string -> nfa
+string -> language
+nfa -> subset
+subset -> dfa
+dfa -> run
+run -> accept
+accept -> regular
+regex ..> regular "alternative description"
+regular -> closure
+regular -> minimize
+regular -> limit
+closure ..> regular "constructions"
+
+require alphabet at top
+require regular at bottom
+prefer regex near regular within=14em weight=2
+prefer limit near minimize within=18em weight=2

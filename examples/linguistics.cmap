@@ -1,0 +1,66 @@
+title "From sound to meaning"
+layout layered dir=down
+page a3
+font 8pt..36pt wrap=16em
+
+style form color=#1565C0
+style structure color=#EF6C00
+style meaning color=#6A1B9A
+
+node sounds "Speech signal" .form
+| continuous acoustic information
+| pressure waves vary in time and frequency
+node phon "Phonology" .form
+| contrastive sound categories
+| phonemes contrast in a language-specific system
+node words "Morphology" .structure
+| roots, affixes, and word formation
+| morphemes carry grammatical or lexical meaning
+node lexicon "Lexicon" .structure
+| stored words and constructional patterns
+| frequency affects access and change
+node syntax "Syntax" .structure
+| constituents and grammatical relations
+| recursion creates unbounded combinations
+node prosody "Prosody" .form
+| stress, rhythm, and intonation
+| signals boundaries and discourse focus
+node context "Discourse context" .structure
+| speaker, listener, and shared knowledge
+| prior turns constrain interpretation
+node semantics "Semantics" .meaning
+| compositional sentence meaning
+| truth conditions combine lexical meanings
+node pragmatics "Pragmatics" .meaning
+| intended meaning in context
+| implicature can exceed literal content
+node interpretation "Interpretation" .meaning
+| listener integrates form, structure, and context
+| ambiguity is resolved probabilistically
+node variation "Language variation" .meaning
+| dialects differ in sound, grammar, and lexicon
+| variation is systematic, not random noise
+node change "Language change" .meaning
+| usage patterns diffuse across speakers
+| sound change can be regular and gradual
+
+sounds -> phon
+sounds -> prosody
+phon -> words
+words -> syntax
+words -> lexicon
+syntax -> semantics
+context -> pragmatics
+semantics -> pragmatics
+pragmatics -> interpretation
+prosody -> interpretation
+lexicon -> interpretation
+syntax ..> context "depends on context"
+variation ..> sounds "community norms"
+variation ..> syntax "community norms"
+change ..> variation "historical source"
+
+require sounds at top
+require interpretation at bottom
+prefer context near pragmatics within=12em weight=3
+prefer prosody near sounds within=14em weight=2

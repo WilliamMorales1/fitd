@@ -1,0 +1,64 @@
+title "Dijkstra shortest paths"
+layout layered dir=down
+page a3
+font 8pt..36pt wrap=17em
+
+style input color=#1565C0
+style step color=#2E7D32
+style result color=#6A1B9A
+
+node graph "Weighted graph" .input
+| directed or undirected graph G = (V, E)
+| every edge has weight w(u,v) >= 0
+| negative edges require another algorithm
+node source "Choose source" .input
+| initialize d[source] = 0
+| initialize every other distance to infinity
+node invariant "Greedy invariant" .step
+| settled d[u] equals the true shortest distance
+| only when all edge weights are non-negative
+node queue "Priority queue" .step
+| smallest tentative distance first
+| keyed by tentative distance d[v]
+node relax "Relax edges" .step
+| d[v] = min(d[v], d[u] + w(u,v))
+| update predecessor when the bound improves
+node settle "Settle vertex" .step
+| remove the minimum; its distance is final
+| each vertex is settled at most once
+node repeat "Repeat" .step
+| inspect every outgoing edge of the settled vertex
+| stop when the queue is empty or target is settled
+node paths "Shortest paths" .result
+| predecessor links reconstruct each route
+| unreachable vertices retain distance infinity
+node correctness "Correctness proof" .result
+| induction on the order vertices are settled
+| a shorter route would cross the frontier
+node complexity "Complexity" .result
+| binary heap: O((|V| + |E|) log |V|)
+| adjacency lists make sparse graphs efficient
+node failure "Failure modes" .result
+| negative edge: greedy choice may be wrong
+| overflow: infinity plus a weight must be guarded
+node compare "Related algorithms" .result
+| BFS is Dijkstra with unit edge weights
+| Bellman-Ford handles negative edges
+
+graph -> source
+source -> invariant
+invariant -> queue
+queue -> relax
+relax -> settle
+settle -> repeat
+repeat -> queue
+repeat -> paths
+settle -> correctness
+queue -> complexity
+relax -> failure
+failure -> compare
+
+require paths at bottom
+prefer repeat at right weight=2
+prefer correctness near invariant within=18em weight=3
+prefer compare near failure within=18em weight=2

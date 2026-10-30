@@ -9,37 +9,68 @@ style check color=#C62828
 
 node src "Source .cmap" .stage
 | one statement per line
+| comments and quoted strings are accepted
 node lex "Lexer" .stage
 | tokens with byte spans
+| newlines delimit statements
 node parse "Parser" .stage
 | recursive descent
 | skips a bad line, keeps going
 node sema "Semantic analysis" .stage
 | names, styles, units
 | ordering cycles (E0008)
+| two passes allow forward references
 node plan "Strategy" .stage
 | radial or layered candidates
+| real font metrics determine box sizes
 node csp "CSP search"
 | FC-CBJ, binary search on font
+| candidate positions satisfy hard constraints
 node bnb "Branch and bound"
 | soft `prefer` constraints
+| compares layouts at the best readable font
 node core "QuickXplain"
 | minimal unsat core (E0110)
+| isolates a conflicting subset of `require`s
 node checker "Checker" .check
 | recomputes every constraint
+| overlap, crossings, clipping, and overflow
 node emit "SVG / TikZ"
+| absolute positions; no downstream reflow
+node measure "Text measurement" .stage
+| font files are shared by layout and rendering
+| wrapping changes node geometry
+node quality "Layout polish" .stage
+| annealing reduces crossings and edge clutter
+| never violates a hard constraint
+node diagnostics "Diagnostics" .check
+| source spans point to the failing statement
+| explain CODE prints the long form
+node output "Rendered output" .stage
+| SVG is page-sized; PNG is cropped
+| TikZ preserves absolute coordinates
+node failure "Failure paths" .check
+| parse errors are reported and skipped
+| unsatisfiable requirements stop output
 
 src -> lex
 lex -> parse
 parse -> sema
 sema -> plan
+plan -> measure
+measure -> quality
 plan -> csp
 csp -> bnb, core
+quality -> csp
 bnb -> checker
-checker -> emit
+checker -> diagnostics
+diagnostics -> emit
+emit -> output
 core ..> sema "points back at source"
+failure ..> diagnostics "reported"
 
 require bnb left-of core
 require align row(bnb, core)
 prefer checker near bnb weight=2
 prefer emit at bottom-right
+prefer diagnostics near checker within=14em weight=2

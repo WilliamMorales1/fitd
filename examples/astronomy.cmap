@@ -1,0 +1,69 @@
+title "Stellar life cycle"
+layout radial root=star
+page a3
+font 8pt..34pt wrap=16em
+
+style formation color=#1565C0
+style stable color=#2E7D32
+style endpoint color=#6A1B9A
+
+node star "Star" .stable
+| self-gravitating sphere of plasma
+| hydrostatic balance: pressure offsets gravity
+node cloud "Molecular cloud" .formation
+| cold gas and dust; dense and opaque
+| collapse begins when gravity beats pressure
+node collapse "Gravitational collapse" .formation
+| density rises as the cloud contracts
+| gravitational potential becomes thermal energy
+node protostar "Protostar" .formation
+| heating core before sustained fusion
+| jets and disks carry away angular momentum
+node fusion "Nuclear fusion" .stable
+| hydrogen -> helium releases energy
+| luminosity balances radiated energy
+node mainseq "Main sequence" .stable
+| core hydrogen burning is the long stable phase
+| mass controls luminosity and lifetime
+node lowmass "Red giant" .stable
+| shell burning expands the outer envelope
+| helium core becomes degenerate
+node white "White dwarf" .endpoint
+| compact carbon-oxygen remnant
+| electron degeneracy supports it
+node massive "Supernova" .endpoint
+| explosive death of a massive star
+| shock enriches the surrounding medium
+node neutron "Neutron star" .endpoint
+| ultra-dense remnant supported by neutron pressure
+node blackhole "Black hole" .endpoint
+| collapse beyond the escape threshold
+| event horizon hides the central remnant
+node nucleosynthesis "Heavy elements" .endpoint
+| fusion and supernovae change chemical composition
+| later stars inherit enriched gas
+node evidence "Observational evidence" .endpoint
+| spectra reveal temperature and composition
+| Hertzsprung-Russell diagram organizes populations
+
+cloud -> collapse
+collapse -> protostar
+protostar -> fusion
+fusion -> mainseq
+mainseq -> star
+star -> lowmass
+lowmass -> white
+star -> massive
+massive -> neutron
+massive -> blackhole
+massive -> nucleosynthesis
+white -> nucleosynthesis
+cloud ..> evidence "spectra"
+star ..> evidence "luminosity and color"
+nucleosynthesis ..> cloud "recycled material"
+
+require star at center
+prefer cloud at top-left weight=2
+prefer white at bottom-left weight=2
+prefer blackhole at bottom-right weight=2
+prefer evidence near star within=18em weight=2

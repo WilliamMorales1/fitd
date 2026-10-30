@@ -1,0 +1,70 @@
+title "Statistical inference"
+layout layered dir=down
+page a3
+font 8pt..36pt wrap=17em
+
+style data color=#1565C0
+style method color=#EF6C00
+style conclusion color=#6A1B9A
+
+node population "Population" .data
+| all units of interest
+| parameter describes the population, usually unknown
+node sample "Random sample" .data
+| observed subset
+| probability sampling supports generalization
+node design "Study design" .method
+| sampling, controls, and measurements
+| randomization separates treatment from confounding
+node data "Observed data" .data
+| measurements plus missingness and recording choices
+| plots reveal structure before modeling
+node estimate "Estimate" .method
+| statistic used to learn about a parameter
+| bias concerns accuracy; variance concerns spread
+node model "Probability model" .method
+| assumptions connect data to unknown parameters
+| likelihood describes data conditional on parameters
+node uncertainty "Uncertainty" .method
+| standard error, confidence interval, or posterior
+| more data often narrows sampling uncertainty
+node hypothesis "Hypothesis test" .method
+| compare evidence with a null model
+| p-value is not the probability the null is true
+node effect "Effect size" .method
+| magnitude matters alongside significance
+| practical importance requires domain context
+node conclusion "Scientific conclusion" .conclusion
+| report effect size, uncertainty, and limitations
+| distinguish association from causal evidence
+node replicate "Replication" .conclusion
+| test whether the result generalizes
+| new samples expose fragile conclusions
+node bias "Bias and confounding" .conclusion
+| selection, measurement, and omitted-variable bias
+| a precise biased estimate is still wrong
+node bayes "Bayesian updating" .conclusion
+| posterior proportional to likelihood times prior
+| prior assumptions must be reported
+
+population -> sample
+sample -> design
+sample -> data
+design -> estimate
+design -> model
+data -> estimate
+estimate -> uncertainty
+model -> uncertainty
+uncertainty -> hypothesis
+uncertainty -> effect
+hypothesis -> conclusion
+effect -> conclusion
+conclusion -> replicate
+replicate ..> population "generalizes back"
+bias ..> design "audit"
+bayes ..> model "alternative framework"
+
+require population at top
+require conclusion at bottom
+prefer replicate near population within=18em weight=2
+prefer bias near design within=18em weight=2
