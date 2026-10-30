@@ -1,6 +1,6 @@
 # Solver
 
-Layout is a finite-domain CSP. `src/csp.rs` is a small solver that knows nothing about diagrams; `src/layout.rs` turns a diagram into a `csp::Problem`.
+Layout is a finite-domain CSP. `src/csp.rs` is a small solver that knows nothing about diagrams; `src/layout/` turns a diagram into a `csp::Problem`.
 
 ## Engine
 
@@ -14,7 +14,7 @@ Budgets count constraint checks, so the same input gives the same output on any 
 
 ## Diagrams as CSPs
 
-A strategy (`radial.rs`, `layered.rs`) measures every box at the trial font and proposes candidate centers per node (ordered by preference), structural constraints, and the edges to draw. `layout.rs` adds the user's `require`/`prefer` constraints.
+A strategy (`radial.rs`, `layered.rs`) measures every box at the trial font and proposes candidate centers per node (ordered by preference), structural constraints, and the edges to draw. `layout/scene.rs` adds the user's `require`/`prefer` constraints.
 
 | Constraint | Arity | Where |
 |---|---|---|

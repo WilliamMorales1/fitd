@@ -107,6 +107,51 @@ impl Diag {
     }
 }
 
+/// mark_rows draws one line's marks. Marks that do not overlap share a row, and messages hang
+/// below on connectors, as rustc does; overlapping marks each get their own row.
+fn mark_rows(pad: &str, marks: &[(usize, String, &str)]) -> String {
+    let mut s = String::new();
+    let overlap = marks.windows(2).any(|w| w[0].0 + w[0].1.chars().count() > w[1].0);
+    if overlap {
+        for (col, mark, msg) in marks {
+            let msg = if msg.is_empty() { String::new() } else { format!(" {msg}") };
+            s += &format!("{pad} | {}{mark}{msg}\n", " ".repeat(*col));
+        }
+        return s;
+    }
+    let mut row = String::new();
+    for (col, mark, _) in marks {
+        row += &" ".repeat(col - row.chars().count());
+        row += mark;
+    }
+    let mut hang: Vec<(usize, &str)> = marks.iter().filter(|m| !m.2.is_empty()).map(|m| (m.0, m.2)).collect();
+    // The rightmost message fits on the mark row itself.
+    if let Some(&(col, msg)) = hang.last()
+        && marks.last().is_some_and(|m| m.0 == col)
+    {
+        row += &format!(" {msg}");
+        hang.pop();
+    }
+    s += &format!("{pad} | {row}\n");
+    while let Some((col, msg)) = hang.pop() {
+        let bars = |upto: usize| {
+            let mut r = String::new();
+            for &(c, _) in hang.iter().filter(|h| h.0 < upto) {
+                r += &" ".repeat(c - r.chars().count());
+                r += "|";
+            }
+            r
+        };
+        let mut conn = bars(col);
+        conn += &" ".repeat(col - conn.chars().count());
+        s += &format!("{pad} | {conn}|\n");
+        let mut text = bars(col);
+        text += &" ".repeat(col - text.chars().count());
+        s += &format!("{pad} | {text}{msg}\n");
+    }
+    s
+}
+
 pub fn render(src: &Source, diags: &[Diag]) -> String {
     let mut s = String::new();
     for d in diags {
@@ -124,37 +169,30 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
             s += &format!("{pad}--> {}:{line}:{col}\n{pad} |\n", src.path);
         }
         let mut last = 0;
-        // Marks share a row while they do not overlap; a message ends its row.
-        let mut row = String::new();
-        let mut open = false;
-        for l in &labels {
-            let (line, col) = src.line_col(l.span.lo);
+        for (i, l) in labels.iter().enumerate() {
+            let line = src.line_col(l.span.lo).0;
+            if line == last {
+                continue;
+            }
+            if last != 0 && line > last + 1 {
+                s += &format!("{pad} ...\n");
+            }
             let text = src.line_text(line);
-            if line != last || !open || col - 1 < row.chars().count() {
-                if !row.is_empty() {
-                    s += &format!("{pad} | {row}\n");
-                    row.clear();
-                }
-            }
-            if line != last {
-                if last != 0 && line > last + 1 {
-                    s += &format!("{pad} ...\n");
-                }
-                s += &format!("{line:>width$} | {text}\n");
-                last = line;
-            }
-            let end_col = if src.line_col(l.span.hi).0 == line { src.line_col(l.span.hi).1 } else { text.chars().count() + 1 };
-            let n = end_col.saturating_sub(col).max(1);
-            let mark = if l.primary { "^" } else { "-" };
-            row += &" ".repeat(col - 1 - row.chars().count());
-            row += &mark.repeat(n);
-            open = l.msg.is_empty();
-            if !open {
-                row += &format!(" {}", l.msg);
-            }
-        }
-        if !row.is_empty() {
-            s += &format!("{pad} | {row}\n");
+            s += &format!("{line:>width$} | {text}\n");
+            last = line;
+            // (start column, mark, message) for every label on this line, left to right.
+            let mut marks: Vec<(usize, String, &str)> = labels[i..]
+                .iter()
+                .take_while(|l| src.line_col(l.span.lo).0 == line)
+                .map(|l| {
+                    let col = src.line_col(l.span.lo).1 - 1;
+                    let end = if src.line_col(l.span.hi).0 == line { src.line_col(l.span.hi).1 - 1 } else { text.chars().count() };
+                    let n = end.saturating_sub(col).max(1);
+                    (col, (if l.primary { "^" } else { "-" }).repeat(n), l.msg.as_str())
+                })
+                .collect();
+            marks.sort_by_key(|m| m.0);
+            s += &mark_rows(&pad, &marks);
         }
         if !labels.is_empty() {
             s += &format!("{pad} |\n");
@@ -189,5 +227,13 @@ mod tests {
         let d = Diag::error("E0008", "m").secondary(Span::new(2, 3), "").secondary(Span::new(6, 7), "");
         let out = render(&src, &[d]);
         assert!(out.contains("1 | a x b y c\n  |   -   -\n"), "{out}");
+    }
+
+    #[test]
+    fn left_message_hangs_on_a_connector() {
+        let src = Source::new("t.cmap", "a x b y c\n");
+        let d = Diag::error("E0008", "m").primary(Span::new(2, 3), "here").secondary(Span::new(6, 7), "");
+        let out = render(&src, &[d]);
+        assert!(out.contains("  |   ^   -\n  |   |\n  |   here\n"), "{out}");
     }
 }

@@ -121,11 +121,11 @@ fn theme_colors_reach_svg_and_tikz() {
 /// Every example with the most warnings and seconds it may take on the reference laptop
 /// (ThinkPad X280, release build). Lower a number when a change improves on it.
 const EXAMPLES: [(&str, usize, f64); 5] = [
-    ("cell_biology", 0, 10.0),
-    ("compiler", 0, 10.0),
-    ("earth_science", 8, 20.0),
-    ("math4200", 3, 25.0),
-    ("math4200-v2", 1, 30.0),
+    ("cell_biology", 0, 5.0),
+    ("compiler", 0, 6.0),
+    ("earth_science", 8, 12.0),
+    ("math4200", 3, 15.0),
+    ("math4200-v2", 1, 25.0),
 ];
 
 #[test]

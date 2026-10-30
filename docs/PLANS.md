@@ -8,7 +8,7 @@ Done: language front end, FC-CBJ engine with spatial-index pruning and branch an
 
 Next:
 
-- **Speed.** About 6 to 8 s for a 39-node map (four plans per probe and three trade-off fonts, each in parallel). Fewer font probes (start the binary search from a size estimate), and cheaper `Clear`/`NoCross` pruning.
+- **Speed.** 1 to 6 s per example (math4200-v2, 39 nodes, is slowest; `--draft` about 2.6 s). Font probes that fail run their whole budget, and polish rescores the whole layout per move. Incremental readability scoring and cheaper constraint checks are next.
 - **Obstacle-avoiding link routes.** Links choose among 8 Bezier bends, which in dense maps all cross some box (W0201). Routing around boxes (shortest path on a visibility graph, then smoothing) would clear them without moving nodes.
 - **Groups**: `group` blocks with a containment constraint.
 - **Watch mode** for live diagnostics.
@@ -43,7 +43,6 @@ The checker works only on the scene, so every strategy gets the same diagnostics
 - **Hybrid search.** CBJ for feasibility, then min-conflicts or simulated annealing to polish soft objectives (balance, symmetry, edge length).
 - **CP-SAT backend.** OR-Tools CP-SAT has `AddNoOverlap2D`, which is exactly region ownership. Positions become integer variables on a grid. Good for exact optima on small maps.
 - **Incremental re-layout.** Seed from the previous solution and penalize movement, so small content edits give small visual diffs. This is the "stable layout" property, useful for living study notes.
-- **Speed.** A spatial hash for overlap checks (currently O(n) per candidate), precomputed angular sectors per node, and parallel binary-search probes.
 
 ## 4. Front ends
 

@@ -2,7 +2,7 @@
 name = "cmapc"
 version = "0.1.0"
 edition = "2024"
-description = "Concept map compiler: constraint-solved radial layout with a borrow-checker-style verifier"
+description = "Constraint-diagram compiler: concept maps and flowcharts laid out by a CSP solver, with rustc-style diagnostics"
 
 [dependencies]
 resvg = { version = "0.49.0", default-features = false, features = ["text"] }
