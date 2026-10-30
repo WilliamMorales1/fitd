@@ -117,7 +117,7 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
             push(false, "W0201", Some(e.b), format!("link {} -> {} passes through {}", id(e.a), id(e.b), id(u)), vec![]);
         }
     }
-    for c in fonts.missing.borrow().iter() {
+    for c in fonts.missing.lock().unwrap().iter() {
         push(false, "W0202", None, format!("no glyph for {c:?} (U+{:04X})", *c as u32), vec![]);
     }
     let labels: Vec<(usize, Rect)> = lay.edges.iter().enumerate().filter_map(|(i, e)| lay.label_rect(e).map(|r| (i, r))).collect();

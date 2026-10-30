@@ -10,8 +10,10 @@ mod layout;
 mod lex;
 mod metrics;
 mod parse;
+mod quality;
 mod radial;
 mod sema;
+mod theme;
 mod tree;
 
 use diag::{Diag, Level, Source};
@@ -23,7 +25,7 @@ use std::process::ExitCode;
 const USAGE: &str = "usage:
   cmapc build <input.cmap> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
               [--portrait] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force]
-              [--budget CHECKS] [--scale PX]
+              [--budget CHECKS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
   cmapc explain <CODE>";
 
 fn page(spec: &str, portrait: bool) -> Result<(f64, f64), String> {
@@ -51,6 +53,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     let (mut margin, mut min_font, mut max_font, mut wrap) = (None, None, None, None);
     let mut budget = 20_000_000;
     let mut scale = 2.0;
+    let (mut theme_name, mut family) = (None, None);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut val = || it.next().cloned().ok_or(format!("{a} needs a value"));
@@ -67,6 +70,8 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             "--wrap" => wrap = Some(num(val()?)?),
             "--budget" => budget = num(val()?)? as u64,
             "--scale" => scale = num(val()?)?,
+            "--theme" => theme_name = Some(val()?),
+            "--font-family" => family = Some(val()?),
             s if !s.starts_with('-') && input.is_none() => input = Some(s.to_string()),
             s => return Err(format!("unknown argument `{s}`\n{USAGE}")),
         }
@@ -101,14 +106,17 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         max_font: max_font.unwrap_or(font.1),
         wrap_em: wrap.or(set.wrap_em).unwrap_or(24.0),
         budget,
-        opt_budget: budget / 4,
+        opt_budget: budget / 16,
+        legible: legible(page_w, page_h, min_font.unwrap_or(font.0)),
     };
 
     let t = tree::build(&g);
     if g.settings.layout.unwrap_or(LayoutKind::Radial) == LayoutKind::Radial {
         eprint!("{}", diag::render(&src, &t.notes));
     }
-    let fonts = metrics::Fonts::load()?;
+    let fonts = metrics::Fonts::load(family.as_deref().or(set.family.as_deref()))?;
+    let name = theme_name.as_deref().or(set.theme.as_deref()).unwrap_or("light");
+    let th = theme::Theme::preset(name).ok_or(format!("unknown theme `{name}` (expected one of: {})", theme::PRESETS.join(", ")))?.with(&set.theme_over);
     let lay = match layout::solve(&g, &t, &fonts, &cfg) {
         Ok(lay) => lay,
         Err(Failure::NoRoom) => {
@@ -158,6 +166,22 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         s.search.backjumps,
         if s.soft_total > 0 { format!("; soft cost {}/{}", s.soft_cost, s.soft_total) } else { String::new() }
     );
+    let rects: Vec<Rect> = (0..g.nodes.len()).map(|v| lay.rect(v)).collect();
+    let q = layout::Readable::new(&t, lay.kind, &lay.edges, cfg.page(), cfg.legible).score(&rects);
+    eprintln!(
+        "readability penalty {:.0}: crossings {:.0}, proximity {:.0}, grouping {:.0}, angles {:.0}, alignment {:.0}, spread {:.0}",
+        q.total(),
+        q.crossings,
+        q.proximity,
+        q.grouping,
+        q.angles,
+        q.alignment,
+        q.spread
+    );
+    if lay.tradeoff.len() > 1 {
+        let tried: Vec<String> = lay.tradeoff.iter().map(|(f, m)| format!("{f:.1}pt {m:.0}{}", if *f == lay.body { " (chosen)" } else { "" })).collect();
+        eprintln!("font trade-off, merit (lower is better; legible from {:.1}pt): {}", cfg.legible, tried.join(", "));
+    }
     if errors > 0 && !force {
         eprintln!("error: aborting due to {errors} previous errors; no output written (use --force to write anyway)");
         return Ok(ExitCode::FAILURE);
@@ -166,18 +190,26 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     let out = svg_out.unwrap_or(format!("{stem}.svg"));
     let bytes = if out.to_ascii_lowercase().ends_with(".png") {
         // A PNG is cropped to the drawing, with the margin as padding, not sized to the page.
-        let svg = emit::svg(&g, &t, &fonts, &lay, emit::bounds(&lay).inflate(cfg.margin));
+        let svg = emit::svg(&g, &t, &fonts, &lay, emit::bounds(&lay).inflate(cfg.margin), &th);
         emit::png(&svg, &fonts, scale)?
     } else {
-        emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h)).into_bytes()
+        emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h), &th).into_bytes()
     };
     std::fs::write(&out, bytes).map_err(|e| format!("{out}: {e}"))?;
     eprintln!("wrote {out}");
     if let Some(p) = tikz_out {
-        std::fs::write(&p, emit::tikz(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h)).map_err(|e| format!("{p}: {e}"))?;
+        std::fs::write(&p, emit::tikz(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h, &th)).map_err(|e| format!("{p}: {e}"))?;
         eprintln!("wrote {p}");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// legible is the smallest comfortable body font for a page read from about its diagonal:
+/// 16pt per meter of viewing distance (poster guides give about 24pt at 1.5m), at least 8pt,
+/// and never below the user's own minimum.
+fn legible(page_w: f64, page_h: f64, min_font: f64) -> f64 {
+    let diagonal_m = page_w.hypot(page_h) / 72.0 * 0.0254;
+    (16.0 * diagonal_m).max(8.0).max(min_font)
 }
 
 fn main() -> ExitCode {

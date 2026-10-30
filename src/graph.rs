@@ -12,7 +12,10 @@ pub struct Node {
     pub id: String,
     pub title: String,
     pub body: Vec<String>,
+    /// Accent: border and tint of a box, fill of a circle, and its branch's color.
     pub color: Option<String>,
+    pub fill: Option<String>,
+    pub text: Option<String>,
     pub shape: Option<Shape>,
     /// Span of the id in its `node` statement.
     pub span: Span,
@@ -120,6 +123,9 @@ pub struct Settings {
     pub margin: Option<f64>,
     pub font: Option<(f64, f64)>,
     pub wrap_em: Option<f64>,
+    pub family: Option<String>,
+    pub theme: Option<String>,
+    pub theme_over: crate::theme::Overrides,
 }
 
 pub struct Graph {

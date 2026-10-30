@@ -8,11 +8,13 @@
 use crate::csp::{self, Outcome, Problem};
 use crate::geom::{P, Rect, segment_hits_rect, segments_cross};
 pub use crate::graph::Shape;
-use crate::graph::{Graph, LayoutKind, Relation, Side};
+use crate::graph::{Dir, Graph, LayoutKind, Relation, Side};
 use crate::metrics::{Fonts, Run};
+use crate::quality::{self, Score};
 use crate::tree::Tree;
 use crate::{layered, radial};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Clone, Copy)]
 pub struct Config {
@@ -27,6 +29,9 @@ pub struct Config {
     pub budget: u64,
     /// Constraint checks spent improving soft preferences once the font is fixed.
     pub opt_budget: u64,
+    /// Smallest body font readable at the page's viewing distance; also the length unit of
+    /// readability scores.
+    pub legible: f64,
 }
 
 impl Config {
@@ -68,6 +73,8 @@ pub struct Stats {
     /// Total weight of soft constraints left unmet, and of all soft constraints.
     pub soft_cost: u64,
     pub soft_total: u64,
+    /// Checks the winning plan of the latest attempt spent.
+    pub probe_checks: u64,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -178,6 +185,10 @@ pub struct Layout {
     pub ky: f64,
     /// Slack allowed when checking alignments, since candidate spots are discrete.
     pub tol: f64,
+    /// Radial branch rotation in degrees, so later passes rebuild the same plan.
+    pub rot: f64,
+    /// Fonts tried by the final trade-off with each one's merit (lower is better).
+    pub tradeoff: Vec<(f64, f64)>,
     pub stats: Stats,
 }
 
@@ -406,7 +417,8 @@ pub fn relation_holds(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64, p
 /// so "its box meets region R" is "its center lies in R grown by half the box": a range query.
 struct Grid {
     cell: f64,
-    buckets: HashMap<(i64, i64), Vec<u32>>,
+    // Ordered, so candidates come out in the same order every run and `polish` is reproducible.
+    buckets: BTreeMap<(i64, i64), Vec<u32>>,
 }
 
 impl Grid {
@@ -417,7 +429,7 @@ impl Grid {
         }
         // About sixteen candidates per bucket.
         let cell = (((x1 - x0) * (y1 - y0)).max(1.0) * 16.0 / at.len().max(1) as f64).sqrt().max(1.0);
-        let mut buckets: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
+        let mut buckets: BTreeMap<(i64, i64), Vec<u32>> = BTreeMap::new();
         for (i, p) in at.iter().enumerate() {
             buckets.entry(((p.0 / cell).floor() as i64, (p.1 / cell).floor() as i64)).or_default().push(i as u32);
         }
@@ -664,12 +676,22 @@ impl Problem for Scene<'_> {
 enum Users<'a> {
     /// These hard constraints only (indices into `Graph::constraints`).
     Hard(&'a [usize]),
-    /// Every hard constraint plus `prefer`s and layered crossings.
-    All,
+    /// Every hard constraint plus `prefer`s and layered crossings, on this layout's plan and
+    /// trying its spots first.
+    All(&'a Layout),
     /// Nodes fixed where this layout put them; only link routes are optimized.
     Routes(&'a Layout),
+    /// Every hard constraint at a smaller font than this layout's, trying its spots first:
+    /// boxes shrink around the same centers, so they usually still fit.
+    Shrunk(&'a Layout),
 }
 
+/// ROTATIONS turns the radial branches, in degrees. Near the largest font that fits, which
+/// rotation solves is close to chance, so each probe tries all of them in parallel.
+const ROTATIONS: [f64; 4] = [0.0, 10.0, 30.0, 45.0];
+
+/// attempt places every node at body font `b`. A radial probe tries each of ROTATIONS and
+/// keeps the first in list order that solves, so the result does not depend on timing.
 fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: Users, stats: &mut Stats) -> Option<Layout> {
     stats.attempts += 1;
     let kind = g.settings.layout.unwrap_or(LayoutKind::Radial);
@@ -678,10 +700,89 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         LayoutKind::Radial => (0..n).map(|v| measure(fonts, g, v, radial::role(t, v), b, cfg)).collect(),
         LayoutKind::Layered(_) => (0..n).map(|v| measure(fonts, g, v, Role::Leaf, b, cfg)).collect(),
     };
-    let plan = match kind {
-        LayoutKind::Radial => radial::plan(t, &boxes, cfg, b),
-        LayoutKind::Layered(dir) => layered::plan(g, &boxes, cfg, b, dir),
+    let rots = match (kind, users) {
+        (_, Users::All(prev) | Users::Routes(prev) | Users::Shrunk(prev)) => vec![prev.rot],
+        (LayoutKind::Radial, Users::Hard(_)) => ROTATIONS.to_vec(),
+        (LayoutKind::Layered(_), Users::Hard(_)) => vec![0.0],
     };
+    let built: Vec<_> = rots.iter().map(|&rot| build(g, t, fonts, cfg, b, users, kind, &boxes, rot)).collect();
+    let optimizing = matches!(users, Users::All(_));
+    let routing = matches!(users, Users::Routes(_));
+    // Once a plan solves, the plans after it in list order cannot win, so they stop.
+    let stop: Vec<AtomicBool> = built.iter().map(|_| AtomicBool::new(false)).collect();
+    let runs: Vec<(Outcome, u64, csp::Stats)> = std::thread::scope(|s| {
+        let stop = &stop;
+        let handles: Vec<_> = built
+            .iter()
+            .enumerate()
+            .map(|(i, (sc, ..))| {
+                s.spawn(move || {
+                    let run = if optimizing || routing {
+                        csp::optimize(sc, cfg.opt_budget, &stop[i])
+                    } else {
+                        let (out, st) = csp::solve(sc, cfg.budget, &stop[i]);
+                        (out, 0, st)
+                    };
+                    if matches!(run.0, Outcome::Sat(_)) {
+                        stop[i + 1..].iter().for_each(|f| f.store(true, Ordering::Relaxed));
+                    }
+                    run
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().expect("solver thread")).collect()
+    });
+    for (i, (out, _, st)) in runs.iter().enumerate() {
+        stats.search += *st;
+        if std::env::var_os("CMAPC_DEBUG").is_some() {
+            let what = match out {
+                Outcome::Sat(_) => "sat",
+                Outcome::Unsat => "unsat",
+                Outcome::Unknown => "budget",
+            };
+            eprintln!("font {b:.2}{} rot {}: {what} after {st:?}", if optimizing { " (optimizing)" } else { "" }, rots[i]);
+        }
+    }
+    let win = runs.iter().position(|(out, ..)| matches!(out, Outcome::Sat(_)))?;
+    let (Outcome::Sat(val), cost, st) = &runs[win] else { unreachable!() };
+    let (sc, mut edges, plan) = built.into_iter().nth(win).unwrap();
+    stats.probe_checks = st.checks;
+    let mut val = val.clone();
+    let mut cost = *cost;
+    if optimizing {
+        let ctx = Readable::new(t, kind, &edges, sc.page, cfg.legible);
+        cost = polish(&sc, &ctx, &mut val, POLISH_MOVES);
+    }
+    if optimizing || routing {
+        stats.soft_cost += cost;
+        stats.soft_total += sc.weights.iter().sum::<u64>();
+    }
+    let mut pos = vec![(0.0, 0.0); n];
+    for (i, &v) in sc.node.iter().enumerate() {
+        pos[v] = sc.at[i][val[i] as usize];
+    }
+    let base = sc.node.len();
+    for (i, r) in sc.routes.iter().enumerate() {
+        (edges[r.edge].bow, edges[r.edge].t) = r.opts[val[base + i] as usize];
+    }
+    Some(Layout { kind, body: b, boxes, pos, edges, kx: plan.0, ky: plan.1, tol: plan.2, rot: rots[win], tradeoff: Vec::new(), stats: *stats })
+}
+
+/// build turns one plan into a CSP scene, plus the plan's edges and its (kx, ky, tol).
+#[allow(clippy::too_many_arguments)]
+fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: Users, kind: LayoutKind, boxes: &[Boxed], rot: f64) -> (Scene<'a>, Vec<Drawn>, (f64, f64, f64)) {
+    let n = g.nodes.len();
+    let plan = match kind {
+        LayoutKind::Radial => radial::plan(t, boxes, cfg, b, rot),
+        LayoutKind::Layered(dir) => layered::plan(g, boxes, cfg, b, dir),
+    };
+    let mut plan = plan;
+    // Starting from a known layout guarantees a first solution; search then improves on it.
+    if let Users::Shrunk(prev) | Users::All(prev) | Users::Routes(prev) = users {
+        for (v, c) in plan.cands.iter_mut().enumerate() {
+            c.insert(0, Cand { cost: f64::NEG_INFINITY, at: prev.pos[v], r: prev.radius(v) });
+        }
+    }
     let mut var = vec![0; n];
     for (i, &v) in plan.order.iter().enumerate() {
         var[v] = i;
@@ -716,8 +817,8 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
     for (ci, c) in g.constraints.iter().enumerate() {
         let on = match users {
             Users::Hard(set) => c.hard && set.contains(&ci),
-            Users::All => true,
-            Users::Routes(_) => c.hard,
+            Users::All(_) => true,
+            Users::Routes(_) | Users::Shrunk(_) => c.hard,
         };
         if !on {
             continue;
@@ -735,7 +836,7 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         }
     }
     sc.grids = sc.at.iter().map(|a| Grid::new(a)).collect();
-    let optimizing = matches!(users, Users::All);
+    let optimizing = matches!(users, Users::All(_));
     let routing = matches!(users, Users::Routes(_));
     if let Users::Routes(prev) = users {
         for (i, &v) in sc.node.iter().enumerate() {
@@ -807,34 +908,115 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
     if routing {
         sc.grids.clear();
     }
-    let (out, cost, st) = if optimizing || routing {
-        csp::optimize(&sc, cfg.opt_budget)
-    } else {
-        let (out, st) = csp::solve(&sc, cfg.budget);
-        (out, 0, st)
-    };
-    stats.search += st;
-    if std::env::var_os("CMAPC_DEBUG").is_some() {
-        let what = match out {
-            Outcome::Sat(_) => "sat",
-            Outcome::Unsat => "unsat",
-            Outcome::Unknown => "budget",
+    (sc, edges, (plan.kx, plan.ky, plan.tol))
+}
+
+/// Readable holds what `quality::score` needs that stays fixed while nodes move.
+pub struct Readable {
+    pub tree: Vec<(usize, usize)>,
+    pub links: Vec<(usize, usize)>,
+    pub branch: Vec<Option<usize>>,
+    pub flow: Option<bool>,
+    pub page: Rect,
+    pub unit: f64,
+}
+
+impl Readable {
+    pub fn new(t: &Tree, kind: LayoutKind, edges: &[Drawn], page: Rect, unit: f64) -> Readable {
+        let pairs = |link: bool| edges.iter().filter(|e| (e.style == EdgeStyle::Link) == link).map(|e| (e.a, e.b)).collect();
+        // Branch grouping only means something when branches own directions, as in radial.
+        let branch = (0..t.parent.len()).map(|v| if kind == LayoutKind::Radial { t.branch(v) } else { None }).collect();
+        let flow = match kind {
+            LayoutKind::Radial => None,
+            LayoutKind::Layered(dir) => Some(dir == Dir::Down),
         };
-        eprintln!("font {b:.2}{}: {what} after {st:?}", if optimizing { " (optimizing)" } else { "" });
+        Readable { tree: pairs(false), links: pairs(true), branch, flow, page, unit }
     }
-    let Outcome::Sat(val) = out else { return None };
-    if optimizing || routing {
-        stats.soft_cost += cost;
-        stats.soft_total += sc.weights.iter().sum::<u64>();
+
+    pub fn score(&self, rects: &[Rect]) -> Score {
+        quality::score(&quality::Input { rects, tree: &self.tree, links: &self.links, branch: &self.branch, flow: self.flow, page: self.page, unit: self.unit })
     }
-    let mut pos = vec![(0.0, 0.0); n];
-    for (i, &v) in sc.node.iter().enumerate() {
-        pos[v] = sc.at[i][val[i] as usize];
+}
+
+/// Moves tried by `polish`, and how far one move may go, in ems.
+const POLISH_MOVES: usize = 150_000;
+const POLISH_REACH: f64 = 10.0;
+/// Readability penalty per unit of unmet `prefer` weight; high, since a `prefer` is the
+/// author's stated intent and the aesthetics are only general guidance.
+const SOFT_PENALTY: f64 = 1000.0;
+
+/// polish moves one node at a time to a nearby candidate spot, keeping every hard constraint,
+/// and anneals on readability plus unmet `prefer` weight. The walk is seeded, so the result is
+/// deterministic. Returns the final soft cost.
+fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize) -> u64 {
+    let nv = sc.node.len();
+    let mut hard = vec![Vec::new(); nv];
+    let mut soft = vec![Vec::new(); nv];
+    for (c, scope) in sc.scopes.iter().enumerate() {
+        for &v in scope.iter().filter(|&&v| v < nv) {
+            if sc.weights[c] == 0 { hard[v].push(c) } else { soft[v].push(c) }
+        }
     }
-    for (i, r) in sc.routes.iter().enumerate() {
-        (edges[r.edge].bow, edges[r.edge].t) = r.opts[val[base + i] as usize];
+    let unmet = |cs: &[usize], val: &[u32]| cs.iter().filter(|&&c| !sc.holds(c, val)).map(|&c| sc.weights[c]).sum::<u64>();
+    let mut rects: Vec<Rect> = (0..nv).map(|v| sc.node_rect(v, val)).collect();
+    let mut soft_cost: u64 = (0..sc.scopes.len()).filter(|&c| sc.weights[c] > 0 && !sc.holds(c, val)).map(|c| sc.weights[c]).sum();
+    let energy = |rects: &[Rect], soft: u64| ctx.score(rects).total() + SOFT_PENALTY * soft as f64;
+    let mut cur = energy(&rects, soft_cost);
+    let (mut best, mut best_val, mut best_soft) = (cur, val.to_vec(), soft_cost);
+    let movable: Vec<usize> = (0..nv).filter(|&i| sc.at[i].len() > 1).collect();
+    if movable.is_empty() {
+        return soft_cost;
     }
-    Some(Layout { kind, body: b, boxes, pos, edges, kx: plan.kx, ky: plan.ky, tol: plan.tol, stats: *stats })
+    let mut rng: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut next = |k: usize| {
+        rng ^= rng << 13;
+        rng ^= rng >> 7;
+        rng ^= rng << 17;
+        (rng % k as u64) as usize
+    };
+    // Temperature falls geometrically from about one em of edge to almost nothing.
+    let (t0, t1): (f64, f64) = (2.0, 0.01);
+    let mut near = Vec::new();
+    for k in 0..moves {
+        let temp = t0 * (t1 / t0).powf(k as f64 / moves as f64);
+        let i = movable[next(movable.len())];
+        let u = sc.node[i];
+        let reach = POLISH_REACH * sc.body;
+        near.clear();
+        sc.grids[i].near(&Rect::centered(sc.at[i][val[i] as usize], 2.0 * reach, 2.0 * reach), &mut |a| near.push(a));
+        if near.is_empty() {
+            continue;
+        }
+        let old = val[i];
+        let a = near[next(near.len())];
+        if a == old {
+            continue;
+        }
+        let before = unmet(&soft[i], val);
+        val[i] = a;
+        if !hard[i].iter().all(|&c| sc.holds(c, val)) {
+            val[i] = old;
+            continue;
+        }
+        let new_soft = soft_cost - before + unmet(&soft[i], val);
+        let old_rect = rects[u];
+        rects[u] = sc.rects[i][a as usize];
+        let e = energy(&rects, new_soft);
+        let x = (next(1 << 20) as f64 + 0.5) / (1 << 20) as f64;
+        if e <= cur || x < ((cur - e) / temp).exp() {
+            cur = e;
+            soft_cost = new_soft;
+            if cur < best {
+                (best, best_soft) = (cur, soft_cost);
+                best_val.copy_from_slice(&val[..]);
+            }
+        } else {
+            val[i] = old;
+            rects[u] = old_rect;
+        }
+    }
+    val.copy_from_slice(&best_val);
+    best_soft
 }
 
 pub enum Failure {
@@ -860,29 +1042,44 @@ fn quickxplain(feasible: &mut dyn FnMut(&[usize]) -> bool, base: &[usize], added
     [d1, d2].concat()
 }
 
+/// Fractions of the largest feasible font that the final trade-off polishes and compares.
+const TRADE: [f64; 3] = [1.0, 0.95, 0.9];
+/// Merit per unit of log font gain above the legibility floor: 5% more font is worth about
+/// one crossing.
+const W_FONT: f64 = 800.0;
+
+/// merit scores a finished layout for the font trade-off, lower is better: its readability
+/// penalty plus unmet `prefer` weight, minus a font gain with diminishing returns.
+pub fn merit(g: &Graph, t: &Tree, cfg: &Config, lay: &Layout) -> f64 {
+    let rects: Vec<Rect> = (0..lay.pos.len()).map(|v| lay.rect(v)).collect();
+    let q = Readable::new(t, lay.kind, &lay.edges, cfg.page(), cfg.legible).score(&rects);
+    let rect = |v: usize| lay.rect(v);
+    let unmet: u64 = g.constraints.iter().filter(|c| !c.hard && !relation_holds(&c.rel, &rect, lay.body, &cfg.page(), lay.tol)).map(|c| c.weight as u64).sum();
+    q.total() + SOFT_PENALTY * unmet as f64 - W_FONT * (lay.body / cfg.legible).ln()
+}
+
 /// solve binary-searches the largest body font for which the hard constraints are
-/// satisfiable, then optimizes soft constraints at that font.
+/// satisfiable, then polishes that font and slightly smaller ones and keeps the best `merit`.
 pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout, Failure> {
     let mut stats = Stats::default();
     let hard: Vec<usize> = (0..g.constraints.len()).filter(|&i| g.constraints[i].hard).collect();
     let probe = |b: f64, set: &[usize], budget: u64, stats: &mut Stats| attempt(g, t, fonts, &Config { budget, ..*cfg }, b, Users::Hard(set), stats);
 
     // Near the largest font that fits, a probe either succeeds quickly or runs until the
-    // budget is gone. So once a probe succeeds, later probes get a few times its cost.
+    // budget is gone. So once a probe succeeds, later probes get twice its cost.
     let (mut lo, mut hi) = (cfg.min_font, cfg.max_font);
     let (mut found, mut next, mut cap) = (None, hi, cfg.budget / 4);
     loop {
-        let before = stats.search.checks;
         match probe(next, &hard, cap, &mut stats) {
             Some(l) => {
-                cap = ((stats.search.checks - before) * 4).clamp(1_000_000, cfg.budget);
+                cap = (stats.probe_checks * 2).clamp(1_000_000, cfg.budget);
                 lo = next;
                 found = Some(l);
             }
             None => hi = next,
         }
-        // One percent of the font size is below what anyone can see.
-        if hi - lo <= 0.01 * lo {
+        // The trade-off below steps down 5% at a time, so finer precision here is wasted.
+        if hi - lo <= 0.03 * lo {
             break;
         }
         next = (lo + hi) / 2.0;
@@ -899,14 +1096,58 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
             return Err(Failure::Core(core));
         }
     };
-    if g.constraints.iter().any(|c| !c.hard) || matches!(best.kind, LayoutKind::Layered(_)) {
-        if let Some(l) = attempt(g, t, fonts, cfg, best.body, Users::All, &mut stats) {
-            best = l;
+    // Then trade font against readability. Above the legibility floor a larger font helps
+    // less and less, so a slightly smaller font may buy a clearer arrangement: polish a few
+    // fonts and keep the best merit. Below the floor nothing smaller is tried.
+    let top = best.body;
+    let fonts_tried: Vec<f64> = TRADE.iter().map(|k| k * top).filter(|&f| f == top || (f >= cfg.legible && f >= cfg.min_font)).collect();
+    // Each font is independent, so they run in parallel, each with its own stats.
+    let runs: Vec<(f64, Option<(f64, Layout)>, Stats)> = std::thread::scope(|s| {
+        let best = &best;
+        let handles: Vec<_> = fonts_tried
+            .iter()
+            .map(|&f| {
+                s.spawn(move || {
+                    let mut st = Stats::default();
+                    let probed;
+                    let base = if f == top {
+                        best
+                    } else {
+                        match attempt(g, t, fonts, &Config { budget: cap, ..*cfg }, f, Users::Shrunk(best), &mut st) {
+                            Some(l) => {
+                                probed = l;
+                                &probed
+                            }
+                            None => return (f, None, st),
+                        }
+                    };
+                    let polished = attempt(g, t, fonts, cfg, f, Users::All(base), &mut st).map(|l| (merit(g, t, cfg, &l), l));
+                    (f, polished, st)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().expect("trade-off thread")).collect()
+    });
+    let mut tradeoff = Vec::new();
+    let mut picked: Option<(f64, Layout, Stats)> = None;
+    for (f, polished, st) in runs {
+        stats.attempts += st.attempts;
+        stats.search += st.search;
+        let Some((m, l)) = polished else { continue };
+        tradeoff.push((f, m));
+        if picked.as_ref().is_none_or(|p| m < p.0) {
+            picked = Some((m, l, st));
         }
     }
+    if let Some((_, l, st)) = picked {
+        best = l;
+        (stats.soft_cost, stats.soft_total) = (st.soft_cost, st.soft_total);
+    }
+    best.tradeoff = tradeoff;
     // Then, with nodes fixed, pick link routes: few variables, so the search is exhaustive.
     if best.edges.iter().any(|e| e.style == EdgeStyle::Link) {
-        if let Some(l) = attempt(g, t, fonts, cfg, best.body, Users::Routes(&best), &mut stats) {
+        if let Some(mut l) = attempt(g, t, fonts, cfg, best.body, Users::Routes(&best), &mut stats) {
+            l.tradeoff = std::mem::take(&mut best.tradeoff);
             best = l;
         }
     }
@@ -989,9 +1230,9 @@ mod tests {
         let cases = (1..12).map(|seed| (8 + seed as usize % 2, 100, seed)).chain((1..12).map(|seed| (10, 25, seed)));
         for (n, k, seed) in cases {
             let mut sc = scene(&g, n, k, seed * 7919);
-            let (plain, ps) = csp::solve(&sc, u64::MAX);
+            let (plain, ps) = csp::solve(&sc, u64::MAX, &AtomicBool::new(false));
             sc.grids = sc.at.iter().map(|a| Grid::new(a)).collect();
-            let (fast, fs) = csp::solve(&sc, u64::MAX);
+            let (fast, fs) = csp::solve(&sc, u64::MAX, &AtomicBool::new(false));
             assert_eq!((ps.nodes, ps.backjumps), (fs.nodes, fs.backjumps), "seed {seed}");
             match fast {
                 Outcome::Sat(_) => sat += 1,

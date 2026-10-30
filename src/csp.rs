@@ -6,6 +6,8 @@
 //! order, so the problem decides the order. Forward checking prunes a variable as soon as it
 //! is the last unassigned one in some scope.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 pub const UNSET: u32 = u32::MAX;
 
 pub trait Problem {
@@ -94,6 +96,8 @@ struct Search<'a, P: Problem> {
     /// Per variable: (depth, culprits) for each prune, so a wipeout knows whom to blame.
     pruned_by: Vec<Vec<(u32, VarSet)>>,
     budget: u64,
+    /// Set by another thread when this search's answer is no longer needed.
+    stop: &'a AtomicBool,
     stats: Stats,
     optimize: bool,
     cost: u64,
@@ -107,7 +111,7 @@ impl<P: Problem> Search<'_, P> {
 
     fn spend(&mut self, n: u64) -> Result<(), Fail> {
         self.stats.checks += n;
-        if self.stats.checks > self.budget { Err(Fail::Abort) } else { Ok(()) }
+        if self.stats.checks > self.budget || self.stop.load(Ordering::Relaxed) { Err(Fail::Abort) } else { Ok(()) }
     }
 
     fn culprits(&self, c: usize) -> VarSet {
@@ -267,21 +271,21 @@ impl<P: Problem> Search<'_, P> {
     }
 }
 
-/// solve searches for an assignment satisfying every hard constraint, within `budget` checks.
-/// Soft constraints are ignored.
-pub fn solve<P: Problem>(p: &P, budget: u64) -> (Outcome, Stats) {
-    let (out, _, stats) = run(p, budget, false);
+/// solve searches for an assignment satisfying every hard constraint, within `budget` checks
+/// or until `stop` is set. Soft constraints are ignored.
+pub fn solve<P: Problem>(p: &P, budget: u64, stop: &AtomicBool) -> (Outcome, Stats) {
+    let (out, _, stats) = run(p, budget, stop, false);
     (out, stats)
 }
 
 /// optimize is branch and bound: it satisfies every hard constraint while minimizing the
 /// total weight of violated soft ones. On budget exhaustion it returns the best found so far
 /// as `Sat`; the returned cost is that solution's soft cost.
-pub fn optimize<P: Problem>(p: &P, budget: u64) -> (Outcome, u64, Stats) {
-    run(p, budget, true)
+pub fn optimize<P: Problem>(p: &P, budget: u64, stop: &AtomicBool) -> (Outcome, u64, Stats) {
+    run(p, budget, stop, true)
 }
 
-fn run<P: Problem>(p: &P, budget: u64, optimize: bool) -> (Outcome, u64, Stats) {
+fn run<P: Problem>(p: &P, budget: u64, stop: &AtomicBool, optimize: bool) -> (Outcome, u64, Stats) {
     let n = p.num_vars();
     let (mut hard, mut soft) = (vec![Vec::new(); n], vec![Vec::new(); n]);
     for (c, s) in p.scopes().iter().enumerate() {
@@ -300,6 +304,7 @@ fn run<P: Problem>(p: &P, budget: u64, optimize: bool) -> (Outcome, u64, Stats) 
         trail: Vec::new(),
         pruned_by: vec![Vec::new(); n],
         budget,
+        stop,
         stats: Stats::default(),
         optimize,
         cost: 0,
@@ -327,6 +332,8 @@ fn run<P: Problem>(p: &P, budget: u64, optimize: bool) -> (Outcome, u64, Stats) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    static GO: AtomicBool = AtomicBool::new(false);
 
     /// Table is a small problem given as scopes, a predicate, and weights.
     struct Table {
@@ -366,15 +373,15 @@ mod tests {
             a != b && (a - b).unsigned_abs() as usize != s[1] - s[0]
         };
         let q = Table { n: 12, k: 12, scopes: all_pairs(12), ok, weights: vec![] };
-        let (Outcome::Sat(v), _) = solve(&q, u64::MAX) else { panic!("no solution") };
+        let (Outcome::Sat(v), _) = solve(&q, u64::MAX, &GO) else { panic!("no solution") };
         assert!((0..q.scopes.len()).all(|c| q.holds(c, &v)));
     }
 
     #[test]
     fn proves_pigeonhole_unsat_and_respects_budget() {
         let p = Table { n: 6, k: 5, scopes: all_pairs(6), ok: |_, s, v| v[s[0]] != v[s[1]], weights: vec![] };
-        assert_eq!(solve(&p, u64::MAX).0, Outcome::Unsat);
-        assert_eq!(solve(&p, 100).0, Outcome::Unknown);
+        assert_eq!(solve(&p, u64::MAX, &GO).0, Outcome::Unsat);
+        assert_eq!(solve(&p, 100, &GO).0, Outcome::Unknown);
     }
 
     #[test]
@@ -387,8 +394,8 @@ mod tests {
         };
         let p = Table { n: 3, k: 2, scopes: vec![vec![0, 1], vec![1, 2], vec![0], vec![2]], ok, weights: vec![0, 0, 5, 1] };
         // a=1 forces b=0, c=1: pay 1 for c rather than 5 for a.
-        let (out, cost, _) = optimize(&p, u64::MAX);
+        let (out, cost, _) = optimize(&p, u64::MAX, &GO);
         assert_eq!((out, cost), (Outcome::Sat(vec![1, 0, 1]), 1));
-        assert_eq!(solve(&p, u64::MAX).0, Outcome::Sat(vec![0, 1, 0]));
+        assert_eq!(solve(&p, u64::MAX, &GO).0, Outcome::Sat(vec![0, 1, 0]));
     }
 }

@@ -1,6 +1,6 @@
-use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::process::Command;
+use std::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Script {
@@ -28,6 +28,8 @@ pub struct Font {
     pub family: String,
     pub bold: bool,
     pub path: String,
+    /// Face index inside a font collection (`.ttc`).
+    pub index: u32,
     pub data: Vec<u8>,
 }
 
@@ -43,30 +45,32 @@ pub struct Run {
 pub struct Fonts {
     pub regular: Vec<Font>,
     pub bold: Vec<Font>,
-    cache: RefCell<HashMap<(bool, char), (f64, usize)>>,
-    pub missing: RefCell<BTreeSet<char>>,
+    // Mutexes, not RefCells, so layouts at several fonts can be measured in parallel.
+    cache: Mutex<HashMap<(bool, char), (f64, usize)>>,
+    pub missing: Mutex<BTreeSet<char>>,
 }
 
 const REGULAR: &[&str] = &["DejaVu Serif:style=Book", "DejaVu Math TeX Gyre", "Noto Sans Math", "DejaVu Sans"];
 const BOLD: &[&str] = &["DejaVu Serif:style=Bold", "DejaVu Sans:style=Bold", "DejaVu Math TeX Gyre", "Noto Sans Math"];
 
 fn locate(pattern: &str) -> Option<Font> {
-    let out = Command::new("fc-match").args(["-f", "%{file}\n%{family[0]}\n%{style[0]}", pattern]).output().ok()?;
+    let out = Command::new("fc-match").args(["-f", "%{file}\n%{family[0]}\n%{style[0]}\n%{index}", pattern]).output().ok()?;
     let s = String::from_utf8(out.stdout).ok()?;
     let mut it = s.lines();
     let path = it.next()?.to_string();
     let family = it.next()?.to_string();
-    let style = it.next().unwrap_or("");
+    let style = it.next().unwrap_or("").to_string();
+    let index = it.next().and_then(|i| i.parse().ok()).unwrap_or(0);
     let data = std::fs::read(&path).ok()?;
-    ttf_parser::Face::parse(&data, 0).ok()?;
-    Some(Font { family, bold: style.contains("Bold"), path, data })
+    ttf_parser::Face::parse(&data, index).ok()?;
+    Some(Font { family, bold: style.contains("Bold"), path, index, data })
 }
 
 fn chain(patterns: &[&str]) -> Vec<Font> {
     let mut out: Vec<Font> = Vec::new();
     for p in patterns {
         if let Some(f) = locate(p) {
-            if !out.iter().any(|o| o.path == f.path) {
+            if !out.iter().any(|o| (&o.path, o.index) == (&f.path, f.index)) {
                 out.push(f);
             }
         }
@@ -111,12 +115,29 @@ pub fn spans(s: &str) -> Vec<(Script, String)> {
 }
 
 impl Fonts {
-    pub fn load() -> Result<Fonts, String> {
-        let (regular, bold) = (chain(REGULAR), chain(BOLD));
-        if regular.is_empty() || bold.is_empty() {
+    /// load puts `family`, when given and installed, ahead of the default fallback chain.
+    pub fn load(family: Option<&str>) -> Result<Fonts, String> {
+        let mut fonts = Fonts { regular: Vec::new(), bold: Vec::new(), cache: Mutex::new(HashMap::new()), missing: Mutex::new(BTreeSet::new()) };
+        if let Some(fam) = family {
+            // fc-match always answers, so a substitute for a missing family must be rejected here.
+            let wanted = |f: &Font| f.family.eq_ignore_ascii_case(fam);
+            match locate(&format!("{fam}:weight=regular")).filter(wanted) {
+                Some(f) => fonts.regular.push(f),
+                None => return Err(format!("font family `{fam}` not found by fc-match (see `fc-list : family`)")),
+            }
+            fonts.bold.extend(locate(&format!("{fam}:weight=bold")).filter(wanted));
+        }
+        for (dst, patterns) in [(&mut fonts.regular, REGULAR), (&mut fonts.bold, BOLD)] {
+            for f in chain(patterns) {
+                if !dst.iter().any(|o| (&o.path, o.index) == (&f.path, f.index)) {
+                    dst.push(f);
+                }
+            }
+        }
+        if fonts.regular.is_empty() || fonts.bold.is_empty() {
             return Err("no usable fonts found via fc-match (install ttf-dejavu)".into());
         }
-        Ok(Fonts { regular, bold, cache: RefCell::new(HashMap::new()), missing: RefCell::new(BTreeSet::new()) })
+        Ok(fonts)
     }
 
     pub fn font(&self, bold: bool, i: usize) -> &Font {
@@ -124,23 +145,23 @@ impl Fonts {
     }
 
     fn advance(&self, bold: bool, c: char) -> (f64, usize) {
-        if let Some(&v) = self.cache.borrow().get(&(bold, c)) {
+        if let Some(&v) = self.cache.lock().unwrap().get(&(bold, c)) {
             return v;
         }
         let fonts = if bold { &self.bold } else { &self.regular };
         let mut found = None;
         for (i, f) in fonts.iter().enumerate() {
-            let face = ttf_parser::Face::parse(&f.data, 0).expect("validated in locate");
+            let face = ttf_parser::Face::parse(&f.data, f.index).expect("validated in locate");
             if let Some(adv) = face.glyph_index(c).and_then(|g| face.glyph_hor_advance(g)) {
                 found = Some((adv as f64 / face.units_per_em() as f64, i));
                 break;
             }
         }
         let v = found.unwrap_or_else(|| {
-            self.missing.borrow_mut().insert(c);
+            self.missing.lock().unwrap().insert(c);
             (0.6, 0)
         });
-        self.cache.borrow_mut().insert((bold, c), v);
+        self.cache.lock().unwrap().insert((bold, c), v);
         v
     }
 

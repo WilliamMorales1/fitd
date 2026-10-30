@@ -100,3 +100,33 @@ fn png_is_cropped_to_drawing() {
     // An A3 page is 1191x842pt; the layered example is a narrow column well inside it.
     assert!(w > 100 && h > 100 && w < 1191 && (w as f64) < 0.8 * h as f64, "{w}x{h}");
 }
+
+#[test]
+fn theme_colors_reach_svg_and_tikz() {
+    let src = tmp("theme.cmap");
+    std::fs::write(&src, "theme dark background=#102030 palette=\"#FFB74D #4DD0E1\"\nnode c\nnode a fill=#FFE0B2 text=#3E2723\nnode b\nc -> a, b\n").unwrap();
+    let (svg, tex) = (tmp("theme.svg"), tmp("theme.tex"));
+    let (ok, log) = cmapc(&["build", src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap()]);
+    assert!(ok, "{log}");
+    let s = std::fs::read_to_string(&svg).unwrap();
+    for c in ["#102030", "#4DD0E1", "#FFE0B2", "#3E2723", "#E6E6E6"] {
+        assert!(s.contains(c), "{c} missing from svg");
+    }
+    assert!(std::fs::read_to_string(&tex).unwrap().contains("\\definecolor{c102030}"));
+    let (ok, log) = cmapc(&["build", src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--theme", "neon"]);
+    assert!(!ok && log.contains("unknown theme `neon`"), "{log}");
+}
+
+#[test]
+fn builds_are_byte_identical() {
+    // Separate processes, so any HashMap iteration order leaking into layout shows up.
+    let outs: Vec<PathBuf> = (0..4).map(|i| tmp(&format!("same{i}.svg"))).collect();
+    let runs: Vec<_> = outs.iter().map(|o| Command::new(env!("CARGO_BIN_EXE_cmapc")).args(["build", "examples/calculus.cmap", "-o", o.to_str().unwrap()]).spawn().unwrap()).collect();
+    for mut r in runs {
+        assert!(r.wait().unwrap().success());
+    }
+    let first = std::fs::read(&outs[0]).unwrap();
+    for o in &outs[1..] {
+        assert!(std::fs::read(o).unwrap() == first, "{} differs from {}", o.display(), outs[0].display());
+    }
+}

@@ -18,7 +18,7 @@ pub fn role(t: &Tree, v: usize) -> Role {
 }
 
 /// wedges gives each node an angular interval (center, half-width) in degrees, sized by leaf count.
-fn wedges(t: &Tree) -> Vec<(f64, f64)> {
+fn wedges(t: &Tree, rot: f64) -> Vec<(f64, f64)> {
     let mut out = vec![(90.0, 180.0); t.parent.len()];
     let mut stack = vec![(t.root, 90.0 + 180.0, 360.0)];
     while let Some((v, hi, span)) = stack.pop() {
@@ -26,7 +26,7 @@ fn wedges(t: &Tree) -> Vec<(f64, f64)> {
         let mut cur = hi;
         if v == t.root && !t.children[v].is_empty() {
             // Center the first branch at the top.
-            cur = 90.0 + span * t.leaves(t.children[v][0]) as f64 / total / 2.0;
+            cur = 90.0 + rot + span * t.leaves(t.children[v][0]) as f64 / total / 2.0;
         }
         for &c in &t.children[v] {
             let w = span * t.leaves(c) as f64 / total;
@@ -38,12 +38,12 @@ fn wedges(t: &Tree) -> Vec<(f64, f64)> {
     out
 }
 
-pub fn plan(t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64) -> Plan {
+pub fn plan(t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64, rot: f64) -> Plan {
     let n = boxes.len();
     let page = cfg.page();
     let kx = (cfg.page_w / cfg.page_h).sqrt();
     let ky = 1.0 / kx;
-    let wedge = wedges(t);
+    let wedge = wedges(t, rot);
     let step = 0.3 * b;
     let lambda = 0.4 * b;
     // Each depth gets an ideal ring so levels spread over the page instead of piling at the center.

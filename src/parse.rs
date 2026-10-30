@@ -144,7 +144,13 @@ impl Parser<'_> {
         if op.text == "at" {
             return Ok(Rel::At { a, place: self.name("a place like `top-left`")? });
         }
-        Ok(Rel::Pair { a, op, b: self.name("a node name")? })
+        let mut nodes = vec![a, self.name("a node name")?];
+        let mut ops = vec![op];
+        while *self.peek() == Tok::Ident && *self.peek_at(1) != Tok::Eq {
+            ops.push(self.name("a relation like `left-of`")?);
+            nodes.push(self.name("a node name")?);
+        }
+        Ok(Rel::Chain { nodes, ops })
     }
 
     fn stmt(&mut self) -> PResult<StmtKind> {
@@ -175,6 +181,10 @@ impl Parser<'_> {
                 StmtKind::Page { size, flags, attrs: self.attrs()? }
             }
             "font" => StmtKind::Font { size: self.value()?, attrs: self.attrs()? },
+            "theme" => {
+                let preset = if *self.peek() == Tok::Ident && *self.peek_at(1) != Tok::Eq { Some(self.name("a theme")?) } else { None };
+                StmtKind::Theme { preset, attrs: self.attrs()? }
+            }
             "style" => StmtKind::Style { name: self.name("a style name")?, attrs: self.attrs()? },
             "node" => {
                 let id = self.name("a node name")?;
@@ -198,7 +208,7 @@ impl Parser<'_> {
             "require" | "prefer" => StmtKind::Constraint { hard: kw.text == "require", rel: self.rel()?, attrs: self.attrs()? },
             _ => {
                 let d = Diag::error("E0002", format!("unknown statement `{}`", kw.text)).primary(kw.span, "not a statement");
-                return Err(d.help("statements: title, root, layout, page, font, style, node, `|` body, `a -> b`, `a ..> b`, require, prefer"));
+                return Err(d.help("statements: title, root, layout, page, font, theme, style, node, `|` body, `a -> b`, `a ..> b`, require, prefer"));
             }
         })
     }
@@ -236,14 +246,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parses_relation_chains() {
+        let (stmts, errs) = parse("require a left-of b left-of c gap=2em\n");
+        assert!(errs.is_empty());
+        assert!(matches!(&stmts[0].kind, StmtKind::Constraint { rel: Rel::Chain { nodes, ops }, attrs, .. }
+            if nodes.len() == 3 && ops.len() == 2 && attrs.len() == 1));
+        assert_eq!(parse("require a left-of b left-of\n").1.len(), 1);
+    }
+
+    #[test]
     fn parses_every_statement() {
-        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em\nstyle hub shape=circle\nnode a \"A\" .hub color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\n";
+        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\" .hub color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\n";
         let (stmts, errs) = parse(src);
         assert!(errs.is_empty(), "{:?}", errs.iter().map(|d| &d.msg).collect::<Vec<_>>());
-        assert_eq!(stmts.len(), 13);
-        assert!(matches!(&stmts[7].kind, StmtKind::Edge { to, label: Some(_), link: false, .. } if to.len() == 2));
-        assert!(matches!(&stmts[9].kind, StmtKind::Edge { link: true, .. }));
-        assert!(matches!(&stmts[11].kind, StmtKind::Constraint { hard: false, rel: Rel::Align { .. }, .. }));
+        assert_eq!(stmts.len(), 14);
+        assert!(matches!(&stmts[4].kind, StmtKind::Theme { preset: Some(_), attrs } if attrs.len() == 2));
+        assert!(matches!(&stmts[8].kind, StmtKind::Edge { to, label: Some(_), link: false, .. } if to.len() == 2));
+        assert!(matches!(&stmts[10].kind, StmtKind::Edge { link: true, .. }));
+        assert!(matches!(&stmts[12].kind, StmtKind::Constraint { hard: false, rel: Rel::Align { .. }, .. }));
     }
 
     #[test]

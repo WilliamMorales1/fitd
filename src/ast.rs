@@ -36,8 +36,9 @@ pub struct Attr {
 
 #[derive(Clone, Debug)]
 pub enum Rel {
-    /// `a left-of b`, `a near b`, and the other two-node relations.
-    Pair { a: Name, op: Name, b: Name },
+    /// `a left-of b`, `a near b`, and the other two-node relations; `a left-of b left-of c`
+    /// chains them, so `ops[i]` relates `nodes[i]` to `nodes[i + 1]`.
+    Chain { nodes: Vec<Name>, ops: Vec<Name> },
     /// `align top(a, b, c)`.
     Align { side: Name, items: Vec<Name> },
     /// `a at top-left`.
@@ -53,6 +54,8 @@ pub enum StmtKind {
     Page { size: Value, flags: Vec<Name>, attrs: Vec<Attr> },
     Font { size: Value, attrs: Vec<Attr> },
     Style { name: Name, attrs: Vec<Attr> },
+    /// `theme dark background=#000`: an optional preset, then overrides.
+    Theme { preset: Option<Name>, attrs: Vec<Attr> },
     Node { id: Name, title: Option<(String, Span)>, classes: Vec<Name>, attrs: Vec<Attr> },
     Body(String),
     Edge { from: Name, link: bool, to: Vec<Name>, label: Option<String> },

@@ -4,21 +4,47 @@ use crate::graph::Graph;
 use crate::geom::{P, Rect};
 use crate::layout::{Drawn, EdgeStyle, Layout, Role, Shape, TextLine};
 use crate::metrics::{Fonts, Script};
+use crate::theme::{self, Theme};
 use crate::tree::Tree;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-const PALETTE: &[&str] = &["#8C5A2B", "#2E7D32", "#1565C0", "#6A1B9A", "#C62828", "#00838F", "#EF6C00", "#455A64"];
+/// Paint is how one node is drawn: accent stroke, fill, and text color.
+struct Paint {
+    accent: String,
+    fill: String,
+    /// Opacity of `fill` over the background.
+    opacity: f64,
+    text: String,
+}
 
-pub fn colors(g: &Graph, t: &Tree) -> Vec<String> {
+/// accents gives each node its own color, else its branch's, else the theme text color.
+fn accents(g: &Graph, t: &Tree, th: &Theme) -> Vec<String> {
     let mut hub_color = BTreeMap::new();
     for (i, &h) in t.children[t.root].iter().enumerate() {
-        hub_color.insert(h, g.nodes[h].color.clone().unwrap_or_else(|| PALETTE[i % PALETTE.len()].to_string()));
+        hub_color.insert(h, g.nodes[h].color.clone().unwrap_or_else(|| th.palette[i % th.palette.len()].clone()));
     }
     (0..g.nodes.len())
         .map(|v| match t.branch(v) {
             Some(h) => g.nodes[v].color.clone().unwrap_or_else(|| hub_color[&h].clone()),
-            None => "#424242".to_string(),
+            None => g.nodes[v].color.clone().unwrap_or_else(|| th.text.clone()),
+        })
+        .collect()
+}
+
+fn paints(g: &Graph, t: &Tree, lay: &Layout, th: &Theme) -> Vec<Paint> {
+    let acc = accents(g, t, th);
+    (0..lay.pos.len())
+        .map(|v| {
+            let n = &g.nodes[v];
+            let (fill, opacity, auto) = match (lay.boxes[v].shape, lay.boxes[v].role, &n.fill) {
+                (_, _, Some(f)) => (f.clone(), 1.0, theme::on(f).to_string()),
+                (Shape::Circle, Role::Root, None) => (th.root.clone(), 1.0, theme::on(&th.root).to_string()),
+                (Shape::Circle, _, None) => (acc[v].clone(), 1.0, theme::on(&acc[v]).to_string()),
+                (Shape::Rect, _, None) => (acc[v].clone(), th.tint, th.text.clone()),
+            };
+            let accent = if lay.boxes[v].role == Role::Root && n.color.is_none() { th.text.clone() } else { acc[v].clone() };
+            Paint { accent, fill, opacity, text: n.text.clone().unwrap_or(auto) }
         })
         .collect()
 }
@@ -92,8 +118,8 @@ fn svg_line(out: &mut String, fonts: &Fonts, l: &TextLine, x: f64, y: f64, fill:
 }
 
 /// svg draws the part of the layout inside `view`, which becomes the whole image.
-pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect) -> String {
-    let col = colors(g, t);
+pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Theme) -> String {
+    let paint = paints(g, t, lay, th);
     let b = lay.body;
     let (w, h) = (view.x1 - view.x0, view.y1 - view.y0);
     let tx = |p: (f64, f64)| (p.0 - view.x0, view.y1 - p.1);
@@ -102,21 +128,25 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect) -> Stri
     if let Some(title) = &g.title {
         let _ = writeln!(o, "<title>{}</title>", xml(title));
     }
-    let _ = writeln!(o, r##"<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#777"/></marker></defs>"##);
-    let _ = writeln!(o, r#"<rect width="{w}" height="{h}" fill="white"/>"#);
+    o.push_str("<defs>");
+    for (id, c) in [("arr", &th.edge), ("lnk", &th.link)] {
+        let _ = write!(o, r#"<marker id="{id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{c}"/></marker>"#);
+    }
+    o.push_str("</defs>\n");
+    let _ = writeln!(o, r#"<rect width="{w}" height="{h}" fill="{}"/>"#, th.background);
     for e in &lay.edges {
         let pts = edge_points(lay, e);
         let d: Vec<String> = pts.iter().map(|&p| tx(p)).map(|(x, y)| format!("{x:.1},{y:.1}")).collect();
         let sw = e.width * b;
         match e.style {
             EdgeStyle::Line => {
-                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{}" stroke-opacity="0.7" stroke-width="{sw:.2}"/>"#, d.join(" "), col[e.b]);
+                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{}" stroke-opacity="0.7" stroke-width="{sw:.2}"/>"#, d.join(" "), paint[e.b].accent);
             }
             EdgeStyle::Arrow => {
-                let _ = writeln!(o, r##"<polyline points="{}" fill="none" stroke="#555" stroke-width="{sw:.2}" marker-end="url(#arr)"/>"##, d.join(" "));
+                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{}" stroke-width="{sw:.2}" marker-end="url(#arr)"/>"#, d.join(" "), th.edge);
             }
             EdgeStyle::Link => {
-                let _ = writeln!(o, r##"<polyline points="{}" fill="none" stroke="#777" stroke-width="{sw:.2}" stroke-dasharray="{:.1} {:.1}" marker-end="url(#arr)"/>"##, d.join(" "), 0.5 * b, 0.3 * b);
+                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{}" stroke-width="{sw:.2}" stroke-dasharray="{:.1} {:.1}" marker-end="url(#lnk)"/>"#, d.join(" "), th.link, 0.5 * b, 0.3 * b);
             }
         }
     }
@@ -124,23 +154,21 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect) -> Stri
         let bx = &lay.boxes[v];
         let (cx, cy) = tx(lay.pos[v]);
         let (left, top) = (cx - bx.w / 2.0, cy - bx.h / 2.0);
-        let fill = match (bx.shape, bx.role) {
+        let p = &paint[v];
+        match (bx.shape, bx.role) {
             (Shape::Circle, Role::Root) => {
-                let _ = writeln!(o, r##"<circle cx="{cx:.1}" cy="{cy:.1}" r="{:.1}" fill="#eeeeee" stroke="#222" stroke-width="{:.2}"/>"##, bx.w / 2.0, 0.12 * b);
-                "#111"
+                let _ = writeln!(o, r#"<circle cx="{cx:.1}" cy="{cy:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#, bx.w / 2.0, p.fill, p.accent, 0.12 * b);
             }
             (Shape::Circle, _) => {
-                let _ = writeln!(o, r#"<circle cx="{cx:.1}" cy="{cy:.1}" r="{:.1}" fill="{}"/>"#, bx.w / 2.0, col[v]);
-                "white"
+                let _ = writeln!(o, r#"<circle cx="{cx:.1}" cy="{cy:.1}" r="{:.1}" fill="{}"/>"#, bx.w / 2.0, p.fill);
             }
             (Shape::Rect, _) => {
-                let _ = writeln!(o, r#"<rect x="{left:.1}" y="{top:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="white"/>"#, bx.w, bx.h, 0.35 * b);
-                let _ = writeln!(o, r#"<rect x="{left:.1}" y="{top:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{c}" fill-opacity="0.08" stroke="{c}" stroke-width="{:.2}"/>"#, bx.w, bx.h, 0.35 * b, 0.1 * b, c = col[v]);
-                "#111"
+                let _ = writeln!(o, r#"<rect x="{left:.1}" y="{top:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{}"/>"#, bx.w, bx.h, 0.35 * b, th.background);
+                let _ = writeln!(o, r#"<rect x="{left:.1}" y="{top:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{}" fill-opacity="{}" stroke="{}" stroke-width="{:.2}"/>"#, bx.w, bx.h, 0.35 * b, p.fill, p.opacity, p.accent, 0.1 * b);
             }
-        };
+        }
         for l in &bx.lines {
-            svg_line(&mut o, fonts, l, left + l.x, top + l.baseline, fill);
+            svg_line(&mut o, fonts, l, left + l.x, top + l.baseline, &p.text);
         }
     }
     // Labels last, so nothing is ever drawn over them.
@@ -148,9 +176,9 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect) -> Stri
         let (Some(label), Some(r)) = (&e.label, lay.label_rect(e)) else { continue };
         let size = 0.8 * b;
         let ((x0, y0), (x1, y1)) = (tx((r.x0, r.y1)), tx((r.x1, r.y0)));
-        let _ = writeln!(o, r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" fill="white" fill-opacity="0.9"/>"#, x1 - x0, y1 - y0);
+        let _ = writeln!(o, r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" fill="{}" fill-opacity="0.9"/>"#, x1 - x0, y1 - y0, th.background);
         let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0 + 0.35 * size);
-        let _ = writeln!(o, r##"<text x="{cx:.1}" y="{cy:.1}" font-size="{size:.2}" font-family="{}" font-style="italic" fill="#555" text-anchor="middle">{}</text>"##, xml(&fonts.regular[0].family), xml(label));
+        let _ = writeln!(o, r#"<text x="{cx:.1}" y="{cy:.1}" font-size="{size:.2}" font-family="{}" font-style="italic" fill="{}" text-anchor="middle">{}</text>"#, xml(&fonts.regular[0].family), th.label, xml(label));
     }
     o.push_str("</svg>\n");
     o
@@ -189,8 +217,9 @@ fn tex(s: &str) -> String {
     o
 }
 
-fn hex(c: &str) -> String {
-    c.trim_start_matches('#').to_uppercase()
+/// cname is the TikZ color name defined for `c` in the preamble.
+fn cname(c: &str) -> String {
+    format!("c{}", theme::rgb(c))
 }
 
 fn tikz_line(o: &mut String, l: &TextLine, x: f64, y: f64, color: &str) {
@@ -208,8 +237,8 @@ fn tikz_line(o: &mut String, l: &TextLine, x: f64, y: f64, color: &str) {
     let _ = writeln!(o, "\\node[anchor=base west, inner sep=0bp, text={color}] at ({x:.2},{y:.2}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont{bf} {body}}};", s = l.size);
 }
 
-pub fn tikz(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64) -> String {
-    let col = colors(g, t);
+pub fn tikz(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64, th: &Theme) -> String {
+    let paint = paints(g, t, lay, th);
     let b = lay.body;
     let mut fallback: BTreeMap<char, String> = BTreeMap::new();
     for bx in &lay.boxes {
@@ -234,51 +263,51 @@ pub fn tikz(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64) ->
     }
     o += "\\usepackage{tikz}\n\\usetikzlibrary{arrows.meta}\n";
     let mut defined = std::collections::BTreeSet::new();
-    for c in &col {
-        if defined.insert(hex(c)) {
-            let _ = writeln!(o, "\\definecolor{{c{}}}{{HTML}}{{{}}}", hex(c), hex(c));
+    let used = [&th.background, &th.text, &th.edge, &th.link, &th.label].into_iter().chain(paint.iter().flat_map(|p| [&p.accent, &p.fill, &p.text]));
+    for c in used {
+        if defined.insert(theme::rgb(c)) {
+            let _ = writeln!(o, "\\definecolor{{{}}}{{HTML}}{{{}}}", cname(c), theme::rgb(c));
         }
     }
     o += "\\begin{document}\n\\begin{tikzpicture}[x=1bp,y=1bp]\n";
-    let _ = writeln!(o, "\\fill[white] ({:.1},{:.1}) rectangle ({:.1},{:.1});", -w / 2.0, -h / 2.0, w / 2.0, h / 2.0);
+    let _ = writeln!(o, "\\fill[{}] ({:.1},{:.1}) rectangle ({:.1},{:.1});", cname(&th.background), -w / 2.0, -h / 2.0, w / 2.0, h / 2.0);
     for e in &lay.edges {
         let raw = edge_points(lay, e);
         let pts: Vec<String> = raw.iter().map(|p| format!("({:.1},{:.1})", p.0, p.1)).collect();
         let lw = e.width * b;
         let style = match e.style {
-            EdgeStyle::Line => format!("c{}, opacity=0.7", hex(&col[e.b])),
-            EdgeStyle::Arrow => "black!65, -{Stealth}".to_string(),
-            EdgeStyle::Link => "black!50, dashed, -{Stealth}".to_string(),
+            EdgeStyle::Line => format!("{}, opacity=0.7", cname(&paint[e.b].accent)),
+            EdgeStyle::Arrow => format!("{}, -{{Stealth}}", cname(&th.edge)),
+            EdgeStyle::Link => format!("{}, dashed, -{{Stealth}}", cname(&th.link)),
         };
         let _ = writeln!(o, "\\draw[{style}, line width={lw:.2}bp] {};", pts.join(" -- "));
     }
     for v in 0..lay.pos.len() {
         let bx = &lay.boxes[v];
         let (cx, cy) = lay.pos[v];
-        let c = format!("c{}", hex(&col[v]));
-        let text = match (bx.shape, bx.role) {
+        let p = &paint[v];
+        let (c, f) = (cname(&p.accent), cname(&p.fill));
+        match (bx.shape, bx.role) {
             (Shape::Circle, Role::Root) => {
-                let _ = writeln!(o, "\\filldraw[fill=black!7, draw=black!85, line width={:.2}bp] ({cx:.1},{cy:.1}) circle ({:.1});", 0.12 * b, bx.w / 2.0);
-                "black"
+                let _ = writeln!(o, "\\filldraw[fill={f}, draw={c}, line width={:.2}bp] ({cx:.1},{cy:.1}) circle ({:.1});", 0.12 * b, bx.w / 2.0);
             }
             (Shape::Circle, _) => {
-                let _ = writeln!(o, "\\fill[{c}] ({cx:.1},{cy:.1}) circle ({:.1});", bx.w / 2.0);
-                "white"
+                let _ = writeln!(o, "\\fill[{f}] ({cx:.1},{cy:.1}) circle ({:.1});", bx.w / 2.0);
             }
             (Shape::Rect, _) => {
-                let _ = writeln!(o, "\\filldraw[fill=white, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});", 0.1 * b, 0.35 * b, cx - bx.w / 2.0, cy - bx.h / 2.0, cx + bx.w / 2.0, cy + bx.h / 2.0);
-                let _ = writeln!(o, "\\fill[{c}, opacity=0.08, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});", 0.35 * b, cx - bx.w / 2.0, cy - bx.h / 2.0, cx + bx.w / 2.0, cy + bx.h / 2.0);
-                "black"
+                let _ = writeln!(o, "\\filldraw[fill={}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});", cname(&th.background), 0.1 * b, 0.35 * b, cx - bx.w / 2.0, cy - bx.h / 2.0, cx + bx.w / 2.0, cy + bx.h / 2.0);
+                let _ = writeln!(o, "\\fill[{f}, opacity={}, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});", p.opacity, 0.35 * b, cx - bx.w / 2.0, cy - bx.h / 2.0, cx + bx.w / 2.0, cy + bx.h / 2.0);
             }
-        };
+        }
+        let text = cname(&p.text);
         for l in &bx.lines {
-            tikz_line(&mut o, l, cx - bx.w / 2.0 + l.x, cy + bx.h / 2.0 - l.baseline, text);
+            tikz_line(&mut o, l, cx - bx.w / 2.0 + l.x, cy + bx.h / 2.0 - l.baseline, &text);
         }
     }
     for e in &lay.edges {
         let (Some(label), Some(r)) = (&e.label, lay.label_rect(e)) else { continue };
         let m = ((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0);
-        let _ = writeln!(o, "\\node[fill=white, fill opacity=0.9, text opacity=1, inner sep=1bp, text=black!65] at ({:.1},{:.1}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont\\itshape {}}};", m.0, m.1, tex(label), s = 0.8 * b);
+        let _ = writeln!(o, "\\node[fill={}, fill opacity=0.9, text opacity=1, inner sep=1bp, text={}] at ({:.1},{:.1}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont\\itshape {}}};", cname(&th.background), cname(&th.label), m.0, m.1, tex(label), s = 0.8 * b);
     }
     o += "\\end{tikzpicture}\n\\end{document}\n";
     o

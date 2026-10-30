@@ -3,6 +3,7 @@
 
 use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
+use crate::theme::{self, Overrides, Theme};
 use crate::graph::{Constraint, Dir, Edge, EdgeKind, Graph, LayoutKind, Length, Node, Place, Relation, Settings, Shape, Side};
 use std::collections::HashMap;
 
@@ -143,19 +144,37 @@ impl Sema {
     }
 }
 
-/// look applies `color` and `shape` attributes to a node or style.
-fn look(attrs: &[Attr], color: &mut Option<String>, shape: &mut Option<Shape>, diags: &mut Vec<Diag>) {
-    let type_err = |diags: &mut Vec<Diag>, v: &Value, msg: &str| diags.push(Diag::error("E0006", msg).primary(v.span(), "wrong type or unit"));
+/// color reads a `#RGB` or `#RRGGBB` value, reporting anything else.
+fn color(v: &Value, diags: &mut Vec<Diag>) -> Option<String> {
+    match v {
+        Value::Color(c, _) | Value::Str(c, _) if theme::is_color(c) => Some(c.clone()),
+        _ => {
+            diags.push(Diag::error("E0006", "expected a color like `#1565C0` or `#15C` (written right after `=`)").primary(v.span(), "wrong type or unit"));
+            None
+        }
+    }
+}
+
+#[derive(Default)]
+struct Look {
+    color: Option<String>,
+    fill: Option<String>,
+    text: Option<String>,
+    shape: Option<Shape>,
+}
+
+/// look applies `color`, `fill`, `text`, and `shape` attributes to a node or style.
+fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
     for a in attrs {
         match (a.key.text.as_str(), &a.value) {
-            ("color", Value::Color(c, _)) => *color = Some(c.clone()),
-            ("color", Value::Str(c, _)) if c.starts_with('#') && c.len() > 1 && c[1..].chars().all(|h| h.is_ascii_hexdigit()) => *color = Some(c.clone()),
-            ("color", v) => type_err(diags, v, "expected a color like `#1565C0` (written right after `=`)"),
-            ("shape", Value::Name(n)) if n.text == "circle" => *shape = Some(Shape::Circle),
-            ("shape", Value::Name(n)) if n.text == "box" => *shape = Some(Shape::Rect),
+            ("color", v) => l.color = color(v, diags).or(l.color.take()),
+            ("fill", v) => l.fill = color(v, diags).or(l.fill.take()),
+            ("text", v) => l.text = color(v, diags).or(l.text.take()),
+            ("shape", Value::Name(n)) if n.text == "circle" => l.shape = Some(Shape::Circle),
+            ("shape", Value::Name(n)) if n.text == "box" => l.shape = Some(Shape::Rect),
             ("shape", Value::Name(n)) => diags.push(unknown("E0009", "shape", n, &["circle", "box"])),
-            ("shape", v) => type_err(diags, v, "expected `circle` or `box`"),
-            _ => diags.push(bad_attr(a, &["color", "shape"])),
+            ("shape", v) => diags.push(Diag::error("E0006", "expected `circle` or `box`").primary(v.span(), "wrong type or unit")),
+            _ => diags.push(bad_attr(a, &["color", "fill", "text", "shape"])),
         }
     }
 }
@@ -195,7 +214,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 s.ids.insert(id.text.clone(), s.nodes.len());
                 let title = title.as_ref().map(|t| t.0.clone()).unwrap_or(id.text.clone());
                 last_node = Some(s.nodes.len());
-                s.nodes.push(Node { id: id.text.clone(), title, body: Vec::new(), color: None, shape: None, span: id.span });
+                s.nodes.push(Node { id: id.text.clone(), title, body: Vec::new(), color: None, fill: None, text: None, shape: None, span: id.span });
                 s.decl.push(st.span);
             }
             StmtKind::Body(text) => match last_node {
@@ -226,6 +245,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             StmtKind::Layout { .. } => "layout",
             StmtKind::Page { .. } => "page",
             StmtKind::Font { .. } => "font",
+            StmtKind::Theme { .. } => "theme",
             _ => "",
         };
         if !key.is_empty() {
@@ -312,7 +332,11 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                             Some(Length::Pt(_)) => s.type_err(&a.value, "wrap width is in em, such as `24em`".into()),
                             None => {}
                         },
-                        _ => s.diags.push(bad_attr(a, &["wrap"])),
+                        "family" => match &a.value {
+                            Value::Str(f, _) if !f.trim().is_empty() => set.family = Some(f.trim().to_string()),
+                            v => s.type_err(v, "expected a quoted font family like `\"Inter\"`".into()),
+                        },
+                        _ => s.diags.push(bad_attr(a, &["wrap", "family"])),
                     }
                 }
             }
@@ -321,12 +345,12 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 if s.nodes[v].span != id.span {
                     continue;
                 }
-                let (mut color, mut shape) = (None, None);
+                let mut l = Look::default();
                 for c in classes {
                     match styles.get_mut(&c.text) {
                         Some(st) => {
                             st.2 = true;
-                            look(&st.1, &mut color, &mut shape, &mut Vec::new());
+                            look(&st.1, &mut l, &mut Vec::new());
                         }
                         None => {
                             let names: Vec<&str> = styles.keys().map(String::as_str).collect();
@@ -334,12 +358,22 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                         }
                     }
                 }
-                look(attrs, &mut color, &mut shape, &mut s.diags);
-                (s.nodes[v].color, s.nodes[v].shape) = (color, shape);
+                look(attrs, &mut l, &mut s.diags);
+                let n = &mut s.nodes[v];
+                (n.color, n.fill, n.text, n.shape) = (l.color, l.fill, l.text, l.shape);
             }
             StmtKind::Style { attrs, .. } => {
                 // Checked once here; each use re-applies them silently.
-                look(attrs, &mut None, &mut None, &mut s.diags);
+                look(attrs, &mut Look::default(), &mut s.diags);
+            }
+            StmtKind::Theme { preset, attrs } => {
+                if let Some(p) = preset {
+                    match Theme::preset(&p.text) {
+                        Some(_) => set.theme = Some(p.text.clone()),
+                        None => s.diags.push(unknown("E0009", "theme", p, theme::PRESETS)),
+                    }
+                }
+                set.theme_over = theme_overrides(attrs, &mut s.diags);
             }
             StmtKind::Edge { from, link, to, label } => {
                 let kind = if *link { EdgeKind::Link } else { EdgeKind::Tree };
@@ -351,9 +385,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 }
             }
             StmtKind::Constraint { hard, rel, attrs } => {
-                if let Some(c) = constraint(&mut s, *hard, rel, attrs, st.span) {
-                    constraints.push(c);
-                }
+                constraints.extend(constraint(&mut s, *hard, rel, attrs, st.span));
             }
             StmtKind::Body(_) => {}
         }
@@ -371,15 +403,52 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     (g, s.diags)
 }
 
-fn constraint(s: &mut Sema, hard: bool, rel: &Rel, attrs: &[Attr], span: Span) -> Option<Constraint> {
+fn theme_overrides(attrs: &[Attr], diags: &mut Vec<Diag>) -> Overrides {
+    let mut o = Overrides::default();
+    for a in attrs {
+        let slot = match a.key.text.as_str() {
+            "background" => &mut o.background,
+            "text" => &mut o.text,
+            "edge" => &mut o.edge,
+            "link" => &mut o.link,
+            "label" => &mut o.label,
+            "root" => &mut o.root,
+            "palette" => {
+                let colors: Vec<&str> = match &a.value {
+                    Value::Str(p, _) => p.split(|c: char| c == ',' || c.is_whitespace()).filter(|c| !c.is_empty()).collect(),
+                    _ => vec![],
+                };
+                if !colors.is_empty() && colors.iter().all(|c| theme::is_color(c)) {
+                    o.palette = Some(colors.iter().map(|c| c.to_string()).collect());
+                } else {
+                    diags.push(Diag::error("E0006", "expected a quoted list of colors like `\"#1565C0 #C62828\"`").primary(a.value.span(), "wrong type or unit"));
+                }
+                continue;
+            }
+            _ => {
+                diags.push(bad_attr(a, theme::KEYS));
+                continue;
+            }
+        };
+        if let Some(c) = color(&a.value, diags) {
+            *slot = Some(c);
+        }
+    }
+    o
+}
+
+fn constraint(s: &mut Sema, hard: bool, rel: &Rel, attrs: &[Attr], span: Span) -> Vec<Constraint> {
     let mut weight = 1;
     let mut gap = Length::Em(1.0);
     let mut within = Length::Em(4.0);
     let mut allowed = vec![];
-    match rel {
-        Rel::Pair { op, .. } if op.text == "near" => allowed.push("within"),
-        Rel::Pair { .. } => allowed.push("gap"),
-        _ => {}
+    if let Rel::Chain { ops, .. } = rel {
+        if ops.iter().any(|o| o.text == "near") {
+            allowed.push("within");
+        }
+        if ops.iter().any(|o| o.text != "near") {
+            allowed.push("gap");
+        }
     }
     if !hard {
         allowed.push("weight");
@@ -395,25 +464,38 @@ fn constraint(s: &mut Sema, hard: bool, rel: &Rel, attrs: &[Attr], span: Span) -
                 Value::Num(t, _) if t.parse::<u32>().is_ok_and(|w| w > 0) => weight = t.parse().unwrap(),
                 v => s.type_err(v, "weight must be a positive integer".into()),
             },
-            "gap" => gap = s.len_value(&a.value, None)?,
-            _ => within = s.len_value(&a.value, None)?,
+            "gap" => match s.len_value(&a.value, None) {
+                Some(l) => gap = l,
+                None => return vec![],
+            },
+            _ => match s.len_value(&a.value, None) {
+                Some(l) => within = l,
+                None => return vec![],
+            },
         }
     }
-    let rel = match rel {
-        Rel::Pair { a, op, b } => {
-            let (a, b) = (s.node(a), s.node(b));
-            let (a, b) = (a?, b?);
-            match op.text.as_str() {
-                "left-of" => Relation::LeftOf { a, b, gap },
-                "right-of" => Relation::LeftOf { a: b, b: a, gap },
-                "above" => Relation::Above { a, b, gap },
-                "below" => Relation::Above { a: b, b: a, gap },
-                "near" => Relation::Near { a, b, within },
-                _ => {
-                    s.diags.push(unknown("E0009", "relation", op, RELATIONS));
-                    return None;
-                }
+    let rels = match rel {
+        Rel::Chain { nodes, ops } => {
+            let ids: Vec<Option<usize>> = nodes.iter().map(|n| s.node(n)).collect();
+            let mut rels = vec![];
+            for (i, op) in ops.iter().enumerate() {
+                let (Some(a), Some(b)) = (ids[i], ids[i + 1]) else { continue };
+                let r = match op.text.as_str() {
+                    "left-of" => Relation::LeftOf { a, b, gap },
+                    "right-of" => Relation::LeftOf { a: b, b: a, gap },
+                    "above" => Relation::Above { a, b, gap },
+                    "below" => Relation::Above { a: b, b: a, gap },
+                    "near" => Relation::Near { a, b, within },
+                    _ => {
+                        s.diags.push(unknown("E0009", "relation", op, RELATIONS));
+                        continue;
+                    }
+                };
+                // A chain link gets its own span so cores and contradictions point at one step.
+                let link = if ops.len() == 1 { span } else { nodes[i].span.to(nodes[i + 1].span) };
+                rels.push((r, link));
             }
+            rels
         }
         Rel::Align { side, items } => {
             let ids: Vec<Option<usize>> = items.iter().map(|n| s.node(n)).collect();
@@ -426,33 +508,38 @@ fn constraint(s: &mut Sema, hard: bool, rel: &Rel, attrs: &[Attr], span: Span) -
                 "column" => Side::Column,
                 _ => {
                     s.diags.push(unknown("E0009", "alignment", side, SIDES));
-                    return None;
+                    return vec![];
                 }
             };
             if items.len() < 2 {
                 s.diags.push(Diag::error("E0007", "alignment needs at least two nodes").primary(span, "only one node"));
-                return None;
+                return vec![];
             }
-            Relation::Align { side, items: ids.into_iter().collect::<Option<Vec<_>>>()? }
+            let Some(items) = ids.into_iter().collect::<Option<Vec<_>>>() else { return vec![] };
+            vec![(Relation::Align { side, items }, span)]
         }
         Rel::At { a, place: p } => {
-            let a = s.node(a)?;
+            let Some(a) = s.node(a) else { return vec![] };
             match place(&p.text) {
-                Some(place) => Relation::At { a, place },
+                Some(place) => vec![(Relation::At { a, place }, span)],
                 None => {
                     s.diags.push(unknown("E0009", "place", p, PLACES));
-                    return None;
+                    return vec![];
                 }
             }
         }
     };
-    let nodes = rel.nodes();
-    if let Some(dup) = nodes.iter().enumerate().find(|(i, v)| nodes[..*i].contains(v)).map(|(_, &v)| v) {
-        let d = Diag::error("E0007", format!("constraint names `{}` twice", s.nodes[dup].id)).primary(span, "a node cannot be related to itself");
-        s.diags.push(d);
-        return None;
+    let mut out = vec![];
+    for (rel, span) in rels {
+        let nodes = rel.nodes();
+        if let Some(dup) = nodes.iter().enumerate().find(|(i, v)| nodes[..*i].contains(v)).map(|(_, &v)| v) {
+            let d = Diag::error("E0007", format!("constraint names `{}` twice", s.nodes[dup].id)).primary(span, "a node cannot be related to itself");
+            s.diags.push(d);
+            continue;
+        }
+        out.push(Constraint { rel, hard, weight, span });
     }
-    Some(Constraint { rel, hard, weight, span })
+    out
 }
 
 /// contradictions finds hard ordering constraints that no layout can meet, without search.
@@ -555,6 +642,21 @@ mod tests {
     }
 
     #[test]
+    fn themes_and_node_colors() {
+        let (g, d) = run("theme dark background=#000 palette=\"#f00, #0f0\"\nfont 7pt family=\"DejaVu Sans\"\nstyle s fill=#fff\nnode a .s text=#123\n");
+        assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        assert_eq!(g.settings.theme.as_deref(), Some("dark"));
+        assert_eq!(g.settings.theme_over.palette.as_ref().map(Vec::len), Some(2));
+        assert_eq!(g.settings.family.as_deref(), Some("DejaVu Sans"));
+        assert_eq!((g.nodes[0].fill.as_deref(), g.nodes[0].text.as_deref()), (Some("#fff"), Some("#123")));
+        assert_eq!(codes("node a\ntheme drak\n"), vec!["E0009"]);
+        assert_eq!(codes("node a\ntheme edge=blue\n"), vec!["E0006"]);
+        assert_eq!(codes("node a\ntheme palette=\"#f00 nope\"\n"), vec!["E0006"]);
+        assert_eq!(codes("node a\ntheme bg=#000\n"), vec!["E0005"]);
+        assert_eq!(codes("node a fill=#12345\n"), vec!["E0006"]);
+    }
+
+    #[test]
     fn suggests_close_names() {
         let (_, d) = run("node cyclic\nnode b\ncyclc -> b\n");
         assert_eq!(d[0].code, "E0001");
@@ -576,6 +678,21 @@ mod tests {
         assert_eq!(codes("node a\nnode b\nrequire align row(a, b)\nrequire a above b\n"), vec!["E0008"]);
         assert_eq!(codes("node a\nnode b\nrequire align column(a, b)\nrequire a above b\n"), Vec::<&str>::new());
         assert_eq!(codes("node a\nnode b\nprefer a left-of b\nprefer b left-of a\n"), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn chains_expand_to_one_constraint_per_link() {
+        let (g, d) = run("node a\nnode b\nnode c\nrequire a left-of b above c gap=2em\n");
+        assert!(d.is_empty());
+        assert!(matches!(g.constraints[..], [
+            Constraint { rel: Relation::LeftOf { a: 0, b: 1, gap: Length::Em(2.0) }, .. },
+            Constraint { rel: Relation::Above { a: 1, b: 2, gap: Length::Em(2.0) }, .. },
+        ]));
+        assert_ne!(g.constraints[0].span, g.constraints[1].span);
+        assert_eq!(codes("node a\nnode b\nnode c\nrequire a left-of b left-of c left-of a\n"), vec!["E0008"]);
+        assert_eq!(codes("node a\nnode b\nnode c\nrequire a left-of b near c within=2em\n"), Vec::<&str>::new());
+        assert_eq!(codes("node a\nnode b\nnode c\nrequire a near b near c gap=2em\n"), vec!["E0005"]);
+        assert_eq!(codes("node a\nnode b\nnode c\nrequire a left-of b sideways c\n"), vec!["E0009"]);
     }
 
     #[test]
