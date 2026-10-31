@@ -196,7 +196,8 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
         along && (bs.len() == 1 || across <= cross_len)
     };
     let wrap = !fits(1, cfg.legible / b);
-    let k = if wrap { (1..=rows.len()).find(|&k| fits(k, 1.0)).unwrap_or(1) } else { 1 };
+    let most = g.settings.bands.unwrap_or(rows.len()).min(rows.len());
+    let k = if wrap { (1..=most).find(|&k| fits(k, 1.0)).unwrap_or(1) } else { 1 };
     let bands = bands(k);
     let feasible = fits(k, 1.0);
     let band: Vec<usize> = (0..rows.len()).map(|l| bands.iter().position(|r| r.contains(&l)).unwrap()).collect();

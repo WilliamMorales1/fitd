@@ -26,7 +26,7 @@ use std::process::ExitCode;
 
 const USAGE: &str = "usage:
   cmapc <input[.cmap]|-> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
-              [--portrait] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
+              [--portrait|--landscape] [--bands N] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
               [--short] [--budget CHECKS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
   cmapc explain <CODE>
   cmapc guide            the whole language on one page, with examples";
@@ -64,7 +64,8 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
 fn build(args: &[String]) -> Result<ExitCode, String> {
     let mut input = None;
     let (mut svg_out, mut tikz_out) = (None, None);
-    let (mut page_spec, mut portrait, mut force, mut draft, mut short) = (None, false, false, false, false);
+    let (mut page_spec, mut portrait, mut landscape, mut force, mut draft, mut short) = (None, false, false, false, false, false);
+    let mut bands = None;
     let (mut margin, mut min_font, mut max_font, mut wrap) = (None, None, None, None);
     let mut budget = 20_000_000;
     let mut scale = 2.0;
@@ -78,6 +79,8 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             "--tikz" => tikz_out = Some(val()?),
             "--page" => page_spec = Some(val()?),
             "--portrait" => portrait = true,
+            "--landscape" => landscape = true,
+            "--bands" => bands = Some(val()?.parse::<usize>().ok().filter(|&k| k > 0).ok_or("--bands needs a whole number, 1 or more")?),
             "--force" => force = true,
             "--draft" => draft = true,
             "--short" => short = true,
@@ -118,6 +121,9 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     }
 
     // Command-line flags override settings written in the file.
+    if bands.is_some() {
+        g.settings.bands = bands;
+    }
     let set = &g.settings;
     let (mut page_w, mut page_h) = match &page_spec {
         Some(p) => page(p, false)?,
@@ -126,7 +132,10 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     if portrait {
         (page_w, page_h) = (page_w.min(page_h), page_w.max(page_h));
     }
-    let page_fixed = portrait || page_spec.as_ref().map_or(set.page_fixed, |p| sema::paper(&p.to_ascii_lowercase()).is_none());
+    if landscape {
+        (page_w, page_h) = (page_w.max(page_h), page_w.min(page_h));
+    }
+    let page_fixed = portrait || landscape || page_spec.as_ref().map_or(set.page_fixed, |p| sema::paper(&p.to_ascii_lowercase()).is_none());
     let font = set.font.unwrap_or((7.0, 48.0));
     let mut cfg = Config {
         page_w,

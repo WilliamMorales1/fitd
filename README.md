@@ -82,7 +82,7 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 
 An input of `-` reads the source from stdin and then needs `-o`. `-o FILE` picks the format by extension: `.svg` (default, `<input>.svg`) is page-sized; `.png` is cropped to the drawing plus `--margin` of padding, at `--scale PX` pixels per point (default 2). `--tikz FILE` also writes a standalone LaTeX file.
 
-`--page a0..a4 | WxH[pt|mm]`, `--portrait`, `--margin PT`, `--min-font PT` (hard floor; also raises the legibility floor of the font trade-off, default 16pt per meter of page diagonal), `--max-font PT`, `--wrap EM`, `--budget CHECKS` (default 20M per probe), `--force` (write output despite checker errors), `--short` (one line per diagnostic, for agents and editors), `--draft` (coarser font search, one font, short polish: 2 to 6 times faster for editing). `--theme light|dark|mono`, `--font-family NAME`. Flags override settings in the file. `CMAPC_DEBUG=1` traces each probe.
+`--page a0..a4 | WxH[pt|mm]`, `--portrait`/`--landscape` (fix the orientation; otherwise a named paper may be turned when that clears warnings), `--bands N` (most bands a long flowchart wraps into; 1 never wraps), `--margin PT`, `--min-font PT` (hard floor; also raises the legibility floor of the font trade-off, default 16pt per meter of page diagonal), `--max-font PT`, `--wrap EM`, `--budget CHECKS` (default 20M per probe), `--force` (write output despite checker errors), `--short` (one line per diagnostic, for agents and editors), `--draft` (coarser font search, one font, short polish: 2 to 6 times faster for editing). `--theme light|dark|mono`, `--font-family NAME`. Flags override settings in the file. `CMAPC_DEBUG=1` traces each probe.
 
 ## Theming
 

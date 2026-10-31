@@ -129,6 +129,8 @@ pub struct Settings {
     /// The page's orientation was given (a `portrait` or `landscape` flag, or `WxH`), so the
     /// layout may not turn it.
     pub page_fixed: bool,
+    /// Most bands a layered flow may wrap into; 1 never wraps. None leaves it to the layout.
+    pub bands: Option<usize>,
     pub margin: Option<f64>,
     pub font: Option<(f64, f64)>,
     /// Span of the `font` statement that set `font`.

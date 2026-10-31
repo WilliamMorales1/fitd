@@ -226,6 +226,15 @@ fn fixtures_fail_or_build_as_designed() {
 }
 
 #[test]
+fn open_orientation_turns_and_flags_fix_it() {
+    // `compiler` keeps warnings on landscape a3 and has none on portrait.
+    let (ok, log) = cmapc(&["examples/compiler.cmap", "-o", tmp("turn.svg").to_str().unwrap()]);
+    assert!(ok && log.contains("turned the page to portrait") && log.contains("on 842x1191pt"), "{log}");
+    let (ok, log) = cmapc(&["examples/compiler.cmap", "-o", tmp("turn.svg").to_str().unwrap(), "--landscape"]);
+    assert!(ok && !log.contains("turned the page") && log.contains("on 1191x842pt"), "{log}");
+}
+
+#[test]
 fn row_alignment_merges_layers_in_flowchart() {
     let src = tmp("row.cmap");
     std::fs::write(&src, "layout layered\npage a4\nnode a\nnode b\nnode c\nnode d\na -> b\nb -> c\nc -> d\nrequire align row(b, c, d)\nrequire b left-of c left-of d\n").unwrap();
@@ -293,6 +302,13 @@ fn layers_that_exactly_fill_the_page_fit_and_crowded_flows_say_why() {
     std::fs::write(&right, text.replace("dir=down", "dir=right")).unwrap();
     let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
     assert!(ok && log.contains("body font 8.0pt") && log.contains(" 0 errors"), "{log}");
+    // `bands=1` and `--bands 1` keep the flow in one line, which does not fit here.
+    std::fs::write(&right, text.replace("dir=down", "dir=right bands=1")).unwrap();
+    let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
+    assert!(!ok && log.contains("the longest path has 9 layers"), "{log}");
+    std::fs::write(&right, text.replace("dir=down", "dir=right")).unwrap();
+    let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap(), "--bands", "1"]);
+    assert!(!ok && log.contains("the longest path has 9 layers"), "{log}");
     // On a strip too small to wrap into, the error says why.
     std::fs::write(&right, text.replace("dir=down", "dir=right").replace("page a4 portrait", "page 400x150pt")).unwrap();
     let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);

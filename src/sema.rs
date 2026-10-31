@@ -285,7 +285,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     }
                     "layered" => {
                         set.layout = Some(LayoutKind::Layered(Dir::Down));
-                        &["dir"]
+                        &["dir", "bands"]
                     }
                     _ => {
                         s.diags.push(unknown("E0009", "layout", kind, &["radial", "layered"]));
@@ -300,6 +300,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                         ("dir", Value::Name(n)) if n.text == "down" => set.layout = Some(LayoutKind::Layered(Dir::Down)),
                         ("dir", Value::Name(n)) if n.text == "right" => set.layout = Some(LayoutKind::Layered(Dir::Right)),
                         ("dir", Value::Name(n)) => s.diags.push(unknown("E0009", "direction", n, &["down", "right"])),
+                        ("bands", Value::Num(t, _)) if t.parse::<usize>().is_ok_and(|k| k > 0) => set.bands = t.parse().ok(),
+                        ("bands", v) => s.type_err(v, "expected a whole number of bands, 1 or more".into()),
                         (_, v) => s.type_err(v, "expected `down` or `right`".into()),
                     }
                 }
