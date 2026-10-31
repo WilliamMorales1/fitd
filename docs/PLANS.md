@@ -17,7 +17,7 @@ cmapc is done when every item below holds. Each is measurable and tied to real u
 
 1. **Real use.** Three new diagrams from actual coursework or notes, each built start to finish without changing cmapc source and without hand-editing the SVG or TikZ. A tool change forced by a diagram resets that diagram's count.
 2. **Original job beaten.** The MATH 4200 map builds at 19.8pt body font or larger with 0 errors, locked in by an e2e test.
-3. **Clean output.** Every example builds with 0 warnings, or each remaining warning has a documented reason it is accepted. Now: 5, all in earth_science (see `PROBLEMS.md`).
+3. **Clean output.** Every example builds with 0 warnings, or each remaining warning has a documented reason it is accepted. Now: 2, both in earth_science (see `PROBLEMS.md`).
 4. **Edit-loop speed.** On the largest example, idle X280: `--draft` under 1 s, full build under 3 s. Last measured under load: about 0.6 to 0.8 s and 1.6 to 2.5 s; re-measure idle.
 5. **No hangs, no panics.** 30 minutes of fuzzing the lexer, parser, and sema with 0 panics. Every unsatisfiable input returns an unsat core or a static contradiction in bounded time.
 6. **Language frozen.** `group` and per-edge color are implemented; per-edge width and arrowheads are cut for good (the layout decides them). `LANGUAGE.md` matches the parser, and every diagnostic code has an `explain` page.

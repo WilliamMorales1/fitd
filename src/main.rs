@@ -126,8 +126,9 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     if portrait {
         (page_w, page_h) = (page_w.min(page_h), page_w.max(page_h));
     }
+    let page_fixed = portrait || page_spec.as_ref().map_or(set.page_fixed, |p| sema::paper(&p.to_ascii_lowercase()).is_none());
     let font = set.font.unwrap_or((7.0, 48.0));
-    let cfg = Config {
+    let mut cfg = Config {
         page_w,
         page_h,
         margin: margin.or(set.margin).unwrap_or(24.0),
@@ -148,7 +149,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     let name = theme_name.as_deref().or(set.theme.as_deref()).unwrap_or("light");
     let th = theme::Theme::preset(name).ok_or(format!("unknown theme `{name}` (expected one of: {})", theme::PRESETS.join(", ")))?.with(&set.theme_over);
     layout::measure_groups(&mut g, &fonts);
-    let lay = match layout::solve(&g, &t, &fonts, &cfg) {
+    let mut lay = match layout::solve(&g, &t, &fonts, &cfg) {
         Ok(lay) => lay,
         Err(Failure::NoRoom(crowded)) => {
             eprintln!("error: no layout fits at the {}pt font floor on a {:.0}x{:.0}pt page, even ignoring `require` constraints", cfg.min_font, cfg.page_w, cfg.page_h);
@@ -189,10 +190,21 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             return Ok(ExitCode::FAILURE);
         }
     };
-    let diags = check::check(&g, &fonts, &cfg, &lay);
+    let mut diags = check::check(&g, &fonts, &cfg, &lay);
+    if !diags.is_empty() && !draft {
+        let (cfg2, notes) = retry(&g, &t, &fonts, cfg, page_fixed, &mut lay, &mut diags);
+        cfg = cfg2;
+        show(&notes);
+    }
+    // The largest font that fits is not always kept; say so, since the log line is easy to miss.
+    if let Some(&(top, _)) = lay.tradeoff.iter().max_by(|a, b| a.0.total_cmp(&b.0))
+        && top > lay.body + 0.05
+    {
+        diags.push(Diag::info(format!("chose {:.1}pt over {top:.1}pt, which fits but reads worse (crossings, spacing); `--min-font {top:.1}` keeps the larger", lay.body)));
+    }
     show(&diags);
     let errors = diags.iter().filter(|d| d.level == Level::Error).count();
-    let warnings = diags.len() - errors;
+    let warnings = diags.iter().filter(|d| d.level == Level::Warning).count();
     let s = lay.stats;
     if short {
         eprintln!("body font {:.1}pt on {:.0}x{:.0}pt; {errors} errors, {warnings} warnings", lay.body, cfg.page_w, cfg.page_h);
@@ -248,6 +260,53 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         eprintln!("wrote {p}");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// retry rebuilds a layout that has warnings with the radial branches reordered toward their
+/// links and, when the file leaves the orientation open, on the turned page. The variants run
+/// in parallel; the one with the fewest diagnostics wins, then the best merit. Returns the
+/// winner's config and a note saying what changed.
+fn retry(g: &graph::Graph, t: &tree::Tree, fonts: &metrics::Fonts, cfg: Config, page_fixed: bool, lay: &mut layout::Layout, diags: &mut Vec<Diag>) -> (Config, Vec<Diag>) {
+    let arranged = if lay.kind == LayoutKind::Radial { radial::arrange(g, t, &cfg) } else { None };
+    let turned = Config { page_w: cfg.page_h, page_h: cfg.page_w, ..cfg };
+    let mut tries: Vec<(&tree::Tree, Config, String)> = Vec::new();
+    if let Some(a) = &arranged {
+        let moved: Vec<String> = (0..t.children.len()).filter(|&v| a.children[v] != t.children[v]).map(|v| format!("`{}`", g.nodes[v].id)).collect();
+        tries.push((a, cfg, format!("reordered the branches under {}", moved.join(", "))));
+    }
+    if !page_fixed && cfg.page_w != cfg.page_h {
+        tries.push((t, turned, format!("turned the page to {}", if turned.page_w < turned.page_h { "portrait" } else { "landscape" })));
+    }
+    let runs: Vec<_> = std::thread::scope(|s| {
+        let handles: Vec<_> = tries.iter().map(|(tr, c, _)| s.spawn(move || layout::solve(g, tr, fonts, c).ok())).collect();
+        handles.into_iter().map(|h| h.join().expect("retry thread")).collect()
+    });
+    let before = diags.len();
+    let mut best = (before, layout::merit(g, t, &cfg, lay));
+    let (mut win, mut stats) = (None, lay.stats);
+    for (k, run) in runs.into_iter().enumerate() {
+        let Some(l) = run else { continue };
+        stats.attempts += l.stats.attempts;
+        stats.search += l.stats.search;
+        let c = tries[k].1;
+        let d = check::check(g, fonts, &c, &l);
+        let key = (d.len(), layout::merit(g, t, &c, &l));
+        if key.0 < best.0 || (key.0 == best.0 && key.1 < best.1) {
+            best = key;
+            win = Some((k, d.len()));
+            *lay = l;
+            *diags = d;
+        }
+    }
+    let soft = (lay.stats.soft_cost, lay.stats.soft_total);
+    lay.stats = layout::Stats { soft_cost: soft.0, soft_total: soft.1, ..stats };
+    match win {
+        Some((k, now)) => {
+            let note = Diag::info(format!("{} (warnings: {before} -> {now})", tries[k].2));
+            (tries[k].1, vec![note])
+        }
+        None => (cfg, Vec::new()),
+    }
 }
 
 /// write saves an output file, creating its directory if needed.

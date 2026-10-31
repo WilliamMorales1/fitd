@@ -100,12 +100,34 @@ fn bbox(pts: &[P]) -> Rect {
     })
 }
 
+/// rails are the two routes of a link in a flowchart around every box between its ends, one
+/// on each side, as the router's detours would take: out across the flow, along it, and back.
+fn rails(x: &Input, c: &[P], a: usize, b: usize, down: bool) -> [[P; 4]; 2] {
+    // (along, across) coordinates and back.
+    let split = |p: P| if down { (p.1, p.0) } else { (p.0, p.1) };
+    let join = |m: f64, k: f64| if down { (k, m) } else { (m, k) };
+    let (ma, mb) = (split(c[a]).0, split(c[b]).0);
+    let (lo, hi) = (ma.min(mb), ma.max(mb));
+    let (mut k0, mut k1) = (split(c[a]).1.min(split(c[b]).1), split(c[a]).1.max(split(c[b]).1));
+    for r in x.rects.iter().enumerate().filter(|&(u, _)| u != a && u != b).map(|(_, r)| r) {
+        let ((m0, n0), (m1, n1)) = (split((r.x0, r.y0)), split((r.x1, r.y1)));
+        if m1 > lo && m0 < hi {
+            (k0, k1) = (k0.min(n0), k1.max(n1));
+        }
+    }
+    let side = |k: f64| [c[a], join(ma, k), join(mb, k), c[b]];
+    [side(k0 - x.unit), side(k1 + x.unit)]
+}
+
 /// link_hits counts what a link bent by `bow` crosses: edges, plus unrelated boxes it tunnels
 /// through, which hide where it goes.
 fn link_hits(x: &Input, c: &[P], a: usize, b: usize, bow: f64) -> usize {
-    let pts = curve(c, a, b, bow);
-    // Most edges and boxes are nowhere near the curve; its bounding box rules them out.
-    let bb = bbox(&pts);
+    path_hits(x, c, a, b, &curve(c, a, b, bow))
+}
+
+fn path_hits(x: &Input, c: &[P], a: usize, b: usize, pts: &[P]) -> usize {
+    // Most edges and boxes are nowhere near the path; its bounding box rules them out.
+    let bb = bbox(pts);
     let mut hits = 0;
     for &(p, q) in x.tree.iter().chain(x.links) {
         let (cp, cq) = (c[p], c[q]);
@@ -295,9 +317,15 @@ impl<'a> Incremental<'a> {
     fn refresh_link(&self, t: &mut Terms, j: usize) {
         let (a, b) = self.links[j];
         let x = Input { rects: &t.rects, tree: self.tree, links: self.links, branch: self.branch, flow: self.flow, page: self.page, unit: self.unit };
-        // The router later picks a bend; charge the link its best bend.
+        // The router later picks a bend, or in a flowchart a detour; charge the link its best.
         t.link_hits[j] = BENDS.iter().map(|&bow| link_hits(&x, &t.c, a, b, bow)).min().unwrap_or(0);
-        let all: Vec<P> = BENDS.iter().flat_map(|&bow| curve(&t.c, a, b, bow)).collect();
+        let mut all: Vec<P> = BENDS.iter().flat_map(|&bow| curve(&t.c, a, b, bow)).collect();
+        if let Some(down) = self.flow {
+            for rail in rails(&x, &t.c, a, b, down) {
+                t.link_hits[j] = t.link_hits[j].min(path_hits(&x, &t.c, a, b, &rail));
+                all.extend(rail);
+            }
+        }
         t.link_bb[j] = bbox(&all);
     }
 

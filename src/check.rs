@@ -5,7 +5,7 @@
 //! as a diagnostic instead of a broken picture.
 
 use crate::diag::Diag;
-use crate::geom::{segment_hits_rect, segments_cross};
+use crate::geom::{P, segment_hits_rect, segments_cross};
 use crate::graph::{Graph, LayoutKind, Relation};
 use crate::geom::Rect;
 use crate::layout::{Config, Drawn, EdgeStyle, Layout, Shape, frame, frame_clear, line_height, paths_meet, relation_holds};
@@ -73,10 +73,10 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
         }
     }
     let radial = lay.kind == LayoutKind::Radial;
-    let straight: Vec<(usize, usize)> = lay.edges.iter().filter(|e| e.style != EdgeStyle::Link).map(|e| (e.a, e.b)).collect();
-    for &(p, v) in &straight {
+    let straight: Vec<(usize, usize, (P, P))> = lay.edges.iter().filter(|e| e.style != EdgeStyle::Link).map(|e| (e.a, e.b, lay.ends(e))).collect();
+    for &(p, v, (pp, pv)) in &straight {
         for u in (0..n).filter(|&u| u != p && u != v) {
-            if segment_hits_rect(lay.pos[p], lay.pos[v], &lay.rect(u).inflate(-0.01)) {
+            if segment_hits_rect(pp, pv, &lay.rect(u).inflate(-0.01)) {
                 push(true, "E0102", Some(v), format!("edge {} -> {} passes through {}", id(p), id(v), id(u)), vec![]);
             }
         }
@@ -84,9 +84,9 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
             push(true, "E0107", Some(v), format!("{} is nearer the center than its parent {}", id(v), id(p)), vec![]);
         }
     }
-    for (i, &(p, v)) in straight.iter().enumerate() {
-        for &(q, w) in &straight[i + 1..] {
-            if segments_cross(lay.pos[p], lay.pos[v], lay.pos[q], lay.pos[w]) {
+    for (i, &(p, v, (pp, pv))) in straight.iter().enumerate() {
+        for &(q, w, (pq, pw)) in &straight[i + 1..] {
+            if segments_cross(pp, pv, pq, pw) {
                 // Radial trees can always be drawn planar; layered graphs in general cannot.
                 let (err, code) = if radial { (true, "E0103") } else { (false, "W0206") };
                 push(err, code, Some(w), format!("edge {} -> {} crosses edge {} -> {}", id(q), id(w), id(p), id(v)), vec![]);

@@ -63,8 +63,8 @@ Analysis runs in two passes. The first collects `node` and `style` declarations 
 | Statement | Attributes | Notes |
 |---|---|---|
 | `layout radial` | `root=NODE` | Default. Root defaults to the graph center (minimum eccentricity). |
-| `layout layered` | `dir=down\|right` | Flowchart. Directed cycles are broken; back edges are drawn as links. |
-| `page` | flags `portrait`, `landscape`; `margin=LEN` | Absolute lengths only. |
+| `layout layered` | `dir=down\|right` | Flowchart. Directed cycles are broken; back edges are drawn as links. A flow too long to reach a readable font in one line wraps into bands that run back and forth. |
+| `page` | flags `portrait`, `landscape`; `margin=LEN` | Absolute lengths only. A paper name without a flag leaves the orientation open: when a layout has warnings, cmapc also tries the turned page (and, in radial maps, branches reordered toward their links) and keeps the one with fewer. |
 | `font LO..HI` or `font SIZE` | `wrap=EM`, `family="NAME"` | The solver maximizes the body font within the range. `family` must be installed; it is used for measuring and drawing. Default DejaVu Serif. |
 | `theme [light\|dark\|mono]` | `background`, `text`, `edge`, `link`, `label`, `root` (colors); `palette="#hex ..."` | Preset defaults to `light`; each attribute overrides one preset value. |
 | `node`, `style` | `color=#hex`, `fill=#hex`, `text=#hex`, `shape=circle\|box` | `color` is the accent (border, tint, branch); `fill` replaces the tint; `text` defaults to the theme text, or black/white by contrast on a solid fill. |

@@ -2,6 +2,7 @@ use crate::diag::Diag;
 use crate::graph::{EdgeKind, Graph};
 use std::collections::VecDeque;
 
+#[derive(Clone)]
 pub struct Link {
     pub a: usize,
     pub b: usize,

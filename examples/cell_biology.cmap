@@ -62,6 +62,6 @@ glycolysis ..> anaerobic "low oxygen"
 atp ..> regulation "feedback"
 
 require glucose at left
-require atp right-of glycolysis
+require atp below glycolysis
 prefer water near atp within=18em weight=2
 prefer yield near atp within=18em weight=2

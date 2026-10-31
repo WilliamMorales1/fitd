@@ -126,6 +126,9 @@ pub enum LayoutKind {
 pub struct Settings {
     pub layout: Option<LayoutKind>,
     pub page: Option<(f64, f64)>,
+    /// The page's orientation was given (a `portrait` or `landscape` flag, or `WxH`), so the
+    /// layout may not turn it.
+    pub page_fixed: bool,
     pub margin: Option<f64>,
     pub font: Option<(f64, f64)>,
     /// Span of the `font` statement that set `font`.

@@ -131,11 +131,13 @@ pub struct Drawn {
     pub t: f64,
     /// Label box size in points, set once the font is known.
     pub label_size: (f64, f64),
+    /// Where an arrow ends, as an offset from the target's center (see `spread_arrivals`).
+    pub aim: P,
 }
 
 impl Drawn {
     pub fn new(a: usize, b: usize, style: EdgeStyle, width: f64, label: Option<String>) -> Drawn {
-        Drawn { a, b, style, width, label, bow: 0.0, via: None, t: 0.5, label_size: (0.0, 0.0) }
+        Drawn { a, b, style, width, label, bow: 0.0, via: None, t: 0.5, label_size: (0.0, 0.0), aim: (0.0, 0.0) }
     }
 }
 
@@ -171,11 +173,18 @@ impl Layout {
         inside_box(self.pos[v], self.boxes[v].shape, self.boxes[v].w, self.boxes[v].h, p)
     }
 
+    /// ends are the points an edge runs between before trimming: the centers of its nodes,
+    /// with the target's moved by `aim`.
+    pub fn ends(&self, e: &Drawn) -> (P, P) {
+        (self.pos[e.a], (self.pos[e.b].0 + e.aim.0, self.pos[e.b].1 + e.aim.1))
+    }
+
     /// path is an edge's drawn route with its chosen bend, trimmed to the node borders.
     pub fn path(&self, e: &Drawn) -> Vec<P> {
+        let (pa, pb) = self.ends(e);
         match &e.via {
             Some(way) => trim(way, &|p| self.inside(e.a, p), &|p| self.inside(e.b, p)),
-            None => curve(self.pos[e.a], &|p| self.inside(e.a, p), self.pos[e.b], &|p| self.inside(e.b, p), e.bow),
+            None => curve(pa, &|p| self.inside(e.a, p), pb, &|p| self.inside(e.b, p), e.bow),
         }
     }
 
@@ -207,15 +216,20 @@ pub enum Kind {
     /// Two nodes of a hard alignment; pairs propagate better than one wide constraint.
     Aligned(Side),
     /// Route `0`'s label stays off node `1`.
-    LabelClear(usize, usize),
+    LabelClear(usize, usize, f64),
     /// Route's label stays on the page.
     LabelPage(usize),
     /// Two routes' labels do not overlap.
-    LabelApart(usize, usize),
+    LabelApart(usize, usize, f64),
+    /// Route `0`'s label sits wholly inside or wholly outside group constraint `1`'s frame,
+    /// clear of its border and title (soft).
+    LabelFrame(usize, usize),
     /// Two dashed links neither cross nor run close together (soft).
     LinkApart(usize, usize),
-    /// A dashed link stays out of node `1` (soft).
-    LinkClear(usize, usize),
+    /// A dashed link does not cross the straight edge between nodes `1` and `2` (soft).
+    LinkEdge(usize, usize, usize),
+    /// A dashed link stays out of node `1` grown by this many ems (soft).
+    LinkClear(usize, usize, f64),
     /// Group constraint `0`'s frame keeps clear of node `1`, which is not a member.
     Outside(usize, usize),
     /// The frames of two group constraints keep clear of each other.
@@ -246,6 +260,9 @@ enum Users<'a> {
     /// Every hard constraint plus `prefer`s and layered crossings, on this layout's plan and
     /// trying its spots first.
     All(&'a Layout),
+    /// Every hard constraint and every `prefer`, all as hard: a layout that meets what the
+    /// author asked for, to weigh against the largest font.
+    Wanted,
     /// Nodes fixed where this layout put them; only link routes are optimized.
     Routes(&'a Layout),
     /// Every hard constraint at a smaller font than this layout's, trying its spots first:
@@ -266,8 +283,8 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
     let boxes = measure_all(g, t, fonts, cfg, b);
     let rots = match (kind, users) {
         (_, Users::All(prev) | Users::Routes(prev) | Users::Shrunk(prev)) => vec![prev.rot],
-        (LayoutKind::Radial, Users::Hard(_)) => ROTATIONS.to_vec(),
-        (LayoutKind::Layered(_), Users::Hard(_)) => vec![0.0],
+        (LayoutKind::Radial, Users::Hard(_) | Users::Wanted) => ROTATIONS.to_vec(),
+        (LayoutKind::Layered(_), Users::Hard(_) | Users::Wanted) => vec![0.0],
     };
     let optimizing = matches!(users, Users::All(_));
     let routing = matches!(users, Users::Routes(_));
@@ -430,57 +447,129 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
     let top = best.body;
     let trade: &[f64] = if cfg.draft { &TRADE[..1] } else { &TRADE };
     let fonts_tried: Vec<f64> = trade.iter().map(|k| k * top).filter(|&f| f == top || (f >= cfg.legible && f >= cfg.min_font)).collect();
-    // Each font is independent, so they run in parallel, each with its own stats.
-    type Trial = (f64, Option<(f64, Layout)>, Stats);
-    let runs: Vec<Trial> = std::thread::scope(|s| {
-        let best = &best;
-        let handles: Vec<_> = fonts_tried
-            .iter()
-            .map(|&f| {
-                s.spawn(move || {
-                    let mut st = Stats::default();
-                    let probed;
-                    let base = if f == top {
-                        best
-                    } else {
-                        match attempt(g, t, fonts, &Config { budget: cap, ..*cfg }, f, Users::Shrunk(best), &mut st) {
-                            Some(l) => {
-                                probed = l;
-                                &probed
-                            }
-                            None => return (f, None, st),
+    // Each font is independent, so they run in parallel, each with its own stats; the soft
+    // cost is the polished winner's. The first round starts from the largest font's layout.
+    // When its winner still misses a `prefer`, a second round starts each font from a layout
+    // that meets every one, since a preference outweighs a few percent of font (see `merit`).
+    type Trial = (f64, Option<(f64, Layout, (u64, u64))>, Stats);
+    let round = |best: &Layout, wanted: bool| -> Vec<Trial> {
+        std::thread::scope(|s| {
+            let handles: Vec<_> = fonts_tried
+                .iter()
+                .map(|&f| {
+                    s.spawn(move || {
+                        let mut st = Stats::default();
+                        let start = match (wanted, f == top) {
+                            (true, _) => attempt(g, t, fonts, &Config { budget: cap, ..*cfg }, f, Users::Wanted, &mut st),
+                            (false, false) => attempt(g, t, fonts, &Config { budget: cap, ..*cfg }, f, Users::Shrunk(best), &mut st),
+                            (false, true) => None,
+                        };
+                        if start.is_none() && (wanted || f != top) {
+                            return (f, None, st);
                         }
-                    };
-                    let polished = attempt(g, t, fonts, cfg, f, Users::All(base), &mut st).map(|l| (merit(g, t, cfg, &l), l));
-                    (f, polished, st)
+                        let mut one = Stats::default();
+                        let polished = attempt(g, t, fonts, cfg, f, Users::All(start.as_ref().unwrap_or(best)), &mut one);
+                        st.attempts += one.attempts;
+                        st.search += one.search;
+                        (f, polished.map(|l| (merit(g, t, cfg, &l), l, (one.soft_cost, one.soft_total))), st)
+                    })
                 })
-            })
-            .collect();
-        handles.into_iter().map(|h| h.join().expect("trade-off thread")).collect()
-    });
-    let mut tradeoff = Vec::new();
-    let mut picked: Option<(f64, Layout, Stats)> = None;
-    for (f, polished, st) in runs {
-        stats.attempts += st.attempts;
-        stats.search += st.search;
-        let Some((m, l)) = polished else { continue };
-        tradeoff.push((f, m));
-        if picked.as_ref().is_none_or(|p| m < p.0) {
-            picked = Some((m, l, st));
+                .collect();
+            handles.into_iter().map(|h| h.join().expect("trade-off thread")).collect()
+        })
+    };
+    let mut tradeoff: Vec<(f64, f64)> = Vec::new();
+    let mut picked: Option<(f64, Layout, (u64, u64))> = None;
+    for wanted in [false, true] {
+        if wanted {
+            let Some(p) = &picked else { break };
+            let rect = |v: usize| p.1.rect(v);
+            if g.constraints.iter().all(|c| c.hard || relation_holds(&c.rel, &rect, p.1.body, &cfg.page(), p.1.tol)) {
+                break;
+            }
+        }
+        for (f, polished, st) in round(&best, wanted) {
+            stats.attempts += st.attempts;
+            stats.search += st.search;
+            let Some((m, l, soft)) = polished else { continue };
+            match tradeoff.iter_mut().find(|x| x.0 == f) {
+                Some(x) => x.1 = x.1.min(m),
+                None => tradeoff.push((f, m)),
+            }
+            if picked.as_ref().is_none_or(|p| m < p.0) {
+                picked = Some((m, l, soft));
+            }
         }
     }
-    if let Some((_, l, st)) = picked {
+    if let Some((_, l, soft)) = picked {
         best = l;
-        (stats.soft_cost, stats.soft_total) = (st.soft_cost, st.soft_total);
+        (stats.soft_cost, stats.soft_total) = soft;
     }
     best.tradeoff = tradeoff;
-    // Then, with nodes fixed, pick link routes: few variables, so the search is exhaustive.
-    if best.edges.iter().any(|e| e.style == EdgeStyle::Link)
+    // Then, with nodes fixed, pick link routes and label spots: few variables, so the search
+    // is exhaustive.
+    if best.edges.iter().any(|e| e.style == EdgeStyle::Link || e.label.is_some())
         && let Some(mut l) = attempt(g, t, fonts, cfg, best.body, Users::Routes(&best), &mut stats)
     {
         l.tradeoff = std::mem::take(&mut best.tradeoff);
         best = l;
     }
+    spread_arrivals(&mut best, &cfg.page());
     best.stats = stats;
     Ok(best)
+}
+
+/// spread_arrivals spaces the ends of arrows that enter one node from earlier layers along its
+/// entry side, in the order of their sources, so they do not meet in one point. An arrow keeps
+/// its center end when the new one would touch another box, a label, or another edge.
+fn spread_arrivals(lay: &mut Layout, page: &Rect) {
+    let LayoutKind::Layered(dir) = lay.kind else { return };
+    let down = dir == Dir::Down;
+    // Position along the flow and across it.
+    let along = |p: P| if down { -p.1 } else { p.0 };
+    let across = |p: P| if down { p.0 } else { p.1 };
+    let n = lay.pos.len();
+    let straight = |e: &Drawn| e.style == EdgeStyle::Arrow;
+    for v in 0..n {
+        let mut ins: Vec<usize> = (0..lay.edges.len()).filter(|&k| straight(&lay.edges[k]) && lay.edges[k].b == v && along(lay.pos[lay.edges[k].a]) < along(lay.pos[v])).collect();
+        if ins.len() < 2 {
+            continue;
+        }
+        // By the slope they arrive at, so the spread ends keep the arrows apart.
+        let slope = |k: usize| {
+            let (a, c) = (lay.pos[lay.edges[k].a], lay.pos[v]);
+            (across(a) - across(c)) / (along(c) - along(a))
+        };
+        ins.sort_by(|&i, &j| slope(i).total_cmp(&slope(j)));
+        let w = if down { lay.boxes[v].w } else { lay.boxes[v].h };
+        for (i, &k) in ins.iter().enumerate() {
+            let off = ((i + 1) as f64 / (ins.len() + 1) as f64 - 0.5) * 0.6 * w;
+            lay.edges[k].aim = if down { (off, 0.0) } else { (0.0, off) };
+            if !arrival_clear(lay, k, page) {
+                lay.edges[k].aim = (0.0, 0.0);
+            }
+        }
+    }
+}
+
+/// arrival_clear reports whether edge `k` misses every box but its own, every edge it does not
+/// share a node with, and, with its label, every label and box.
+fn arrival_clear(lay: &Layout, k: usize, page: &Rect) -> bool {
+    let e = &lay.edges[k];
+    let (p, q) = lay.ends(e);
+    let n = lay.pos.len();
+    if (0..n).any(|u| u != e.a && u != e.b && segment_hits_rect(p, q, &lay.rect(u))) {
+        return false;
+    }
+    // With the end moved, even an edge sharing a node can cross; the checker tests every pair.
+    let others = lay.edges.iter().enumerate().filter(|&(j, f)| j != k && f.style != EdgeStyle::Link);
+    if others.clone().any(|(_, f)| {
+        let (r, s) = lay.ends(f);
+        segments_cross(p, q, r, s)
+    }) {
+        return false;
+    }
+    let Some(l) = lay.label_rect(e) else { return true };
+    let clear = l.inflate(0.15 * lay.body);
+    l.within(page) && (0..n).all(|u| !clear.intersects(&lay.rect(u))) && lay.edges.iter().enumerate().all(|(j, f)| j == k || lay.label_rect(f).is_none_or(|r| !clear.intersects(&r)))
 }

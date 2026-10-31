@@ -42,10 +42,24 @@ pub fn trim(pts: &[P], in_a: &dyn Fn(P) -> bool, in_b: &dyn Fn(P) -> bool) -> Ve
 }
 
 /// detours are paths from `pa` to `pb` around `boxes`, kept `clear` away from each and inside
-/// `page`: the shortest route over the corners of the grown boxes (a visibility graph), drawn
-/// smooth, and the same route with sharp corners in case smoothing cuts into a box. Empty when
-/// the straight line is already clear or no route exists. Paths are untrimmed, about 60 points.
+/// `page`: the shortest route over the corners of the grown boxes (a visibility graph). The
+/// first is planned three times as far out with its corners rounded within the extra room;
+/// then the tight route with small rounded corners, and sharp in case rounding cuts into a
+/// box. Empty when the straight line is already clear or no route exists. Paths are
+/// untrimmed, about 60 points.
 pub fn detours(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Vec<Vec<P>> {
+    let Some(way) = route(pa, pb, boxes, page, clear) else { return Vec::new() };
+    let mut out = Vec::new();
+    if let Some(wide) = route(pa, pb, boxes, page, 3.0 * clear) {
+        out.push(densify(&fillet(&wide, 2.0 * clear), 60));
+    }
+    out.extend([densify(&fillet(&way, clear), 60), densify(&way, 60)]);
+    out
+}
+
+/// route is the shortest polyline from `pa` to `pb` over the corners of `boxes` grown by
+/// `clear`, or None when the straight line is clear or nothing gets through.
+fn route(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Option<Vec<P>> {
     let grown: Vec<Rect> = boxes.iter().map(|r| r.inflate(clear)).collect();
     // Slightly smaller than `grown`, so a segment along a grown box's side still counts as clear.
     let hard: Vec<Rect> = boxes.iter().map(|r| r.inflate(0.98 * clear)).collect();
@@ -54,7 +68,7 @@ pub fn detours(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Vec<Vec
         hard.iter().all(|r| !r.intersects(&bb.inflate(1e-9)) || !segment_hits_rect(p, q, r))
     };
     if seen(pa, pb) {
-        return Vec::new();
+        return None;
     }
     let mut pts = vec![pa, pb];
     for r in &grown {
@@ -64,9 +78,30 @@ pub fn detours(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Vec<Vec
             }
         }
     }
-    let Some(way) = shortest(&pts, &seen) else { return Vec::new() };
-    let way: Vec<P> = way.iter().map(|&i| pts[i]).collect();
-    vec![smooth(&way, 60), densify(&way, 60)]
+    let way = shortest(&pts, &seen)?;
+    Some(way.iter().map(|&i| pts[i]).collect())
+}
+
+/// fillet replaces each inner corner of a polyline with a quadratic arc that starts at most
+/// `reach` before it, which stays within half of `reach` of the corner.
+fn fillet(way: &[P], reach: f64) -> Vec<P> {
+    let mut out = vec![way[0]];
+    for i in 1..way.len() - 1 {
+        let (p, c, q) = (way[i - 1], way[i], way[i + 1]);
+        let toward = |a: P, d: f64| {
+            let len = (a.0 - c.0).hypot(a.1 - c.1).max(1e-9);
+            let k = d.min(len / 2.0) / len;
+            (c.0 + k * (a.0 - c.0), c.1 + k * (a.1 - c.1))
+        };
+        let (s, e) = (toward(p, reach), toward(q, reach));
+        out.extend((0..=8).map(|j| {
+            let t = j as f64 / 8.0;
+            let (u, w) = ((1.0 - t) * (1.0 - t), 2.0 * (1.0 - t) * t);
+            (u * s.0 + w * c.0 + t * t * e.0, u * s.1 + w * c.1 + t * t * e.1)
+        }));
+    }
+    out.push(way[way.len() - 1]);
+    out
 }
 
 /// shortest is Dijkstra from point 0 to point 1 over the legs `seen` allows. Legs are tested
@@ -106,32 +141,6 @@ fn densify(way: &[P], n: usize) -> Vec<P> {
             let t = i as f64 / k as f64;
             (w[0].0 + t * (w[1].0 - w[0].0), w[0].1 + t * (w[1].1 - w[0].1))
         }));
-    }
-    out
-}
-
-/// smooth draws a centripetal Catmull-Rom spline through a polyline's points, which passes
-/// through every corner without loops or cusps.
-fn smooth(way: &[P], n: usize) -> Vec<P> {
-    let len: f64 = way.windows(2).map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1)).sum();
-    let at = |i: isize| way[i.clamp(0, way.len() as isize - 1) as usize];
-    let mut out = vec![way[0]];
-    for i in 0..way.len() - 1 {
-        let (p0, p1, p2, p3) = (at(i as isize - 1), at(i as isize), at(i as isize + 1), at(i as isize + 2));
-        let knot = |a: P, b: P| (b.0 - a.0).hypot(b.1 - a.1).sqrt().max(1e-6);
-        let (t1, t2, t3) = (knot(p0, p1), knot(p1, p2), knot(p2, p3));
-        let (t1, t2, t3) = (t1, t1 + t2, t1 + t2 + t3);
-        let lerp = |a: P, b: P, ta: f64, tb: f64, t: f64| {
-            let (u, w) = ((tb - t) / (tb - ta), (t - ta) / (tb - ta));
-            (u * a.0 + w * b.0, u * a.1 + w * b.1)
-        };
-        let k = (((p2.0 - p1.0).hypot(p2.1 - p1.1) / len * n as f64).ceil() as usize).max(1);
-        for j in 1..=k {
-            let t = t1 + (t2 - t1) * j as f64 / k as f64;
-            let (a1, a2, a3) = (lerp(p0, p1, 0.0, t1, t), lerp(p1, p2, t1, t2, t), lerp(p2, p3, t2, t3, t));
-            let (b1, b2) = (lerp(a1, a2, 0.0, t2, t), lerp(a2, a3, t1, t3, t));
-            out.push(lerp(b1, b2, t1, t2, t));
-        }
     }
     out
 }
@@ -188,7 +197,7 @@ mod tests {
         let wall = Rect::centered((0.0, 0.0), 20.0, 120.0);
         assert!(detours((-50.0, 0.0), (50.0, 30.0), &[Rect::centered((0.0, 90.0), 5.0, 5.0)], &page, 4.0).is_empty(), "straight line is clear");
         let ways = detours((-50.0, 0.0), (50.0, 0.0), &[wall], &page, 4.0);
-        assert_eq!(ways.len(), 2);
+        assert_eq!(ways.len(), 3);
         for w in &ways {
             assert_eq!((w[0], *w.last().unwrap()), ((-50.0, 0.0), (50.0, 0.0)));
             assert!(w.windows(2).all(|s| !segment_hits_rect(s[0], s[1], &wall)), "{w:?}");

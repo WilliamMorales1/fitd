@@ -3,6 +3,12 @@
 use super::*;
 use std::cell::RefCell;
 
+/// Margin in ems that links and labels try to keep off boxes, and labels off each other.
+const CLEAR: f64 = 0.4;
+
+/// Margin in ems that labels must keep.
+const LABEL_CLEAR: f64 = 0.15;
+
 /// Route is an edge whose bend or label position the solver chooses. Its variable comes after
 /// every node's, so all positions are known when its values are checked.
 pub(super) struct Route {
@@ -328,9 +334,9 @@ impl Problem for Scene<'_> {
                 let by_node = |u: usize| self.rects[self.var[u]][val[self.var[u]] as usize];
                 relation_holds(&self.g.constraints[ci].rel, &by_node, self.body, &self.page, self.tol)
             }
-            Kind::LabelClear(i, u) => !self.route_label(i, val).intersects(&self.node_rect(u, val).inflate(0.15 * self.body)),
+            Kind::LabelClear(i, u, m) => !self.route_label(i, val).intersects(&self.node_rect(u, val).inflate(m * self.body)),
             Kind::LabelPage(i) => self.route_label(i, val).within(&self.page),
-            Kind::LabelApart(i, j) => !self.route_label(i, val).inflate(0.15 * self.body).intersects(&self.route_label(j, val)),
+            Kind::LabelApart(i, j, m) => !self.route_label(i, val).inflate(m * self.body).intersects(&self.route_label(j, val)),
             Kind::LinkApart(i, j) if self.apart.get(c).is_some_and(|t| !t.is_empty()) => {
                 let bend = |i: usize| self.routes[i].opts[val[self.node.len() + i] as usize].0;
                 self.apart[c][bend(i) * self.routes[j].bends() + bend(j)]
@@ -352,8 +358,21 @@ impl Problem for Scene<'_> {
                 let f = |c: usize| frame(&self.g.constraints[c].rel, &|v| self.node_rect(v, val), self.body);
                 frame_clear(&f(ci), &f(cj), self.body)
             }
-            Kind::LinkClear(i, u) => {
+            Kind::LabelFrame(i, ci) => {
+                let rel = &self.g.constraints[ci].rel;
+                let f = frame(rel, &|v| self.node_rect(v, val), self.body);
+                let l = self.route_label(i, val);
+                let titled = matches!(rel, Relation::Group { title: Some(_), .. });
+                let inner = Rect { y1: f.y1 - if titled { TITLE_BAND * self.body } else { 0.0 }, ..f }.inflate(-LABEL_CLEAR * self.body);
+                !l.intersects(&f.inflate(CLEAR * self.body)) || l.within(&inner)
+            }
+            Kind::LinkEdge(i, p, q) => {
+                let (a, b) = (self.center(p, val), self.center(q, val));
+                !self.route_path(i, val).windows(2).any(|s| segments_cross(s[0], s[1], a, b))
+            }
+            Kind::LinkClear(i, u, margin) => {
                 let (w, h) = self.size[self.var[u]];
+                let (w, h) = (w + 2.0 * margin * self.body, h + 2.0 * margin * self.body);
                 let c = self.center(u, val);
                 let shape = self.shapes[self.var[u]];
                 !self.route_path(i, val).iter().any(|&p| inside_box(c, shape, w, h, p))
@@ -367,7 +386,7 @@ impl Problem for Scene<'_> {
 pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: Users, kind: LayoutKind, boxes: &[Boxed], rot: f64) -> (Scene<'a>, Vec<Drawn>, (f64, f64, f64)) {
     let n = g.nodes.len();
     let plan = match kind {
-        LayoutKind::Radial => radial::plan(t, boxes, cfg, b, rot),
+        LayoutKind::Radial => radial::plan(g, t, boxes, cfg, b, rot),
         LayoutKind::Layered(dir) => layered::plan(g, boxes, cfg, b, dir),
     };
     let mut plan = plan;
@@ -413,13 +432,13 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
     for (ci, c) in g.constraints.iter().enumerate() {
         let on = match users {
             Users::Hard(set) => c.hard && set.contains(&ci),
-            Users::All(_) => true,
+            Users::All(_) | Users::Wanted => true,
             Users::Routes(_) | Users::Shrunk(_) => c.hard,
         };
         if !on {
             continue;
         }
-        let w = if c.hard { 0 } else { c.weight as u64 };
+        let w = if c.hard || matches!(users, Users::Wanted) { 0 } else { c.weight as u64 };
         match &c.rel {
             Relation::Align { side, items } if c.hard => {
                 for (i, &a) in items.iter().enumerate() {
@@ -525,22 +544,43 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
     for i in 0..sc.routes.len() {
         if sc.routes[i].label.is_some() {
             push(&mut sc, &[], &[i], Kind::LabelPage(i), 0);
+            // Labels must not touch boxes or each other; once nodes are fixed, they also try
+            // to keep a margin.
             for u in 0..n {
-                push(&mut sc, &[u], &[i], Kind::LabelClear(i, u), 0);
+                push(&mut sc, &[u], &[i], Kind::LabelClear(i, u, LABEL_CLEAR), 0);
+                if routing {
+                    push(&mut sc, &[u], &[i], Kind::LabelClear(i, u, CLEAR), 2);
+                }
+            }
+            if routing {
+                for (ci, c) in g.constraints.iter().enumerate() {
+                    if let Relation::Group { items, .. } = &c.rel {
+                        push(&mut sc, items, &[i], Kind::LabelFrame(i, ci), 2);
+                    }
+                }
             }
             for j in i + 1..sc.routes.len() {
                 if sc.routes[j].label.is_some() {
-                    push(&mut sc, &[], &[i, j], Kind::LabelApart(i, j), 0);
+                    push(&mut sc, &[], &[i, j], Kind::LabelApart(i, j, LABEL_CLEAR), 0);
+                    if routing {
+                        push(&mut sc, &[], &[i, j], Kind::LabelApart(i, j, CLEAR), 2);
+                    }
                 }
             }
         }
         if routing && links.contains(&i) {
             let (a, b2) = (sc.routes[i].a, sc.routes[i].b);
+            // Weights follow what a reader notices most: a link through a box (W0201), two
+            // links meeting (W0207), a link grazing a box, a link over a tree edge.
             for u in (0..n).filter(|&u| u != a && u != b2) {
-                push(&mut sc, &[u], &[i], Kind::LinkClear(i, u), 2);
+                push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, 0.0), 40);
+                push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, CLEAR), 2);
             }
             for &j in links.iter().filter(|&&j| j > i) {
-                push(&mut sc, &[], &[i, j], Kind::LinkApart(i, j), 1);
+                push(&mut sc, &[], &[i, j], Kind::LinkApart(i, j), 20);
+            }
+            for e in edges.iter().filter(|e| e.style != EdgeStyle::Link && ![a, b2].contains(&e.a) && ![a, b2].contains(&e.b)) {
+                push(&mut sc, &[e.a, e.b], &[i], Kind::LinkEdge(i, e.a, e.b), 1);
             }
         }
     }

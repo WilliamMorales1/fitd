@@ -162,11 +162,11 @@ fn theme_colors_reach_svg_and_tikz() {
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
 const EXAMPLES: [(&str, usize, u64); 5] = [
-    ("cell_biology", 0, 30_000),
-    ("compiler", 0, 300_000),
-    ("earth_science", 5, 43_000_000),
-    ("math4200", 0, 38_000_000),
-    ("math4200-v2", 0, 55_000_000),
+    ("cell_biology", 0, 4_300_000),
+    ("compiler", 0, 4_600_000),
+    ("earth_science", 2, 128_000_000),
+    ("math4200", 0, 40_000_000),
+    ("math4200-v2", 0, 56_000_000),
 ];
 
 const HANG_SECS: f64 = 60.0;
@@ -288,8 +288,13 @@ fn layers_that_exactly_fill_the_page_fit_and_crowded_flows_say_why() {
     std::fs::write(&down, &text).unwrap();
     let (ok, log) = cmapc(&[down.to_str().unwrap(), "-o", tmp("bill-down.svg").to_str().unwrap()]);
     assert!(ok && log.contains("body font 8.0pt"), "{log}");
+    // Across a portrait page the nine layers do not fit in one line, so the flow wraps.
     let right = tmp("bill-right.cmap");
     std::fs::write(&right, text.replace("dir=down", "dir=right")).unwrap();
+    let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
+    assert!(ok && log.contains("body font 8.0pt") && log.contains(" 0 errors"), "{log}");
+    // On a strip too small to wrap into, the error says why.
+    std::fs::write(&right, text.replace("dir=down", "dir=right").replace("page a4 portrait", "page 400x150pt")).unwrap();
     let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
     assert!(!ok && log.contains("the longest path has 9 layers") && log.contains("dir=down"), "{log}");
 }

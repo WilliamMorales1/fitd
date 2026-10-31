@@ -50,8 +50,9 @@ fn paints(g: &Graph, t: &Tree, lay: &Layout, th: &Theme) -> Vec<Paint> {
 }
 
 /// clipped shortens a straight edge to the borders of its two nodes, so arrowheads show.
-fn clipped(lay: &Layout, a: usize, b: usize) -> (P, P) {
-    let (pa, pb) = (lay.pos[a], lay.pos[b]);
+fn clipped(lay: &Layout, e: &Drawn) -> (P, P) {
+    let (a, b) = (e.a, e.b);
+    let (pa, pb) = lay.ends(e);
     let lerp = |t: f64| (pa.0 + t * (pb.0 - pa.0), pa.1 + t * (pb.1 - pa.1));
     let exit = |v: usize, mut inside: f64, mut outside: f64| {
         for _ in 0..40 {
@@ -68,7 +69,7 @@ fn edge_points(lay: &Layout, e: &Drawn) -> Vec<P> {
     match e.style {
         EdgeStyle::Link => lay.path(e),
         EdgeStyle::Arrow => {
-            let (s, t) = clipped(lay, e.a, e.b);
+            let (s, t) = clipped(lay, e);
             vec![s, t]
         }
         EdgeStyle::Line => vec![lay.pos[e.a], lay.pos[e.b]],

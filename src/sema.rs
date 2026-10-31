@@ -311,7 +311,10 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     _ => None,
                 };
                 match text.map(|t| page_size(t, None)) {
-                    Some(Ok(p)) => set.page = Some(p),
+                    Some(Ok(p)) => {
+                        set.page = Some(p);
+                        set.page_fixed = text.is_some_and(|t| paper(t).is_none()) || !flags.is_empty();
+                    }
                     Some(Err(e)) => s.type_err(size, e),
                     None => s.type_err(size, "expected a page size like `a1` or `594x420mm`".into()),
                 }

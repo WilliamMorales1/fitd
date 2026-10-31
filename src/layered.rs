@@ -178,44 +178,76 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     let along: Vec<(usize, usize)> = (0..tree.len()).filter(|&i| flat[i]).map(|i| tree[i]).collect();
     let rows = order(n, &layer, &dag);
 
-    // Spread layers over the page, with at least two ems between them for arrows.
+    // Spread layers over the page, with at least two ems between them for arrows. When the
+    // flow is too long to reach the legibility floor in one line, it wraps into bands that
+    // run back and forth (a snake), so each band's last layer sits beside the next one's first.
+    let sep = (0.6 * b).max(3.0);
     let thick: Vec<f64> = rows.iter().map(|r| r.iter().map(|&v| size(v).0).fold(0.0, f64::max)).collect();
-    let used: f64 = thick.iter().sum();
-    let gaps = rows.len().saturating_sub(1) as f64;
-    // A hair under an exact fill, so rounding never pushes the last layer off the page.
-    let gap = if gaps > 0.0 { ((main_len - used) / gaps - 1e-6).min(6.0 * b) } else { 0.0 };
-    let feasible = gaps == 0.0 || gap >= 2.0 * b;
-    let mut m = lead + (main_len - used - gap * gaps).max(0.0) / 2.0;
-    let mut center = Vec::new();
-    for t in &thick {
-        center.push(m + t / 2.0);
-        m += t + gap;
+    let span: Vec<f64> = rows.iter().map(|r| r.iter().map(|&v| size(v).1).sum::<f64>() + sep * r.len().saturating_sub(1) as f64).collect();
+    let bands = |k: usize| -> Vec<std::ops::Range<usize>> {
+        let per = rows.len().div_ceil(k.max(1)).max(1);
+        (0..rows.len()).step_by(per).map(|s| s..(s + per).min(rows.len())).collect()
+    };
+    // Whether `k` bands fit with every length scaled by `scale`.
+    let fits = |k: usize, scale: f64| {
+        let bs = bands(k);
+        let along = bs.iter().all(|r| scale * (thick[r.clone()].iter().sum::<f64>() + 2.0 * b * (r.len() - 1) as f64) <= main_len);
+        let across = scale * (bs.iter().map(|r| span[r.clone()].iter().copied().fold(0.0, f64::max)).sum::<f64>() + 2.0 * b * (bs.len() - 1) as f64);
+        along && (bs.len() == 1 || across <= cross_len)
+    };
+    let wrap = !fits(1, cfg.legible / b);
+    let k = if wrap { (1..=rows.len()).find(|&k| fits(k, 1.0)).unwrap_or(1) } else { 1 };
+    let bands = bands(k);
+    let feasible = fits(k, 1.0);
+    let band: Vec<usize> = (0..rows.len()).map(|l| bands.iter().position(|r| r.contains(&l)).unwrap()).collect();
+    // One gap for every band, so their layers line up.
+    let gap = bands.iter().filter(|r| r.len() > 1).map(|r| (main_len - thick[r.clone()].iter().sum::<f64>()) / (r.len() - 1) as f64 - 1e-6).fold(6.0 * b, f64::min);
+    let mut center = vec![0.0; rows.len()];
+    for (i, r) in bands.iter().enumerate() {
+        let used: f64 = thick[r.clone()].iter().sum();
+        let mut m = lead + (main_len - used - gap * (r.len() - 1) as f64).max(0.0) / 2.0;
+        for l in r.clone() {
+            // A hair under an exact fill, so rounding never pushes the last layer off the page.
+            center[l] = if i % 2 == 0 { m + thick[l] / 2.0 } else { 2.0 * lead + main_len - m - thick[l] / 2.0 };
+            m += thick[l] + gap;
+        }
+    }
+    // Each band owns a slice of the cross axis, as wide as its widest layer plus a share of
+    // what is left; one band owns all of it.
+    let need: Vec<f64> = bands.iter().map(|r| span[r.clone()].iter().copied().fold(0.0, f64::max)).collect();
+    let slack = ((cross_len - need.iter().sum::<f64>() - 2.0 * b * (k - 1) as f64) / k as f64).max(0.0);
+    let mut slices = Vec::new();
+    let mut c0 = -cross_len / 2.0;
+    for (i, w) in need.iter().enumerate() {
+        let w = if k == 1 { cross_len } else { w + slack };
+        slices.push((c0, c0 + w));
+        c0 += w + if i + 1 < k { 2.0 * b } else { 0.0 };
     }
 
     let step = 0.5 * b;
     let mut cands: Vec<Vec<Cand>> = (0..n).map(|_| Vec::new()).collect();
-    for row in rows.iter().filter(|_| feasible) {
-        // Ideal spots spread the row evenly across the page, in barycenter order.
+    for (l, row) in rows.iter().enumerate().filter(|_| feasible) {
+        // Ideal spots spread the row evenly across its band, in barycenter order.
+        let (lo, hi) = slices[band[l]];
         let total: f64 = row.iter().map(|&v| size(v).1).sum();
-        let space = ((cross_len - total) / row.len() as f64).clamp(0.0, 4.0 * b);
+        let space = ((hi - lo - total) / row.len() as f64).clamp(0.0, 4.0 * b);
         let span = total + space * row.len() as f64;
-        let mut c = -span / 2.0 + space / 2.0;
+        let mut c = (lo + hi) / 2.0 - span / 2.0 + space / 2.0;
         for &v in row {
             let (_, w) = size(v);
             let ideal = c + w / 2.0;
             c += w + space;
             // One grid shared by every node, so centers can line up exactly.
-            let k = ((cross_len - w) / 2.0 / step).floor() as i64;
-            for i in -k..=k {
+            let (i0, i1) = (((lo + w / 2.0) / step).ceil() as i64, ((hi - w / 2.0) / step).floor() as i64);
+            for i in i0..=i1 {
                 let x = i as f64 * step;
-                cands[v].push(Cand { cost: (x - ideal).abs(), at: to_xy(center[layer[v]], x), r: 0.0 });
+                cands[v].push(Cand { cost: (x - ideal).abs(), at: to_xy(center[l], x), r: 0.0 });
             }
             cands[v].retain(|c| Rect::centered(c.at, boxes[v].w, boxes[v].h).within(&page));
             cands[v].sort_by(|a, b| a.cost.total_cmp(&b.cost));
         }
     }
 
-    let sep = (0.6 * b).max(3.0);
     let mut cons = Vec::new();
     for row in &rows {
         for (i, &u) in row.iter().enumerate() {
@@ -231,13 +263,15 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
             cons.push((vec![a, c, u], Kind::Clear(sep * 0.25), 0));
         }
     }
-    for (k, &(a, c)) in dag.iter().enumerate() {
+    // In a single band only the layers an edge spans can be in its way; across bands anything can.
+    let near = |l: usize, lo: usize, hi: usize| k > 1 || (l >= lo && l <= hi);
+    for (i, &(a, c)) in dag.iter().enumerate() {
         let (lo, hi) = (layer[a].min(layer[c]), layer[a].max(layer[c]));
-        for u in (0..n).filter(|&u| u != a && u != c && layer[u] >= lo && layer[u] <= hi) {
+        for u in (0..n).filter(|&u| u != a && u != c && near(layer[u], lo, hi)) {
             cons.push((vec![a, c, u], Kind::Clear(sep * 0.25), 0));
         }
-        for &(p, q) in &dag[k + 1..] {
-            let overlap = layer[p].max(layer[a]) < layer[q].min(layer[c]);
+        for &(p, q) in &dag[i + 1..] {
+            let overlap = k > 1 || layer[p].max(layer[a]) < layer[q].min(layer[c]);
             if overlap && a != p && a != q && c != p && c != q {
                 cons.push((vec![a, c, p, q], Kind::NoCross, 1));
             }
@@ -257,7 +291,7 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     let member = |v: usize| g.constraints.iter().any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)));
     let (mut order, rest): (Vec<usize>, Vec<usize>) = rows.concat().into_iter().partition(|&v| member(v));
     order.extend(rest);
-    let crowded = (!feasible).then_some((rows.len(), used + 2.0 * b * gaps, main_len));
+    let crowded = (!feasible).then(|| (rows.len(), thick.iter().sum::<f64>() + 2.0 * b * (rows.len() - 1) as f64, main_len));
     Plan { order, cands, cons, edges, kx: 1.0, ky: 1.0, tol: 0.5 * step, crowded }
 }
 
