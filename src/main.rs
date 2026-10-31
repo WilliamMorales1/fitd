@@ -3,6 +3,8 @@ mod check;
 mod csp;
 mod diag;
 mod emit;
+#[cfg(test)]
+mod fuzz;
 mod geom;
 mod graph;
 mod layered;
@@ -23,10 +25,15 @@ use layout::{Config, Failure};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
-  cmapc <input[.cmap]> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
+  cmapc <input[.cmap]|-> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
               [--portrait] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
-              [--budget CHECKS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
-  cmapc explain <CODE>";
+              [--short] [--budget CHECKS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
+  cmapc explain <CODE>
+  cmapc guide            the whole language on one page, with examples";
+
+/// GUIDE is the language reference sized for an agent's context: everything needed to write a
+/// diagram, in a few hundred tokens.
+const GUIDE: &str = include_str!("guide.txt");
 
 fn page(spec: &str, portrait: bool) -> Result<(f64, f64), String> {
     let (w, h) = sema::page_size(&spec.to_ascii_lowercase(), Some("pt"))?;
@@ -41,6 +48,14 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             println!("{code}: {text}");
             Ok(ExitCode::SUCCESS)
         }
+        Some("guide") => {
+            print!("{GUIDE}");
+            Ok(ExitCode::SUCCESS)
+        }
+        Some("-h" | "--help" | "help") => {
+            println!("{USAGE}");
+            Ok(ExitCode::SUCCESS)
+        }
         Some(_) => build(args),
         None => Err(USAGE.into()),
     }
@@ -49,7 +64,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
 fn build(args: &[String]) -> Result<ExitCode, String> {
     let mut input = None;
     let (mut svg_out, mut tikz_out) = (None, None);
-    let (mut page_spec, mut portrait, mut force, mut draft) = (None, false, false, false);
+    let (mut page_spec, mut portrait, mut force, mut draft, mut short) = (None, false, false, false, false);
     let (mut margin, mut min_font, mut max_font, mut wrap) = (None, None, None, None);
     let mut budget = 20_000_000;
     let mut scale = 2.0;
@@ -65,6 +80,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             "--portrait" => portrait = true,
             "--force" => force = true,
             "--draft" => draft = true,
+            "--short" => short = true,
             "--margin" => margin = Some(num(val()?)?),
             "--min-font" => min_font = Some(num(val()?)?),
             "--max-font" => max_font = Some(num(val()?)?),
@@ -73,7 +89,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             "--scale" => scale = num(val()?)?,
             "--theme" => theme_name = Some(val()?),
             "--font-family" => family = Some(val()?),
-            s if !s.starts_with('-') && input.is_none() => input = Some(s.to_string()),
+            s if (s == "-" || !s.starts_with('-')) && input.is_none() => input = Some(s.to_string()),
             s => return Err(format!("unknown argument `{s}`\n{USAGE}")),
         }
     }
@@ -81,13 +97,22 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     if !std::path::Path::new(&input).exists() && std::path::Path::new(&format!("{input}.cmap")).exists() {
         input.push_str(".cmap");
     }
-    let text = std::fs::read_to_string(&input).map_err(|e| format!("{input}: {e}"))?;
+    let text = if input == "-" {
+        if svg_out.is_none() {
+            return Err("reading the diagram from stdin needs -o".into());
+        }
+        input = "<stdin>".into();
+        std::io::read_to_string(std::io::stdin()).map_err(|e| format!("stdin: {e}"))?
+    } else {
+        std::fs::read_to_string(&input).map_err(|e| format!("{input}: {e}"))?
+    };
     let src = Source::new(&input, &text);
+    let show = |diags: &[Diag]| eprint!("{}", if short { diag::render_short(&src, diags) } else { diag::render(&src, diags) });
     let (stmts, mut diags) = parse::parse(&text);
-    let (g, sema_diags) = sema::analyze(&stmts);
+    let (mut g, sema_diags) = sema::analyze(&stmts);
     diags.extend(sema_diags);
     diags.sort_by_key(Diag::pos);
-    eprint!("{}", diag::render(&src, &diags));
+    show(&diags);
     if diags.iter().any(|d| d.level == Level::Error) {
         return Ok(ExitCode::FAILURE);
     }
@@ -110,25 +135,31 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         max_font: max_font.unwrap_or(font.1),
         wrap_em: wrap.or(set.wrap_em).unwrap_or(24.0),
         budget,
-        opt_budget: budget / 16,
+        opt_budget: budget / if draft { 32 } else { 16 },
         legible: legible(page_w, page_h, min_font.unwrap_or(font.0)),
         draft,
     };
 
     let t = tree::build(&g);
     if g.settings.layout.unwrap_or(LayoutKind::Radial) == LayoutKind::Radial {
-        eprint!("{}", diag::render(&src, &t.notes));
+        show(&t.notes);
     }
     let fonts = metrics::Fonts::load(family.as_deref().or(set.family.as_deref()))?;
     let name = theme_name.as_deref().or(set.theme.as_deref()).unwrap_or("light");
     let th = theme::Theme::preset(name).ok_or(format!("unknown theme `{name}` (expected one of: {})", theme::PRESETS.join(", ")))?.with(&set.theme_over);
+    layout::measure_groups(&mut g, &fonts);
     let lay = match layout::solve(&g, &t, &fonts, &cfg) {
         Ok(lay) => lay,
-        Err(Failure::NoRoom) => {
-            eprintln!(
-                "error: no layout fits at --min-font {}pt on a {:.0}x{:.0}pt page, even ignoring `require` constraints\n  = help: use a larger --page, a smaller --min-font, or a narrower --wrap",
-                cfg.min_font, cfg.page_w, cfg.page_h
-            );
+        Err(Failure::NoRoom(crowded)) => {
+            eprintln!("error: no layout fits at the {}pt font floor on a {:.0}x{:.0}pt page, even ignoring `require` constraints", cfg.min_font, cfg.page_w, cfg.page_h);
+            match (crowded, g.settings.layout) {
+                (Some((layers, need, have)), Some(LayoutKind::Layered(dir))) => {
+                    let (along, other) = if dir == graph::Dir::Down { ("tall", "right") } else { ("wide", "down") };
+                    eprintln!("  = note: the longest path has {layers} layers, which need {need:.0}pt along the flow; the page gives {have:.0}pt");
+                    eprintln!("  = help: use `layout layered dir={other}`, a page that is more {along}, or fewer steps on the longest path");
+                }
+                _ => eprintln!("  = help: use a larger page, a lower font floor (`font 6pt..30pt`), or a narrower `wrap`"),
+            }
             return Ok(ExitCode::FAILURE);
         }
         Err(Failure::Core(core)) => {
@@ -154,44 +185,48 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             } else {
                 d
             };
-            eprint!("{}", diag::render(&src, &[d.help("remove one, turn it into `prefer`, or use a larger page")]));
+            show(&[d.help("remove one, turn it into `prefer`, or use a larger page")]);
             return Ok(ExitCode::FAILURE);
         }
     };
     let diags = check::check(&g, &fonts, &cfg, &lay);
-    eprint!("{}", diag::render(&src, &diags));
+    show(&diags);
     let errors = diags.iter().filter(|d| d.level == Level::Error).count();
     let warnings = diags.len() - errors;
     let s = lay.stats;
-    eprintln!(
-        "body font {:.1}pt (titles {:.1}pt) on {:.0}x{:.0}pt; {} nodes, {} edges; {errors} errors, {warnings} warnings; solver: {} attempts, {} nodes, {} checks, {} backjumps{}",
-        lay.body,
-        1.2 * lay.body,
-        cfg.page_w,
-        cfg.page_h,
-        g.nodes.len(),
-        lay.edges.len(),
-        s.attempts,
-        s.search.nodes,
-        s.search.checks,
-        s.search.backjumps,
-        if s.soft_total > 0 { format!("; soft cost {}/{}", s.soft_cost, s.soft_total) } else { String::new() }
-    );
-    let rects: Vec<Rect> = (0..g.nodes.len()).map(|v| lay.rect(v)).collect();
-    let q = layout::Readable::new(&t, lay.kind, &lay.edges, cfg.page(), cfg.legible).score(&rects);
-    eprintln!(
-        "readability penalty {:.0}: crossings {:.0}, proximity {:.0}, grouping {:.0}, angles {:.0}, alignment {:.0}, spread {:.0}",
-        q.total(),
-        q.crossings,
-        q.proximity,
-        q.grouping,
-        q.angles,
-        q.alignment,
-        q.spread
-    );
-    if lay.tradeoff.len() > 1 {
-        let tried: Vec<String> = lay.tradeoff.iter().map(|(f, m)| format!("{f:.1}pt {m:.0}{}", if *f == lay.body { " (chosen)" } else { "" })).collect();
-        eprintln!("font trade-off, merit (lower is better; legible from {:.1}pt): {}", cfg.legible, tried.join(", "));
+    if short {
+        eprintln!("body font {:.1}pt on {:.0}x{:.0}pt; {errors} errors, {warnings} warnings", lay.body, cfg.page_w, cfg.page_h);
+    } else {
+        eprintln!(
+            "body font {:.1}pt (titles {:.1}pt) on {:.0}x{:.0}pt; {} nodes, {} edges; {errors} errors, {warnings} warnings; solver: {} attempts, {} nodes, {} checks, {} backjumps{}",
+            lay.body,
+            1.2 * lay.body,
+            cfg.page_w,
+            cfg.page_h,
+            g.nodes.len(),
+            lay.edges.len(),
+            s.attempts,
+            s.search.nodes,
+            s.search.checks,
+            s.search.backjumps,
+            if s.soft_total > 0 { format!("; soft cost {}/{}", s.soft_cost, s.soft_total) } else { String::new() }
+        );
+        let rects: Vec<Rect> = (0..g.nodes.len()).map(|v| lay.rect(v)).collect();
+        let q = layout::Readable::new(&t, lay.kind, &lay.edges, cfg.page(), cfg.legible).score(&rects);
+        eprintln!(
+            "readability penalty {:.0}: crossings {:.0}, proximity {:.0}, grouping {:.0}, angles {:.0}, alignment {:.0}, spread {:.0}",
+            q.total(),
+            q.crossings,
+            q.proximity,
+            q.grouping,
+            q.angles,
+            q.alignment,
+            q.spread
+        );
+        if lay.tradeoff.len() > 1 {
+            let tried: Vec<String> = lay.tradeoff.iter().map(|(f, m)| format!("{f:.1}pt {m:.0}{}", if *f == lay.body { " (chosen)" } else { "" })).collect();
+            eprintln!("font trade-off, merit (lower is better; legible from {:.1}pt): {}", cfg.legible, tried.join(", "));
+        }
     }
     if errors > 0 && !force {
         eprintln!("error: aborting due to {errors} previous errors; no output written (use --force to write anyway)");
@@ -201,18 +236,26 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     let out = svg_out.unwrap_or(format!("{stem}.svg"));
     let bytes = if out.to_ascii_lowercase().ends_with(".png") {
         // A PNG is cropped to the drawing, with the margin as padding, not sized to the page.
-        let svg = emit::svg(&g, &t, &fonts, &lay, emit::bounds(&lay).inflate(cfg.margin), &th);
+        let svg = emit::svg(&g, &t, &fonts, &lay, emit::bounds(&g, &lay).inflate(cfg.margin), &th);
         emit::png(&svg, &fonts, scale)?
     } else {
         emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h), &th).into_bytes()
     };
-    std::fs::write(&out, bytes).map_err(|e| format!("{out}: {e}"))?;
+    write(&out, &bytes)?;
     eprintln!("wrote {out}");
     if let Some(p) = tikz_out {
-        std::fs::write(&p, emit::tikz(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h, &th)).map_err(|e| format!("{p}: {e}"))?;
+        write(&p, emit::tikz(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h, &th).as_bytes())?;
         eprintln!("wrote {p}");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// write saves an output file, creating its directory if needed.
+fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
+    if let Some(dir) = std::path::Path::new(path).parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    std::fs::write(path, bytes).map_err(|e| format!("{path}: {e}"))
 }
 
 /// legible is the smallest comfortable body font for a page read from about its diagonal:

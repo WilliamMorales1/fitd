@@ -2,7 +2,7 @@
 
 use super::*;
 
-/// Readable holds what `quality::score` needs that stays fixed while nodes move.
+/// Readable holds what the readability score needs that stays fixed while nodes move.
 pub struct Readable {
     pub tree: Vec<(usize, usize)>,
     pub links: Vec<(usize, usize)>,
@@ -25,7 +25,11 @@ impl Readable {
     }
 
     pub fn score(&self, rects: &[Rect]) -> Score {
-        quality::score(&quality::Input { rects, tree: &self.tree, links: &self.links, branch: &self.branch, flow: self.flow, page: self.page, unit: self.unit })
+        self.incremental(rects).score()
+    }
+
+    fn incremental<'s>(&'s self, rects: &'s [Rect]) -> quality::Incremental<'s> {
+        quality::Incremental::new(&quality::Input { rects, tree: &self.tree, links: &self.links, branch: &self.branch, flow: self.flow, page: self.page, unit: self.unit })
     }
 }
 
@@ -51,10 +55,10 @@ pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize) 
         }
     }
     let unmet = |cs: &[usize], val: &[u32]| cs.iter().filter(|&&c| !sc.holds(c, val)).map(|&c| sc.weights[c]).sum::<u64>();
-    let mut rects: Vec<Rect> = (0..nv).map(|v| sc.node_rect(v, val)).collect();
+    let rects: Vec<Rect> = (0..nv).map(|v| sc.node_rect(v, val)).collect();
     let mut soft_cost: u64 = (0..sc.scopes.len()).filter(|&c| sc.weights[c] > 0 && !sc.holds(c, val)).map(|c| sc.weights[c]).sum();
-    let energy = |rects: &[Rect], soft: u64| ctx.score(rects).total() + SOFT_PENALTY * soft as f64;
-    let mut cur = energy(&rects, soft_cost);
+    let mut layout = ctx.incremental(&rects);
+    let mut cur = layout.score().total() + SOFT_PENALTY * soft_cost as f64;
     let (mut best, mut best_val, mut best_soft) = (cur, val.to_vec(), soft_cost);
     let movable: Vec<usize> = (0..nv).filter(|&i| sc.at[i].len() > 1).collect();
     if movable.is_empty() {
@@ -69,19 +73,25 @@ pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize) 
     };
     // Temperature falls geometrically from about one em of edge to almost nothing.
     let (t0, t1): (f64, f64) = (2.0, 0.01);
-    let mut near = Vec::new();
+    // Spots within reach of each node's current spot; a node keeps its spot through most
+    // moves, so the grid query is cached until it moves.
+    let mut near: Vec<(u32, Vec<u32>)> = vec![(csp::UNSET, Vec::new()); nv];
     for k in 0..moves {
         let temp = t0 * (t1 / t0).powf(k as f64 / moves as f64);
         let i = movable[next(movable.len())];
         let u = sc.node[i];
         let reach = POLISH_REACH * sc.body;
-        near.clear();
-        sc.grids[i].near(&Rect::centered(sc.at[i][val[i] as usize], 2.0 * reach, 2.0 * reach), &mut |a| near.push(a));
-        if near.is_empty() {
+        let old = val[i];
+        if near[i].0 != old {
+            let spots = &mut near[i].1;
+            spots.clear();
+            sc.grids[i].near(&Rect::centered(sc.at[i][old as usize], 2.0 * reach, 2.0 * reach), |a| spots.push(a));
+            near[i].0 = old;
+        }
+        if near[i].1.is_empty() {
             continue;
         }
-        let old = val[i];
-        let a = near[next(near.len())];
+        let a = near[i].1[next(near[i].1.len())];
         if a == old {
             continue;
         }
@@ -92,11 +102,10 @@ pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize) 
             continue;
         }
         let new_soft = soft_cost - before + unmet(&soft[i], val);
-        let old_rect = rects[u];
-        rects[u] = sc.rects[i][a as usize];
-        let e = energy(&rects, new_soft);
+        let e = layout.try_move(u, sc.rects[i][a as usize]).total() + SOFT_PENALTY * new_soft as f64;
         let x = (next(1 << 20) as f64 + 0.5) / (1 << 20) as f64;
         if e <= cur || x < ((cur - e) / temp).exp() {
+            layout.accept();
             cur = e;
             soft_cost = new_soft;
             if cur < best {
@@ -105,7 +114,6 @@ pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize) 
             }
         } else {
             val[i] = old;
-            rects[u] = old_rect;
         }
     }
     val.copy_from_slice(&best_val);

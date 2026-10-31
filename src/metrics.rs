@@ -67,11 +67,14 @@ fn locate(pattern: &str) -> Option<Font> {
 }
 
 fn chain(patterns: &[&str]) -> Vec<Font> {
+    // Each lookup spawns fc-match, so they run at once.
+    let found: Vec<Option<Font>> = std::thread::scope(|s| {
+        let handles: Vec<_> = patterns.iter().map(|p| s.spawn(move || locate(p))).collect();
+        handles.into_iter().map(|h| h.join().expect("font lookup thread")).collect()
+    });
     let mut out: Vec<Font> = Vec::new();
-    for p in patterns {
-        if let Some(f) = locate(p)
-            && !out.iter().any(|o| (&o.path, o.index) == (&f.path, f.index))
-        {
+    for f in found.into_iter().flatten() {
+        if !out.iter().any(|o| (&o.path, o.index) == (&f.path, f.index)) {
             out.push(f);
         }
     }
@@ -127,8 +130,12 @@ impl Fonts {
             }
             fonts.bold.extend(locate(&format!("{fam}:weight=bold")).filter(wanted));
         }
-        for (dst, patterns) in [(&mut fonts.regular, REGULAR), (&mut fonts.bold, BOLD)] {
-            for f in chain(patterns) {
+        let (regular, bold) = std::thread::scope(|s| {
+            let bold = s.spawn(|| chain(BOLD));
+            (chain(REGULAR), bold.join().expect("font lookup thread"))
+        });
+        for (dst, found) in [(&mut fonts.regular, regular), (&mut fonts.bold, bold)] {
+            for f in found {
                 if !dst.iter().any(|o| (&o.path, o.index) == (&f.path, f.index)) {
                     dst.push(f);
                 }

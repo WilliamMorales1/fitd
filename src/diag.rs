@@ -208,6 +208,27 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
     s
 }
 
+/// render_short gives each error or warning one line, `path:line:col: level[CODE]: message`,
+/// for agents and editors. Notes are left out; other lines a diagnostic points at are listed.
+pub fn render_short(src: &Source, diags: &[Diag]) -> String {
+    let mut s = String::new();
+    for d in diags.iter().filter(|d| d.level != Level::Note) {
+        let level = if d.level == Level::Error { "error" } else { "warning" };
+        let (line, col) = d.labels.iter().find(|l| l.primary).or(d.labels.first()).map_or((0, 0), |l| src.line_col(l.span.lo));
+        s += &format!("{}:{line}:{col}: {level}[{}]: {}", src.path, d.code, d.msg);
+        let mut also: Vec<usize> = d.labels.iter().map(|l| src.line_col(l.span.lo).0).filter(|&l| l != line).collect();
+        also.dedup();
+        if !also.is_empty() {
+            s += &format!("; also line {}", also.iter().map(|l| l.to_string()).collect::<Vec<_>>().join(", "));
+        }
+        if let Some(h) = &d.help {
+            s += &format!("; {h}");
+        }
+        s += "\n";
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,5 +256,13 @@ mod tests {
         let d = Diag::error("E0008", "m").primary(Span::new(2, 3), "here").secondary(Span::new(6, 7), "");
         let out = render(&src, &[d]);
         assert!(out.contains("  |   ^   -\n  |   |\n  |   here\n"), "{out}");
+    }
+
+    #[test]
+    fn short_form_is_one_line_per_diagnostic() {
+        let src = Source::new("t.cmap", "node a\na -> bb\nrequire a above bb\n");
+        let d = Diag::error("E0110", "m").primary(Span::new(7, 8), "").secondary(Span::new(15, 33), "").help("h");
+        let out = render_short(&src, &[d, Diag::info("skipped")]);
+        assert_eq!(out, "t.cmap:2:1: error[E0110]: m; also line 3; h\n");
     }
 }

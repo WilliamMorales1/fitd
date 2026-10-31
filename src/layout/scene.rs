@@ -1,6 +1,7 @@
 //! The scene CSP: a strategy's plan plus user constraints, as a `csp::Problem`.
 
 use super::*;
+use std::cell::RefCell;
 
 /// Route is an edge whose bend or label position the solver chooses. Its variable comes after
 /// every node's, so all positions are known when its values are checked.
@@ -8,19 +9,36 @@ pub(super) struct Route {
     pub(super) edge: usize,
     pub(super) a: usize,
     pub(super) b: usize,
-    /// (bow, t) pairs in preference order.
-    pub(super) opts: Vec<(f64, f64)>,
+    /// Bends: bows of the curve, then detours around boxes (untrimmed paths).
+    pub(super) bows: Vec<f64>,
+    pub(super) vias: Vec<Vec<P>>,
+    /// (bend, t) pairs in preference order, every bend with the same label spots.
+    pub(super) opts: Vec<(usize, f64)>,
     pub(super) label: Option<(f64, f64)>,
     /// Path per option, filled when both endpoints are fixed; curves dominate route checks.
     pub(super) paths: Vec<Vec<P>>,
+}
+
+impl Route {
+    pub(super) fn bends(&self) -> usize {
+        self.bows.len() + self.vias.len()
+    }
 }
 
 /// Grid buckets one variable's candidate centers. Every candidate of a node has the same box,
 /// so "its box meets region R" is "its center lies in R grown by half the box": a range query.
 pub(super) struct Grid {
     pub(super) cell: f64,
-    // Ordered, so candidates come out in the same order every run and `polish` is reproducible.
-    pub(super) buckets: BTreeMap<(i64, i64), Vec<u32>>,
+    /// Cell coordinates of the first column and row, and the row count.
+    x0: i64,
+    y0: i64,
+    ny: i64,
+    /// Candidates of cell k (column-major) are `items[start[k]..start[k + 1]]`, so they come out
+    /// in the same order every run and `polish` is reproducible.
+    start: Vec<u32>,
+    items: Vec<u32>,
+    /// Non-empty cells as (column, row, cell index).
+    full: Vec<(i64, i64, usize)>,
 }
 
 impl Grid {
@@ -31,17 +49,36 @@ impl Grid {
         }
         // About sixteen candidates per bucket.
         let cell = (((x1 - x0) * (y1 - y0)).max(1.0) * 16.0 / at.len().max(1) as f64).sqrt().max(1.0);
-        let mut buckets: BTreeMap<(i64, i64), Vec<u32>> = BTreeMap::new();
-        for (i, p) in at.iter().enumerate() {
-            buckets.entry(((p.0 / cell).floor() as i64, (p.1 / cell).floor() as i64)).or_default().push(i as u32);
+        let key = |p: &P| ((p.0 / cell).floor() as i64, (p.1 / cell).floor() as i64);
+        let (cx0, cy0, cx1, cy1) = at.iter().map(key).fold((i64::MAX, i64::MAX, i64::MIN, i64::MIN), |(a, b, c, d), (x, y)| (a.min(x), b.min(y), c.max(x), d.max(y)));
+        let (nx, ny) = if at.is_empty() { (0, 0) } else { (cx1 - cx0 + 1, cy1 - cy0 + 1) };
+        let index = |(x, y): (i64, i64)| ((x - cx0) * ny + (y - cy0)) as usize;
+        let mut start = vec![0u32; (nx * ny) as usize + 1];
+        for p in at {
+            start[index(key(p)) + 1] += 1;
         }
-        Grid { cell, buckets }
+        for k in 1..start.len() {
+            start[k] += start[k - 1];
+        }
+        let mut fill = start.clone();
+        let mut items = vec![0; at.len()];
+        for (i, p) in at.iter().enumerate() {
+            let k = index(key(p));
+            items[fill[k] as usize] = i as u32;
+            fill[k] += 1;
+        }
+        let full = (0..nx).flat_map(|x| (0..ny).map(move |y| (cx0 + x, cy0 + y))).filter(|&c| start[index(c)] < start[index(c) + 1]).map(|c| (c.0, c.1, index(c))).collect();
+        Grid { cell, x0: cx0, y0: cy0, ny, start, items, full }
+    }
+
+    fn bucket(&self, k: usize) -> &[u32] {
+        &self.items[self.start[k] as usize..self.start[k + 1] as usize]
     }
 
     /// shadow calls `f` with every candidate whose center may lie in the wedge seen from
     /// `apex` across the convex hull of `pts` (and some that do not). None when the wedge is
     /// 180 degrees or wider, which happens when `apex` touches the hull.
-    pub(super) fn shadow(&self, apex: P, pts: &[P], f: &mut dyn FnMut(u32)) -> Option<u64> {
+    pub(super) fn shadow(&self, apex: P, pts: &[P], mut f: impl FnMut(u32)) -> Option<u64> {
         let cross = |a: P, b: P| a.0 * b.1 - a.1 * b.0;
         let n = pts.len() as f64;
         let mid = (pts.iter().map(|p| p.0).sum::<f64>() / n - apex.0, pts.iter().map(|p| p.1).sum::<f64>() / n - apex.1);
@@ -64,7 +101,7 @@ impl Grid {
         }
         let (dlo, dhi) = (lo.1, hi.1);
         let mut n = 0;
-        for (&(cx, cy), b) in &self.buckets {
+        for &(cx, cy, k) in &self.full {
             let (x0, y0) = (cx as f64 * self.cell - apex.0, cy as f64 * self.cell - apex.1);
             let (x1, y1) = (x0 + self.cell, y0 + self.cell);
             let corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)];
@@ -72,6 +109,7 @@ impl Grid {
             if corners.iter().all(|&c| cross(dlo, c) < 0.0) || corners.iter().all(|&c| cross(dhi, c) > 0.0) {
                 continue;
             }
+            let b = self.bucket(k);
             n += b.len() as u64;
             b.iter().for_each(|&i| f(i));
         }
@@ -79,28 +117,33 @@ impl Grid {
     }
 
     /// near calls `f` with every candidate whose center may lie in `r` (and some that do not).
-    pub(super) fn near(&self, r: &Rect, f: &mut dyn FnMut(u32)) -> u64 {
+    pub(super) fn near(&self, r: &Rect, mut f: impl FnMut(u32)) -> u64 {
         let (cx0, cx1) = ((r.x0 / self.cell).floor() as i64, (r.x1 / self.cell).floor() as i64);
         let (cy0, cy1) = ((r.y0 / self.cell).floor() as i64, (r.y1 / self.cell).floor() as i64);
-        let mut n = 0;
-        if (cx1 - cx0 + 1) * (cy1 - cy0 + 1) > self.buckets.len() as i64 {
-            for b in self.buckets.values() {
-                n += b.len() as u64;
-                b.iter().for_each(|&i| f(i));
-            }
-            return n;
+        if (cx1 - cx0 + 1) * (cy1 - cy0 + 1) > self.full.len() as i64 {
+            self.items.iter().for_each(|&i| f(i));
+            return self.items.len() as u64;
         }
+        let nx = (self.start.len() as i64 - 1) / self.ny.max(1);
+        let (cx0, cx1) = (cx0.max(self.x0), cx1.min(self.x0 + nx - 1));
+        let (cy0, cy1) = (cy0.max(self.y0), cy1.min(self.y0 + self.ny - 1));
+        let mut n = 0;
         for cx in cx0..=cx1 {
-            for cy in cy0..=cy1 {
-                if let Some(b) = self.buckets.get(&(cx, cy)) {
-                    n += b.len() as u64;
-                    b.iter().for_each(|&i| f(i));
-                }
+            // A column's cells are contiguous, so its candidates are one slice.
+            if cy0 > cy1 {
+                break;
             }
+            let k = ((cx - self.x0) * self.ny + (cy0 - self.y0)) as usize;
+            let b = &self.items[self.start[k] as usize..self.start[k + (cy1 - cy0) as usize + 1] as usize];
+            n += b.len() as u64;
+            b.iter().for_each(|&i| f(i));
         }
         n
     }
 }
+
+/// Memo is a label box keyed by the values that place it.
+type Memo = ([u32; 3], Rect);
 
 /// Scene is a plan plus user constraints, as a `csp::Problem` over variables in plan order.
 pub(super) struct Scene<'a> {
@@ -124,6 +167,9 @@ pub(super) struct Scene<'a> {
     pub(super) routes: Vec<Route>,
     /// Per constraint, when routing: whether two links stay apart, by bend of each (BOWS order).
     pub(super) apart: Vec<Vec<bool>>,
+    /// Per route, its last label box keyed by the values of its endpoints and itself: labels
+    /// are checked against every node, so the same curve is asked for many times in a row.
+    pub(super) labels: RefCell<Vec<Option<Memo>>>,
 }
 
 impl Scene<'_> {
@@ -141,18 +187,32 @@ impl Scene<'_> {
         if let Some(p) = r.paths.get(k) {
             return Cow::Borrowed(p);
         }
-        let (bow, _) = r.opts[k];
         let inside = |u: usize, p: P| {
             let (w, h) = self.size[self.var[u]];
             inside_box(self.center(u, val), self.shapes[self.var[u]], w, h, p)
         };
-        Cow::Owned(curve(self.center(r.a, val), &|p| inside(r.a, p), self.center(r.b, val), &|p| inside(r.b, p), bow))
+        Cow::Owned(match r.opts[k].0.checked_sub(r.bows.len()) {
+            Some(j) => trim(&r.vias[j], &|p| inside(r.a, p), &|p| inside(r.b, p)),
+            None => curve(self.center(r.a, val), &|p| inside(r.a, p), self.center(r.b, val), &|p| inside(r.b, p), r.bows[r.opts[k].0]),
+        })
     }
 
     pub(super) fn route_label(&self, i: usize, val: &[u32]) -> Rect {
         let r = &self.routes[i];
-        let (_, t) = r.opts[val[self.node.len() + i] as usize];
-        label_rect(&self.route_path(i, val), t, r.label.unwrap())
+        let key = [val[self.var[r.a]], val[self.var[r.b]], val[self.node.len() + i]];
+        let mut memo = self.labels.borrow_mut();
+        if memo.len() <= i {
+            memo.resize(self.routes.len(), None);
+        }
+        if let Some((k, rect)) = memo[i]
+            && k == key
+        {
+            return rect;
+        }
+        let (_, t) = r.opts[key[2] as usize];
+        let rect = label_rect(&self.route_path(i, val), t, r.label.unwrap());
+        memo[i] = Some((key, rect));
+        rect
     }
 }
 
@@ -176,34 +236,39 @@ impl Problem for Scene<'_> {
         self.weights[c]
     }
 
-    fn filter(&self, c: usize, val: &[u32], y: usize, alive: &dyn Fn(usize) -> bool, bad: &mut dyn FnMut(usize)) -> Option<u64> {
+    fn propagate(&self, c: usize) -> bool {
+        matches!(self.kinds[c], Kind::Rel(_) | Kind::Aligned(_))
+    }
+
+    fn filter(&self, c: usize, val: &[u32], y: usize, removed: &[u32], bad: &mut Vec<usize>) -> Option<u64> {
         if self.grids.is_empty() || y >= self.node.len() {
             return None;
         }
         let s = &self.scopes[c];
         let (w, h) = self.size[y];
         let mut tests = 0;
-        let mut visit = |a: u32, hit: &dyn Fn(usize) -> bool| {
+        // Generic, not a closure, so `hit` inlines into the scan.
+        fn visit(a: u32, removed: &[u32], tests: &mut u64, bad: &mut Vec<usize>, hit: impl Fn(usize) -> bool) {
             let a = a as usize;
-            if alive(a) {
-                tests += 1;
+            if removed[a] == csp::UNSET {
+                *tests += 1;
                 if hit(a) {
-                    bad(a);
+                    bad.push(a);
                 }
             }
-        };
+        }
         match self.kinds[c] {
             Kind::Apart(gap) => {
                 let other = if s[0] == y { s[1] } else { s[0] };
                 let r = self.rects[other][val[other] as usize].inflate(gap);
                 let grown = Rect { x0: r.x0 - w / 2.0, y0: r.y0 - h / 2.0, x1: r.x1 + w / 2.0, y1: r.y1 + h / 2.0 };
-                self.grids[y].near(&grown, &mut |a| visit(a, &|a| r.intersects(&self.rects[y][a])));
+                self.grids[y].near(&grown, |a| visit(a, removed, &mut tests, bad, |a| r.intersects(&self.rects[y][a])));
                 Some(tests)
             }
             Kind::Clear(thin) if s[2] == y => {
                 let (p, q) = (self.at[s[0]][val[s[0]] as usize], self.at[s[1]][val[s[1]] as usize]);
                 let grown = Rect { x0: p.0.min(q.0) - thin - w / 2.0, y0: p.1.min(q.1) - thin - h / 2.0, x1: p.0.max(q.0) + thin + w / 2.0, y1: p.1.max(q.1) + thin + h / 2.0 };
-                self.grids[y].near(&grown, &mut |a| visit(a, &|a| segment_hits_rect(p, q, &self.rects[y][a].inflate(thin))));
+                self.grids[y].near(&grown, |a| visit(a, removed, &mut tests, bad, |a| segment_hits_rect(p, q, &self.rects[y][a].inflate(thin))));
                 Some(tests)
             }
             Kind::Clear(thin) => {
@@ -212,8 +277,8 @@ impl Problem for Scene<'_> {
                 let r = self.rects[s[2]][val[s[2]] as usize].inflate(thin);
                 let corners = [(r.x0, r.y0), (r.x1, r.y0), (r.x0, r.y1), (r.x1, r.y1)];
                 let ends = |a: usize| if open == 0 { (self.at[y][a], apex) } else { (apex, self.at[y][a]) };
-                self.grids[y].shadow(apex, &corners, &mut |a| {
-                    visit(a, &|a| {
+                self.grids[y].shadow(apex, &corners, |a| {
+                    visit(a, removed, &mut tests, bad, |a| {
                         let (p, q) = ends(a);
                         segment_hits_rect(p, q, &r)
                     })
@@ -228,8 +293,8 @@ impl Problem for Scene<'_> {
                 let pos = |i: usize| self.at[s[i]][val[s[i]] as usize];
                 let apex = pos(partner);
                 let other = [pos(o0), pos(o1)];
-                self.grids[y].shadow(apex, &other, &mut |a| {
-                    visit(a, &|a| {
+                self.grids[y].shadow(apex, &other, |a| {
+                    visit(a, removed, &mut tests, bad, |a| {
                         let mut seg = [(0.0, 0.0); 4];
                         for (i, p) in seg.iter_mut().enumerate() {
                             *p = if i == k { self.at[y][a] } else { pos(i) };
@@ -237,6 +302,12 @@ impl Problem for Scene<'_> {
                         segments_cross(seg[0], seg[1], seg[2], seg[3])
                     })
                 })?;
+                Some(tests)
+            }
+            Kind::Outside(ci, _) if s[s.len() - 1] == y => {
+                let f = frame(&self.g.constraints[ci].rel, &|v| self.node_rect(v, val), self.body).inflate(FRAME_CLEAR * self.body);
+                let grown = Rect { x0: f.x0 - w / 2.0, y0: f.y0 - h / 2.0, x1: f.x1 + w / 2.0, y1: f.y1 + h / 2.0 };
+                self.grids[y].near(&grown, |a| visit(a, removed, &mut tests, bad, |a| f.intersects(&self.rects[y][a])));
                 Some(tests)
             }
             _ => None,
@@ -261,8 +332,8 @@ impl Problem for Scene<'_> {
             Kind::LabelPage(i) => self.route_label(i, val).within(&self.page),
             Kind::LabelApart(i, j) => !self.route_label(i, val).inflate(0.15 * self.body).intersects(&self.route_label(j, val)),
             Kind::LinkApart(i, j) if self.apart.get(c).is_some_and(|t| !t.is_empty()) => {
-                let bend = |i: usize| val[self.node.len() + i] as usize / (self.routes[i].opts.len() / BOWS.len());
-                self.apart[c][bend(i) * BOWS.len() + bend(j)]
+                let bend = |i: usize| self.routes[i].opts[val[self.node.len() + i] as usize].0;
+                self.apart[c][bend(i) * self.routes[j].bends() + bend(j)]
             }
             Kind::LinkApart(i, j) => {
                 let (ri, rj) = (&self.routes[i], &self.routes[j]);
@@ -272,6 +343,14 @@ impl Problem for Scene<'_> {
                     .map(|u| self.node_rect(u, val).inflate(1.5 * self.body))
                     .collect();
                 !paths_meet(&self.route_path(i, val), &self.route_path(j, val), 0.5 * self.body, &skip)
+            }
+            Kind::Outside(ci, u) => {
+                let rel = &self.g.constraints[ci].rel;
+                frame_clear(&frame(rel, &|v| self.node_rect(v, val), self.body), &self.node_rect(u, val), self.body)
+            }
+            Kind::Frames(ci, cj) => {
+                let f = |c: usize| frame(&self.g.constraints[c].rel, &|v| self.node_rect(v, val), self.body);
+                frame_clear(&f(ci), &f(cj), self.body)
             }
             Kind::LinkClear(i, u) => {
                 let (w, h) = self.size[self.var[u]];
@@ -320,6 +399,7 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
         grids: Vec::new(),
         routes: Vec::new(),
         apart: Vec::new(),
+        labels: RefCell::new(Vec::new()),
     };
     for &v in &plan.order {
         let c = &plan.cands[v];
@@ -348,6 +428,19 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
                     }
                 }
             }
+            Relation::Group { items, .. } => {
+                cons.push((items.clone(), Kind::Rel(ci), 0));
+                for u in (0..n).filter(|u| !items.contains(u)) {
+                    cons.push(([&items[..], &[u]].concat(), Kind::Outside(ci, u), 0));
+                }
+                for (cj, d) in g.constraints.iter().enumerate().take(ci) {
+                    if let Relation::Group { items: other, .. } = &d.rel
+                        && cons.iter().any(|c| matches!(c.1, Kind::Rel(k) if k == cj))
+                    {
+                        cons.push(([&items[..], &other[..]].concat(), Kind::Frames(cj, ci), 0));
+                    }
+                }
+            }
             rel => cons.push((rel.nodes(), Kind::Rel(ci), w)),
         }
     }
@@ -368,16 +461,35 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
         if !link && e.label.is_none() {
             continue;
         }
-        let bows: &[f64] = if link { &BOWS } else { &[0.0] };
+        let bows: Vec<f64> = if link { BOWS.to_vec() } else { vec![0.0] };
+        let mut vias = Vec::new();
+        if link && routing {
+            // Nodes are fixed, so detours around the other boxes can be computed up front.
+            let others: Vec<Rect> = (0..n).filter(|&u| u != e.a && u != e.b).map(|u| sc.rects[sc.var[u]][0]).collect();
+            vias = detours(sc.at[sc.var[e.a]][0], sc.at[sc.var[e.b]][0], &others, &sc.page, 0.4 * b);
+        }
         let spots: &[f64] = if e.label.is_some() { &SPOTS } else { &[0.5] };
-        let opts = bows.iter().flat_map(|&bow| spots.iter().map(move |&t| (bow, t))).collect();
+        let opts = (0..bows.len() + vias.len()).flat_map(|k| spots.iter().map(move |&t| (k, t))).collect();
         let label = e.label.as_ref().map(|l| label_size(fonts, l, b));
         e.label_size = label.unwrap_or((0.0, 0.0));
-        sc.routes.push(Route { edge: k, a: e.a, b: e.b, opts, label, paths: Vec::new() });
+        sc.routes.push(Route { edge: k, a: e.a, b: e.b, bows, vias, opts, label, paths: Vec::new() });
         if routing {
             // Every node has a single spot, so value 0 everywhere places them all.
             let i = sc.routes.len() - 1;
             let mut val = vec![0; sc.node.len() + i + 1];
+            if link {
+                // Bends that clear every box go first, so branch and bound finds a good
+                // routing early even when its budget runs out.
+                let r = &sc.routes[i];
+                let hits: Vec<usize> = (0..r.bends())
+                    .map(|k| {
+                        val[sc.node.len() + i] = r.opts.iter().position(|o| o.0 == k).unwrap() as u32;
+                        let path = sc.route_path(i, &val);
+                        (0..n).filter(|&u| u != r.a && u != r.b && path.iter().any(|&p| inside_box(sc.at[sc.var[u]][0], sc.shapes[sc.var[u]], sc.size[sc.var[u]].0, sc.size[sc.var[u]].1, p))).count()
+                    })
+                    .collect();
+                sc.routes[i].opts.sort_by_key(|o| hits[o.0]);
+            }
             sc.routes[i].paths = (0..sc.routes[i].opts.len() as u32)
                 .map(|o| {
                     val[sc.node.len() + i] = o;
@@ -439,13 +551,14 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
         sc.apart = vec![Vec::new(); sc.kinds.len()];
         for c in 0..sc.kinds.len() {
             let Kind::LinkApart(i, j) = sc.kinds[c] else { continue };
-            let (si, sj) = (sc.routes[i].opts.len() / BOWS.len(), sc.routes[j].opts.len() / BOWS.len());
+            let (ni, nj) = (sc.routes[i].bends(), sc.routes[j].bends());
+            let first = |r: &Route, k: usize| r.opts.iter().position(|o| o.0 == k).unwrap() as u32;
             let mut val = vec![0; sc.node.len() + sc.routes.len()];
-            let mut table = Vec::with_capacity(BOWS.len() * BOWS.len());
-            for bi in 0..BOWS.len() {
-                for bj in 0..BOWS.len() {
-                    val[sc.node.len() + i] = (bi * si) as u32;
-                    val[sc.node.len() + j] = (bj * sj) as u32;
+            let mut table = Vec::with_capacity(ni * nj);
+            for bi in 0..ni {
+                for bj in 0..nj {
+                    val[sc.node.len() + i] = first(&sc.routes[i], bi);
+                    val[sc.node.len() + j] = first(&sc.routes[j], bj);
                     table.push(sc.holds(c, &val));
                 }
             }
@@ -489,6 +602,7 @@ mod tests {
             grids: Vec::new(),
             routes: Vec::new(),
             apart: Vec::new(),
+            labels: RefCell::new(Vec::new()),
         };
         for _ in 0..n {
             let (w, h) = (300.0 + rnd().abs() / 3.0, 160.0 + rnd().abs() / 4.0);

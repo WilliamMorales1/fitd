@@ -102,5 +102,5 @@ pub fn plan(t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64, rot: f64) -> Plan {
     }
     let mut drawn: Vec<Drawn> = edges.iter().map(|&(p, v)| Drawn::new(p, v, EdgeStyle::Line, if t.depth[v] == 1 { 0.45 } else { 0.18 }, None)).collect();
     drawn.extend(t.links.iter().map(|l| Drawn::new(l.a, l.b, EdgeStyle::Link, 0.1, l.label.clone())));
-    Plan { order: t.order.clone(), cands, cons, edges: drawn, kx, ky, tol: 0.5 * step }
+    Plan { order: t.order.clone(), cands, cons, edges: drawn, kx, ky, tol: 0.5 * step, crowded: None }
 }

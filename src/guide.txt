@@ -1,0 +1,53 @@
+cmapc: .cmap text -> SVG/PNG/TikZ. The solver picks positions and the largest font that fits.
+
+Build:  cmapc FILE.cmap -o out.svg|out.png [--tikz out.tex] [--short]
+Stdin:  cmapc - -o out.svg <<'EOF' ... EOF
+Exit 0 = written. Errors and warnings go to stderr; --short prints one line each.
+
+Syntax: one statement per line, # comment. Only `node` lines and edges are needed.
+  node ID "Title" .style        # ID: letters, digits, _, inner -; title defaults to ID
+  | body line                   # detail text under the node above, any number
+  a -> b, c "label"             # hierarchy or flow edge (-- undirected)
+  a ..> b "label"               # cross link, dashed (.. undirected)
+  title "Text"
+  layout radial root=ID         # default: concept/mind map around a root
+  layout layered dir=down|right # flowchart, pipeline, DAG
+  page a0..a4|WxHmm|WxHpt portrait|landscape margin=1cm   # default a1 landscape
+  font 8pt..30pt wrap=16em      # range searched; one size fixes it, so give a range
+  theme light|dark|mono
+  style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle
+  group "Title" a, b, c color=#hex   # framed, nothing else inside; one group per node
+  require REL                   # must hold, or build fails with E0110
+  prefer REL weight=2           # soft, warns W0205 if unmet
+REL:
+  a left-of b gap=2em | right-of | above | below   # chains: a above b above c
+  a near b within=4em
+  a at top-left|top|top-right|left|center|right|bottom-left|bottom|bottom-right
+  align row(a, b) | column(a, b) | top(..) | bottom(..) | left(..) | right(..)
+Lengths need units: pt mm cm in em. Edge color: a -> b color=#hex or .style.
+
+Concept map:
+  title "Photosynthesis"
+  node sun "Light" .in
+  | photons absorbed by chlorophyll
+  node leaf "Leaf"
+  node sugar "Glucose"
+  style in color=#F9A825
+  leaf -> sun, sugar
+  sun ..> sugar "drives"
+
+Flowchart:
+  layout layered dir=right
+  page a4
+  node in "Input"
+  node check "Valid?"
+  node out "Save"
+  node err "Report error"
+  in -> check
+  check -> out "yes"
+  check -> err "no"
+  require out above err
+
+Fix loop: read the first error, edit that line, rebuild. `cmapc explain CODE` details a code.
+Unsat (E0110): drop or `prefer` one listed constraint, or use a larger page.
+No layout fits: lower the font floor, use a larger page, or follow the printed help.

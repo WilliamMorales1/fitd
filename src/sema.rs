@@ -179,6 +179,24 @@ fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
     }
 }
 
+type Styles = HashMap<String, (Span, Vec<Attr>, bool)>;
+
+/// apply_styles applies `.style` classes in order, marking each style used.
+fn apply_styles(s: &mut Sema, styles: &mut Styles, classes: &[Name], l: &mut Look) {
+    for c in classes {
+        match styles.get_mut(&c.text) {
+            Some(st) => {
+                st.2 = true;
+                look(&st.1, l, &mut Vec::new());
+            }
+            None => {
+                let names: Vec<&str> = styles.keys().map(String::as_str).collect();
+                s.diags.push(unknown("E0004", "style", c, &names));
+            }
+        }
+    }
+}
+
 fn bad_attr(a: &Attr, allowed: &[&str]) -> Diag {
     let d = Diag::error("E0005", format!("unknown attribute `{}`", a.key.text)).primary(a.key.span, "not valid on this statement");
     match suggest(&a.key.text, allowed.iter().copied()) {
@@ -198,7 +216,7 @@ fn place(s: &str) -> Option<Place> {
 
 pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     let mut s = Sema { diags: Vec::new(), ids: HashMap::new(), nodes: Vec::new(), decl: Vec::new() };
-    let mut styles: HashMap<String, (Span, Vec<Attr>, bool)> = HashMap::new();
+    let mut styles: Styles = HashMap::new();
 
     // Pass 1: declarations, so edges and constraints may name nodes declared further down.
     let mut last_node = None;
@@ -238,6 +256,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     let mut set = Settings::default();
     let (mut title, mut root, mut edges, mut constraints) = (None, None, Vec::new(), Vec::new());
     let mut seen_setting: HashMap<&str, Span> = HashMap::new();
+    // Span of the group statement each node belongs to.
+    let mut member: Vec<Option<Span>> = vec![None; s.nodes.len()];
     for st in stmts {
         let key = match &st.kind {
             StmtKind::Title(_) => "title",
@@ -347,18 +367,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     continue;
                 }
                 let mut l = Look::default();
-                for c in classes {
-                    match styles.get_mut(&c.text) {
-                        Some(st) => {
-                            st.2 = true;
-                            look(&st.1, &mut l, &mut Vec::new());
-                        }
-                        None => {
-                            let names: Vec<&str> = styles.keys().map(String::as_str).collect();
-                            s.diags.push(unknown("E0004", "style", c, &names));
-                        }
-                    }
-                }
+                apply_styles(&mut s, &mut styles, classes, &mut l);
                 look(attrs, &mut l, &mut s.diags);
                 let n = &mut s.nodes[v];
                 (n.color, n.fill, n.text, n.shape) = (l.color, l.fill, l.text, l.shape);
@@ -376,13 +385,49 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 }
                 set.theme_over = theme_overrides(attrs, &mut s.diags);
             }
-            StmtKind::Edge { from, link, to, label } => {
+            StmtKind::Edge { from, link, to, label, classes, attrs } => {
                 let kind = if *link { EdgeKind::Link } else { EdgeKind::Tree };
+                // An edge has a stroke only, so it takes just the color of its styles.
+                let mut l = Look::default();
+                apply_styles(&mut s, &mut styles, classes, &mut l);
+                for a in attrs {
+                    match a.key.text.as_str() {
+                        "color" => l.color = color(&a.value, &mut s.diags).or(l.color.take()),
+                        _ => s.diags.push(bad_attr(a, &["color"])),
+                    }
+                }
                 let a = s.node(from);
                 for t in to {
                     if let (Some(a), Some(b)) = (a, s.node(t)) {
-                        edges.push(Edge { a, b, kind, label: label.clone(), span: from.span.to(t.span) });
+                        edges.push(Edge { a, b, kind, label: label.clone(), color: l.color.clone(), span: from.span.to(t.span) });
                     }
+                }
+            }
+            StmtKind::Group { title, items, attrs } => {
+                let mut col = None;
+                for a in attrs {
+                    match a.key.text.as_str() {
+                        "color" => col = color(&a.value, &mut s.diags).or(col),
+                        _ => s.diags.push(bad_attr(a, &["color"])),
+                    }
+                }
+                let ids: Vec<Option<usize>> = items.iter().map(|n| s.node(n)).collect();
+                let Some(ids) = ids.into_iter().collect::<Option<Vec<_>>>() else { continue };
+                if let Some(dup) = ids.iter().enumerate().find(|(i, v)| ids[..*i].contains(v)).map(|(_, &v)| v) {
+                    s.diags.push(Diag::error("E0007", format!("group names `{}` twice", s.nodes[dup].id)).primary(st.span, "listed twice"));
+                    continue;
+                }
+                let mut ok = true;
+                for (k, &v) in ids.iter().enumerate() {
+                    if let Some(prev) = member[v] {
+                        let d = Diag::error("E0010", format!("`{}` is already in a group", s.nodes[v].id)).primary(items[k].span, "second group");
+                        s.diags.push(d.secondary(prev, "first group").help("groups cannot share or nest nodes"));
+                        ok = false;
+                    }
+                    member[v] = Some(st.span);
+                }
+                if ok {
+                    constraints.push(Constraint { rel: Relation::Group { items: ids, title: title.clone(), color: col, title_em: 0.0 }, hard: true, weight: 1, span: st.span });
                 }
             }
             StmtKind::Constraint { hard, rel, attrs } => {
@@ -656,6 +701,18 @@ mod tests {
         assert_eq!(codes("node a\ntheme palette=\"#f00 nope\"\n"), vec!["E0006"]);
         assert_eq!(codes("node a\ntheme bg=#000\n"), vec!["E0005"]);
         assert_eq!(codes("node a fill=#12345\n"), vec!["E0006"]);
+    }
+
+    #[test]
+    fn edge_colors_and_groups() {
+        let (g, d) = run("style hot color=#f00 shape=circle\nnode a\nnode b\nnode c\na -> b .hot\na -> c color=#00f\ngroup \"G\" b, c color=#0f0\n");
+        assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        assert_eq!((g.edges[0].color.as_deref(), g.edges[1].color.as_deref()), (Some("#f00"), Some("#00f")));
+        assert!(matches!(&g.constraints[0], Constraint { rel: Relation::Group { items, title: Some(_), color: Some(_), .. }, hard: true, .. } if items == &[1, 2]));
+        assert_eq!(codes("node a\nnode b\na -> b width=2pt\n"), vec!["E0005"]);
+        assert_eq!(codes("node a\nnode b\ngroup a, b\ngroup b\n"), vec!["E0010"]);
+        assert_eq!(codes("node a\ngroup a, a\n"), vec!["E0007"]);
+        assert_eq!(codes("node a\ngroup a, ghost\n"), vec!["E0001"]);
     }
 
     #[test]

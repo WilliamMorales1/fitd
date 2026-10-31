@@ -6,14 +6,14 @@
 
 use crate::diag::Diag;
 use crate::geom::{segment_hits_rect, segments_cross};
-use crate::graph::{Graph, LayoutKind};
+use crate::graph::{Graph, LayoutKind, Relation};
 use crate::geom::Rect;
-use crate::layout::{Config, Drawn, EdgeStyle, Layout, Shape, line_height, paths_meet, relation_holds};
+use crate::layout::{Config, Drawn, EdgeStyle, Layout, Shape, frame, frame_clear, line_height, paths_meet, relation_holds};
 use crate::metrics::Fonts;
 
 pub const EXPLAIN: &[(&str, &str)] = &[
     ("E0001", "An edge, constraint, or `root` names a node id that is never declared with `node`."),
-    ("E0002", "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered`, `page`, `font`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"]`, `A ..> B`, `require REL`, `prefer REL [weight=N]`."),
+    ("E0002", "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `require REL`, `prefer REL [weight=N]`."),
     ("E0003", "Two `node` (or `style`) statements declare the same name."),
     ("E0004", "A node uses `.name` but no `style name` is declared."),
     ("E0005", "An attribute is not valid on this statement, such as `weight=` on `require`."),
@@ -21,13 +21,14 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ("E0007", "A constraint names the same node twice, or an alignment lists fewer than two nodes."),
     ("E0008", "Hard constraints contradict each other on one axis: orderings (`left-of`, `above`) form a cycle, possibly through alignments. Found before search; no layout can satisfy them."),
     ("E0009", "An unknown keyword value: layout, relation, alignment side, place, shape, or page flag."),
+    ("E0010", "A node is listed in two `group` statements. Groups cannot share or nest nodes, since each frame must hold its own members and nothing else."),
     ("E0101", "Two nodes claim overlapping regions. Each node owns its box exclusively, like a mutable borrow."),
     ("E0102", "An edge passes through a node that is neither of its endpoints, so a reader cannot tell where it goes."),
     ("E0103", "Two tree edges cross. Radial trees must stay planar so each branch reads as one direction."),
     ("E0104", "A node extends past the page margin."),
     ("E0105", "A text line is wider than the box (or circle) that owns it."),
     ("E0106", "The body font is below --min-font, so the map is not readable at the target size."),
-    ("E0108", "The finished layout breaks a `require` constraint. The solver should never produce this; it indicates a solver bug."),
+    ("E0108", "The finished layout breaks a `require` constraint or a `group` (its frame leaves the page, holds a node that is not a member, or meets another frame). The solver should never produce this; it indicates a solver bug."),
     ("E0109", "An edge label is covered by a node, overlaps another label, or is clipped by the page. The solver should never produce this."),
     ("E0110", "Even at --min-font, the listed `require` constraints cannot all hold together on this page. The set is minimal: drop any one and the rest fit (QuickXplain over the search budget)."),
     ("E0107", "A child sits closer to the center than its parent, breaking the general-to-specific direction."),
@@ -145,6 +146,17 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
         }
     }
     let rect = |v: usize| lay.rect(v);
+    let groups: Vec<(usize, Rect)> = g.constraints.iter().enumerate().filter(|(_, c)| matches!(c.rel, Relation::Group { .. })).map(|(i, c)| (i, frame(&c.rel, &rect, lay.body))).collect();
+    for (k, &(ci, f)) in groups.iter().enumerate() {
+        let c = &g.constraints[ci];
+        let items = c.rel.nodes();
+        if let Some(u) = (0..n).find(|&u| !items.contains(&u) && !frame_clear(&f, &lay.rect(u), lay.body)) {
+            d.push(Diag::error("E0108", format!("group frame holds {}, which is not a member", id(u))).primary(c.span, "violated by the layout"));
+        }
+        if let Some(&(cj, _)) = groups[k + 1..].iter().find(|(_, h)| !frame_clear(&f, h, lay.body)) {
+            d.push(Diag::error("E0108", "group frames meet").primary(c.span, "this frame").secondary(g.constraints[cj].span, "meets this one"));
+        }
+    }
     for c in &g.constraints {
         if !relation_holds(&c.rel, &rect, lay.body, &page, lay.tol) {
             d.push(if c.hard {
@@ -155,4 +167,35 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
         }
     }
     d
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EXPLAIN;
+
+    #[test]
+    fn every_code_has_an_explain_page() {
+        let sources = [include_str!("diag.rs"), include_str!("lex.rs"), include_str!("parse.rs"), include_str!("sema.rs"), include_str!("check.rs"), include_str!("main.rs")];
+        let mut seen = 0;
+        for src in sources {
+            for (i, _) in src.match_indices('"') {
+                let code = src.get(i + 1..i + 6).unwrap_or("");
+                if src.get(i + 6..i + 7) == Some("\"") && (code.starts_with('E') || code.starts_with('W')) && code[1..].chars().all(|c| c.is_ascii_digit()) {
+                    seen += 1;
+                    assert!(EXPLAIN.iter().any(|(c, _)| *c == code), "{code} has no `cmapc explain` page");
+                }
+            }
+        }
+        assert!(seen > 20, "found only {seen} codes");
+        let lang = include_str!("../docs/LANGUAGE.md");
+        for (code, _) in EXPLAIN {
+            let n: u32 = code[1..].parse().unwrap();
+            // The table lists some codes as ranges, like `E0101-E0107`.
+            let listed = lang.contains(code) || lang.match_indices(&code[..3]).any(|(i, _)| {
+                let range = &lang[i..(i + 11).min(lang.len())];
+                range.len() == 11 && &range[5..6] == "-" && range[1..5].parse::<u32>().is_ok_and(|lo| lo <= n) && range[7..11].parse::<u32>().is_ok_and(|hi| n <= hi)
+            });
+            assert!(listed, "{code} missing from docs/LANGUAGE.md");
+        }
+    }
 }

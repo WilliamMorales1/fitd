@@ -34,6 +34,8 @@ pub struct Edge {
     pub b: usize,
     pub kind: EdgeKind,
     pub label: Option<String>,
+    /// Stroke color; None draws the layout's default (branch accent, theme edge or link).
+    pub color: Option<String>,
     pub span: Span,
 }
 
@@ -85,13 +87,17 @@ pub enum Relation {
     Near { a: usize, b: usize, within: Length },
     Align { side: Side, items: Vec<usize> },
     At { a: usize, place: Place },
+    /// A frame, with the title on top, around these nodes and no others, on the page.
+    /// `title_em` is the title's width in ems of the body font, measured once fonts are
+    /// loaded (`layout::measure_groups`).
+    Group { items: Vec<usize>, title: Option<String>, color: Option<String>, title_em: f64 },
 }
 
 impl Relation {
     pub fn nodes(&self) -> Vec<usize> {
         match self {
             Relation::LeftOf { a, b, .. } | Relation::Above { a, b, .. } | Relation::Near { a, b, .. } => vec![*a, *b],
-            Relation::Align { items, .. } => items.clone(),
+            Relation::Align { items, .. } | Relation::Group { items, .. } => items.clone(),
             Relation::At { a, .. } => vec![*a],
         }
     }

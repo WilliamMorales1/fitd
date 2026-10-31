@@ -10,7 +10,7 @@
 
 use crate::geom::Rect;
 use crate::graph::{Dir, EdgeKind, Graph, Relation, Side};
-use crate::layout::{Boxed, Cand, Config, Drawn, EdgeStyle, Kind, Plan};
+use crate::layout::{Boxed, Cand, Config, Drawn, EdgeStyle, FRAME_PAD, Kind, Plan, TITLE_BAND};
 
 /// back_edges returns the indices of tree edges that close a directed cycle in DFS order.
 fn back_edges(n: usize, edges: &[(usize, usize)]) -> Vec<bool> {
@@ -137,9 +137,16 @@ fn merged(g: &Graph, dir: Dir) -> Vec<usize> {
 pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan {
     let n = boxes.len();
     let page = cfg.page();
+    // Layers fill the page along the flow, so leave room at both ends for group frames.
+    let framed = g.constraints.iter().any(|c| matches!(c.rel, Relation::Group { .. }));
+    let (lead, trail) = match (framed, dir) {
+        (false, _) => (0.0, 0.0),
+        (true, Dir::Down) => ((FRAME_PAD + TITLE_BAND) * b, FRAME_PAD * b),
+        (true, Dir::Right) => (FRAME_PAD * b, FRAME_PAD * b),
+    };
     let (main_len, cross_len) = match dir {
-        Dir::Down => (page.y1 - page.y0, page.x1 - page.x0),
-        Dir::Right => (page.x1 - page.x0, page.y1 - page.y0),
+        Dir::Down => (page.y1 - page.y0 - lead - trail, page.x1 - page.x0),
+        Dir::Right => (page.x1 - page.x0 - lead - trail, page.y1 - page.y0),
     };
     // (main, cross) extent of each box: main runs along the flow.
     let size = |v: usize| match dir {
@@ -175,9 +182,10 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     let thick: Vec<f64> = rows.iter().map(|r| r.iter().map(|&v| size(v).0).fold(0.0, f64::max)).collect();
     let used: f64 = thick.iter().sum();
     let gaps = rows.len().saturating_sub(1) as f64;
-    let gap = if gaps > 0.0 { ((main_len - used) / gaps).min(6.0 * b) } else { 0.0 };
+    // A hair under an exact fill, so rounding never pushes the last layer off the page.
+    let gap = if gaps > 0.0 { ((main_len - used) / gaps - 1e-6).min(6.0 * b) } else { 0.0 };
     let feasible = gaps == 0.0 || gap >= 2.0 * b;
-    let mut m = (main_len - used - gap * gaps).max(0.0) / 2.0;
+    let mut m = lead + (main_len - used - gap * gaps).max(0.0) / 2.0;
     let mut center = Vec::new();
     for t in &thick {
         center.push(m + t / 2.0);
@@ -244,8 +252,13 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Link) {
         edges.push(Drawn::new(e.a, e.b, EdgeStyle::Link, 0.1, e.label.clone()));
     }
-    let order: Vec<usize> = rows.concat();
-    Plan { order, cands, cons, edges, kx: 1.0, ky: 1.0, tol: 0.5 * step }
+    // Group members go first: once a frame is known, forward checking keeps everyone else off
+    // it, instead of a non-member taking a spot that a later member's frame needs.
+    let member = |v: usize| g.constraints.iter().any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)));
+    let (mut order, rest): (Vec<usize>, Vec<usize>) = rows.concat().into_iter().partition(|&v| member(v));
+    order.extend(rest);
+    let crowded = (!feasible).then_some((rows.len(), used + 2.0 * b * gaps, main_len));
+    Plan { order, cands, cons, edges, kx: 1.0, ky: 1.0, tol: 0.5 * step, crowded }
 }
 
 #[cfg(test)]

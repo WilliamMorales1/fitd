@@ -14,7 +14,6 @@ use crate::quality::{self, Score};
 use crate::tree::Tree;
 use crate::{layered, radial};
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod explain;
@@ -26,15 +25,24 @@ mod scene;
 
 use explain::quickxplain;
 use measure::measure_all;
-use path::{BOWS, SPOTS, inside_box};
+use path::{BOWS, SPOTS, detours, inside_box, trim};
 use polish::{POLISH_MOVES, SOFT_PENALTY, polish};
-use relations::aligned;
+use relations::{FRAME_CLEAR, aligned};
 use scene::{Scene, build};
 
 pub use measure::{label_size, line_height};
 pub use path::{curve, label_rect, paths_meet};
 pub use polish::Readable;
-pub use relations::relation_holds;
+pub use relations::{FRAME_PAD, TITLE_BAND, frame, frame_clear, relation_holds};
+
+/// measure_groups sets each group's title width, which frames need, from the loaded fonts.
+pub fn measure_groups(g: &mut Graph, fonts: &Fonts) {
+    for c in &mut g.constraints {
+        if let Relation::Group { title: Some(t), title_em, .. } = &mut c.rel {
+            *title_em = label_size(fonts, t, 1.0).0;
+        }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct Config {
@@ -116,9 +124,10 @@ pub struct Drawn {
     /// Stroke width in ems of the body font.
     pub width: f64,
     pub label: Option<String>,
-    /// Bend of a link (see `curve`) and the label's position along the path, 0 to 1. The
-    /// solver picks both.
+    /// Bend of a link (see `curve`), or instead a detour around boxes (untrimmed), and the
+    /// label's position along the path, 0 to 1. The solver picks them.
     pub bow: f64,
+    pub via: Option<Vec<P>>,
     pub t: f64,
     /// Label box size in points, set once the font is known.
     pub label_size: (f64, f64),
@@ -126,7 +135,7 @@ pub struct Drawn {
 
 impl Drawn {
     pub fn new(a: usize, b: usize, style: EdgeStyle, width: f64, label: Option<String>) -> Drawn {
-        Drawn { a, b, style, width, label, bow: 0.0, t: 0.5, label_size: (0.0, 0.0) }
+        Drawn { a, b, style, width, label, bow: 0.0, via: None, t: 0.5, label_size: (0.0, 0.0) }
     }
 }
 
@@ -164,7 +173,10 @@ impl Layout {
 
     /// path is an edge's drawn route with its chosen bend, trimmed to the node borders.
     pub fn path(&self, e: &Drawn) -> Vec<P> {
-        curve(self.pos[e.a], &|p| self.inside(e.a, p), self.pos[e.b], &|p| self.inside(e.b, p), e.bow)
+        match &e.via {
+            Some(way) => trim(way, &|p| self.inside(e.a, p), &|p| self.inside(e.b, p)),
+            None => curve(self.pos[e.a], &|p| self.inside(e.a, p), self.pos[e.b], &|p| self.inside(e.b, p), e.bow),
+        }
     }
 
     pub fn label_rect(&self, e: &Drawn) -> Option<Rect> {
@@ -204,6 +216,10 @@ pub enum Kind {
     LinkApart(usize, usize),
     /// A dashed link stays out of node `1` (soft).
     LinkClear(usize, usize),
+    /// Group constraint `0`'s frame keeps clear of node `1`, which is not a member.
+    Outside(usize, usize),
+    /// The frames of two group constraints keep clear of each other.
+    Frames(usize, usize),
 }
 
 /// Plan is what a strategy hands to the core: candidates per node and constraints over nodes.
@@ -217,6 +233,9 @@ pub struct Plan {
     pub kx: f64,
     pub ky: f64,
     pub tol: f64,
+    /// Layered only, when the layers do not fit along the flow: (layers, length they need,
+    /// length the page gives), in points.
+    pub crowded: Option<(usize, f64, f64)>,
 }
 
 /// Which user constraints an attempt includes.
@@ -250,32 +269,32 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         (LayoutKind::Radial, Users::Hard(_)) => ROTATIONS.to_vec(),
         (LayoutKind::Layered(_), Users::Hard(_)) => vec![0.0],
     };
-    let built: Vec<_> = rots.iter().map(|&rot| build(g, t, fonts, cfg, b, users, kind, &boxes, rot)).collect();
     let optimizing = matches!(users, Users::All(_));
     let routing = matches!(users, Users::Routes(_));
     // Once a plan solves, the plans after it in list order cannot win, so they stop.
-    let stop: Vec<AtomicBool> = built.iter().map(|_| AtomicBool::new(false)).collect();
-    let runs: Vec<(Outcome, u64, csp::Stats)> = std::thread::scope(|s| {
-        let stop = &stop;
-        let handles: Vec<_> = built
+    let stop: Vec<AtomicBool> = rots.iter().map(|_| AtomicBool::new(false)).collect();
+    let (built, runs): (Vec<_>, Vec<(Outcome, u64, csp::Stats)>) = std::thread::scope(|s| {
+        let (stop, boxes) = (&stop, &boxes);
+        let handles: Vec<_> = rots
             .iter()
             .enumerate()
-            .map(|(i, (sc, ..))| {
+            .map(|(i, &rot)| {
                 s.spawn(move || {
+                    let built = build(g, t, fonts, cfg, b, users, kind, boxes, rot);
                     let run = if optimizing || routing {
-                        csp::optimize(sc, cfg.opt_budget, &stop[i])
+                        csp::optimize(&built.0, cfg.opt_budget, &stop[i])
                     } else {
-                        let (out, st) = csp::solve(sc, cfg.budget, &stop[i]);
+                        let (out, st) = csp::solve(&built.0, cfg.budget, &stop[i]);
                         (out, 0, st)
                     };
                     if matches!(run.0, Outcome::Sat(_)) {
                         stop[i + 1..].iter().for_each(|f| f.store(true, Ordering::Relaxed));
                     }
-                    run
+                    (built, run)
                 })
             })
             .collect();
-        handles.into_iter().map(|h| h.join().expect("solver thread")).collect()
+        handles.into_iter().map(|h| h.join().expect("solver thread")).unzip()
     });
     // Plans after the first that solves were cancelled at a timing-dependent point, so their
     // work is left out of the stats to keep the build log reproducible.
@@ -313,14 +332,21 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
     }
     let base = sc.node.len();
     for (i, r) in sc.routes.iter().enumerate() {
-        (edges[r.edge].bow, edges[r.edge].t) = r.opts[val[base + i] as usize];
+        let (k, t) = r.opts[val[base + i] as usize];
+        let e = &mut edges[r.edge];
+        e.t = t;
+        match k.checked_sub(r.bows.len()) {
+            Some(j) => e.via = Some(r.vias[j].clone()),
+            None => (e.bow, e.via) = (r.bows[k], None),
+        }
     }
     Some(Layout { kind, body: b, boxes, pos, edges, kx: plan.0, ky: plan.1, tol: plan.2, rot: rots[win], tradeoff: Vec::new(), stats: *stats })
 }
 
 pub enum Failure {
-    /// Nothing fits even without user constraints.
-    NoRoom,
+    /// Nothing fits even without user constraints; for a layered layout whose layers are too
+    /// many for the page, how crowded the flow is (see `Plan::crowded`).
+    NoRoom(Option<(usize, f64, f64)>),
     /// These hard user constraints cannot all hold at the minimum font; removing any one of
     /// them makes the rest satisfiable (within the search budget).
     Core(Vec<usize>),
@@ -351,9 +377,10 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
     let probe = |b: f64, set: &[usize], budget: u64, stats: &mut Stats| attempt(g, t, fonts, &Config { budget, ..*cfg }, b, Users::Hard(set), stats);
 
     // Near the largest font that fits, a probe either succeeds quickly or runs until the
-    // budget is gone. So once a probe succeeds, later probes get twice its cost.
+    // budget is gone. So once a probe succeeds, later probes get twice its cost. A draft
+    // gives up sooner on the first, usually too large, fonts.
     let (mut lo, mut hi) = (cfg.min_font, cfg.max_font);
-    let (mut found, mut next, mut cap) = (None, hi, cfg.budget / 4);
+    let (mut found, mut next, mut cap) = (None, hi, cfg.budget / if cfg.draft { 20 } else { 4 });
     loop {
         match probe(next, &hard, cap, &mut stats) {
             Some(l) => {
@@ -361,7 +388,17 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
                 lo = next;
                 found = Some(l);
             }
-            None => hi = next,
+            None => {
+                hi = next;
+                // Settle whether anything fits before bisecting further: on an unsatisfiable
+                // input every probe down to the floor would otherwise run its whole cap.
+                if found.is_none() {
+                    found = if next > lo || cap < cfg.budget { probe(lo, &hard, cfg.budget, &mut stats) } else { None };
+                    if found.is_none() {
+                        break;
+                    }
+                }
+            }
         }
         // The trade-off below steps down 5% at a time, so finer precision here is wasted.
         if hi - lo <= if cfg.draft { 0.1 } else { 0.03 } * lo {
@@ -369,13 +406,19 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
         }
         next = (lo + hi) / 2.0;
     }
-    let mut best = match found.or_else(|| probe(cfg.min_font, &hard, cfg.budget, &mut stats)) {
+    let mut best = match found {
         Some(l) => l,
         None => {
             if hard.is_empty() || probe(cfg.min_font, &[], cfg.budget, &mut stats).is_none() {
-                return Err(Failure::NoRoom);
+                let crowded = match g.settings.layout {
+                    Some(LayoutKind::Layered(dir)) => layered::plan(g, &measure_all(g, t, fonts, cfg, cfg.min_font), cfg, cfg.min_font, dir).crowded,
+                    _ => None,
+                };
+                return Err(Failure::NoRoom(crowded));
             }
-            let mut feasible = |set: &[usize]| probe(cfg.min_font, set, cfg.budget, &mut stats).is_some();
+            // The full set already failed on the whole budget. Subsets that fit usually solve
+            // fast, so core probes get the first probe's cap; a core is minimal within it.
+            let mut feasible = |set: &[usize]| probe(cfg.min_font, set, cfg.budget / 4, &mut stats).is_some();
             let mut core = quickxplain(&mut feasible, &[], false, &hard);
             core.sort();
             return Err(Failure::Core(core));

@@ -1,8 +1,8 @@
 //! SVG, PNG and TikZ backends. All draw from the same solved geometry; none re-flows text.
 
-use crate::graph::{Graph, LayoutKind};
+use crate::graph::{Graph, LayoutKind, Relation};
 use crate::geom::{P, Rect};
-use crate::layout::{Drawn, EdgeStyle, Layout, Role, Shape, TextLine};
+use crate::layout::{Drawn, EdgeStyle, FRAME_PAD, Layout, Role, Shape, TITLE_BAND, TextLine, frame};
 use crate::metrics::{Fonts, Script};
 use crate::theme::{self, Theme};
 use crate::tree::Tree;
@@ -75,8 +75,33 @@ fn edge_points(lay: &Layout, e: &Drawn) -> Vec<P> {
     }
 }
 
-/// bounds is the smallest rectangle, in layout coordinates, holding every node, edge and label.
-pub fn bounds(lay: &Layout) -> Rect {
+/// stroke is the color the source gave an edge, if any. Edges are matched by endpoints, the
+/// same direction first, since the radial tree may orient an edge either way.
+fn stroke<'a>(g: &'a Graph, e: &Drawn) -> Option<&'a str> {
+    let find = |a: usize, b: usize| g.edges.iter().find(|x| (x.a, x.b) == (a, b));
+    find(e.a, e.b).or_else(|| find(e.b, e.a)).and_then(|x| x.color.as_deref())
+}
+
+/// Group is a frame to draw: its border, title, and color.
+struct Group<'a> {
+    rect: Rect,
+    title: Option<&'a str>,
+    color: Option<&'a str>,
+}
+
+fn groups<'a>(g: &'a Graph, lay: &Layout) -> Vec<Group<'a>> {
+    g.constraints
+        .iter()
+        .filter_map(|c| match &c.rel {
+            Relation::Group { title, color, .. } => Some(Group { rect: frame(&c.rel, &|v| lay.rect(v), lay.body), title: title.as_deref(), color: color.as_deref() }),
+            _ => None,
+        })
+        .collect()
+}
+
+/// bounds is the smallest rectangle, in layout coordinates, holding every node, edge, label,
+/// and group frame.
+pub fn bounds(g: &Graph, lay: &Layout) -> Rect {
     let mut r = Rect { x0: f64::MAX, y0: f64::MAX, x1: f64::MIN, y1: f64::MIN };
     let mut add = |b: Rect| r = Rect { x0: r.x0.min(b.x0), y0: r.y0.min(b.y0), x1: r.x1.max(b.x1), y1: r.y1.max(b.y1) };
     for (v, bx) in lay.boxes.iter().enumerate() {
@@ -89,6 +114,9 @@ pub fn bounds(lay: &Layout) -> Rect {
         if let Some(l) = lay.label_rect(e) {
             add(l);
         }
+    }
+    for f in groups(g, lay) {
+        add(f.rect);
     }
     r
 }
@@ -129,24 +157,43 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
         let _ = writeln!(o, "<title>{}</title>", xml(title));
     }
     o.push_str("<defs>");
-    for (id, c) in [("arr", &th.edge), ("lnk", &th.link)] {
+    // Arrowheads take their edge's color, so each edge color gets its own marker.
+    let mut markers = vec![("arr".to_string(), th.edge.as_str()), ("lnk".to_string(), th.link.as_str())];
+    for e in lay.edges.iter().filter(|e| e.style != EdgeStyle::Line) {
+        if let Some(c) = stroke(g, e).filter(|c| !markers.iter().any(|m| m.1 == *c)) {
+            markers.push((format!("m{}", theme::rgb(c)), c));
+        }
+    }
+    for (id, c) in &markers {
         let _ = write!(o, r#"<marker id="{id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{c}"/></marker>"#);
     }
     o.push_str("</defs>\n");
     let _ = writeln!(o, r#"<rect width="{w}" height="{h}" fill="{}"/>"#, th.background);
+    for f in groups(g, lay) {
+        let ((x0, y0), (x1, y1)) = (tx((f.rect.x0, f.rect.y1)), tx((f.rect.x1, f.rect.y0)));
+        let c = f.color.unwrap_or(&th.edge);
+        let _ = writeln!(o, r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{c}" fill-opacity="{:.2}" stroke="{c}" stroke-width="{:.2}"/>"#, x1 - x0, y1 - y0, 0.5 * b, th.tint / 2.0, 0.08 * b);
+        if let Some(t) = f.title {
+            let (x, y) = (x0 + FRAME_PAD * b, y0 + (TITLE_BAND / 2.0 + 0.3) * b);
+            let _ = writeln!(o, r#"<text x="{x:.1}" y="{y:.1}" font-size="{:.2}" font-family="{}" font-weight="bold" fill="{}">{}</text>"#, 0.8 * b, xml(&fonts.regular[0].family), f.color.unwrap_or(&th.label), xml(t));
+        }
+    }
     for e in &lay.edges {
         let pts = edge_points(lay, e);
         let d: Vec<String> = pts.iter().map(|&p| tx(p)).map(|(x, y)| format!("{x:.1},{y:.1}")).collect();
         let sw = e.width * b;
+        let marker = |c: &str| markers.iter().find(|m| m.1 == c).map_or("arr", |m| m.0.as_str()).to_string();
         match e.style {
             EdgeStyle::Line => {
-                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{}" stroke-opacity="0.7" stroke-width="{sw:.2}"/>"#, d.join(" "), paint[e.b].accent);
+                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{}" stroke-opacity="0.7" stroke-width="{sw:.2}"/>"#, d.join(" "), stroke(g, e).unwrap_or(&paint[e.b].accent));
             }
             EdgeStyle::Arrow => {
-                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{}" stroke-width="{sw:.2}" marker-end="url(#arr)"/>"#, d.join(" "), th.edge);
+                let c = stroke(g, e).unwrap_or(&th.edge);
+                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{c}" stroke-width="{sw:.2}" marker-end="url(#{})"/>"#, d.join(" "), marker(c));
             }
             EdgeStyle::Link => {
-                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{}" stroke-width="{sw:.2}" stroke-dasharray="{:.1} {:.1}" marker-end="url(#lnk)"/>"#, d.join(" "), th.link, 0.5 * b, 0.3 * b);
+                let c = stroke(g, e).unwrap_or(&th.link);
+                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{c}" stroke-width="{sw:.2}" stroke-dasharray="{:.1} {:.1}" marker-end="url(#{})"/>"#, d.join(" "), 0.5 * b, 0.3 * b, marker(c));
             }
         }
     }
@@ -268,7 +315,9 @@ pub fn tikz(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64, th
     }
     o += "\\usepackage{tikz}\n\\usetikzlibrary{arrows.meta}\n";
     let mut defined = std::collections::BTreeSet::new();
-    let used = [&th.background, &th.text, &th.edge, &th.link, &th.label].into_iter().chain(paint.iter().flat_map(|p| [&p.accent, &p.fill, &p.text]));
+    let frames = groups(g, lay);
+    let extra: Vec<&str> = lay.edges.iter().filter_map(|e| stroke(g, e)).chain(frames.iter().filter_map(|f| f.color)).collect();
+    let used = [&th.background, &th.text, &th.edge, &th.link, &th.label].into_iter().map(String::as_str).chain(paint.iter().flat_map(|p| [p.accent.as_str(), p.fill.as_str(), p.text.as_str()])).chain(extra);
     for c in used {
         if defined.insert(theme::rgb(c)) {
             let _ = writeln!(o, "\\definecolor{{{}}}{{HTML}}{{{}}}", cname(c), theme::rgb(c));
@@ -276,14 +325,22 @@ pub fn tikz(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64, th
     }
     o += "\\begin{document}\n\\begin{tikzpicture}[x=1bp,y=1bp]\n";
     let _ = writeln!(o, "\\fill[{}] ({:.1},{:.1}) rectangle ({:.1},{:.1});", cname(&th.background), -w / 2.0, -h / 2.0, w / 2.0, h / 2.0);
+    for f in &frames {
+        let (r, c) = (f.rect, cname(f.color.unwrap_or(&th.edge)));
+        let _ = writeln!(o, "\\filldraw[fill={c}, fill opacity={:.2}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});", th.tint / 2.0, 0.08 * b, 0.5 * b, r.x0, r.y0, r.x1, r.y1);
+        if let Some(t) = f.title {
+            let _ = writeln!(o, "\\node[anchor=base west, inner sep=0bp, text={}] at ({:.1},{:.1}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont\\bfseries {}}};", cname(f.color.unwrap_or(&th.label)), r.x0 + FRAME_PAD * b, r.y1 - (TITLE_BAND / 2.0 + 0.3) * b, tex(t), s = 0.8 * b);
+        }
+    }
     for e in &lay.edges {
         let raw = edge_points(lay, e);
         let pts: Vec<String> = raw.iter().map(|p| format!("({:.1},{:.1})", p.0, p.1)).collect();
         let lw = e.width * b;
+        let col = |default: &str| cname(stroke(g, e).unwrap_or(default));
         let style = match e.style {
-            EdgeStyle::Line => format!("{}, opacity=0.7", cname(&paint[e.b].accent)),
-            EdgeStyle::Arrow => format!("{}, -{{Stealth}}", cname(&th.edge)),
-            EdgeStyle::Link => format!("{}, dashed, -{{Stealth}}", cname(&th.link)),
+            EdgeStyle::Line => format!("{}, opacity=0.7", col(&paint[e.b].accent)),
+            EdgeStyle::Arrow => format!("{}, -{{Stealth}}", col(&th.edge)),
+            EdgeStyle::Link => format!("{}, dashed, -{{Stealth}}", col(&th.link)),
         };
         let _ = writeln!(o, "\\draw[{style}, line width={lw:.2}bp] {};", pts.join(" -- "));
     }

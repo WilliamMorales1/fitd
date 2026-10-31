@@ -31,9 +31,109 @@ pub fn curve(pa: P, in_a: &dyn Fn(P) -> bool, pb: P, in_b: &dyn Fn(P) -> bool, b
             (u * pa.0 + w * c.0 + t * t * pb.0, u * pa.1 + w * c.1 + t * t * pb.1)
         })
         .collect();
+    trim(&pts, in_a, in_b)
+}
+
+/// trim keeps the part of a path from where it leaves box `a` to where it enters box `b`.
+pub fn trim(pts: &[P], in_a: &dyn Fn(P) -> bool, in_b: &dyn Fn(P) -> bool) -> Vec<P> {
     let s = pts.iter().position(|&p| !in_a(p)).unwrap_or(0);
     let e = pts.iter().rposition(|&p| !in_b(p)).unwrap_or(pts.len() - 1).max(s);
     pts[s..=e].to_vec()
+}
+
+/// detours are paths from `pa` to `pb` around `boxes`, kept `clear` away from each and inside
+/// `page`: the shortest route over the corners of the grown boxes (a visibility graph), drawn
+/// smooth, and the same route with sharp corners in case smoothing cuts into a box. Empty when
+/// the straight line is already clear or no route exists. Paths are untrimmed, about 60 points.
+pub fn detours(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Vec<Vec<P>> {
+    let grown: Vec<Rect> = boxes.iter().map(|r| r.inflate(clear)).collect();
+    // Slightly smaller than `grown`, so a segment along a grown box's side still counts as clear.
+    let hard: Vec<Rect> = boxes.iter().map(|r| r.inflate(0.98 * clear)).collect();
+    let seen = |p: P, q: P| {
+        let bb = Rect { x0: p.0.min(q.0), y0: p.1.min(q.1), x1: p.0.max(q.0), y1: p.1.max(q.1) };
+        hard.iter().all(|r| !r.intersects(&bb.inflate(1e-9)) || !segment_hits_rect(p, q, r))
+    };
+    if seen(pa, pb) {
+        return Vec::new();
+    }
+    let mut pts = vec![pa, pb];
+    for r in &grown {
+        for c in [(r.x0, r.y0), (r.x1, r.y0), (r.x0, r.y1), (r.x1, r.y1)] {
+            if page.contains(c) && hard.iter().all(|h| !(h.x0 < c.0 && c.0 < h.x1 && h.y0 < c.1 && c.1 < h.y1)) {
+                pts.push(c);
+            }
+        }
+    }
+    let Some(way) = shortest(&pts, &seen) else { return Vec::new() };
+    let way: Vec<P> = way.iter().map(|&i| pts[i]).collect();
+    vec![smooth(&way, 60), densify(&way, 60)]
+}
+
+/// shortest is Dijkstra from point 0 to point 1 over the legs `seen` allows. Legs are tested
+/// for visibility only when relaxed.
+fn shortest(pts: &[P], seen: &dyn Fn(P, P) -> bool) -> Option<Vec<usize>> {
+    let n = pts.len();
+    let (mut dist, mut prev, mut done) = (vec![f64::INFINITY; n], vec![usize::MAX; n], vec![false; n]);
+    dist[0] = 0.0;
+    loop {
+        let u = (0..n).filter(|&u| !done[u] && dist[u].is_finite()).min_by(|&a, &b| dist[a].total_cmp(&dist[b]))?;
+        if u == 1 {
+            break;
+        }
+        done[u] = true;
+        for v in 0..n {
+            let d = dist[u] + (pts[v].0 - pts[u].0).hypot(pts[v].1 - pts[u].1);
+            if !done[v] && d < dist[v] && seen(pts[u], pts[v]) {
+                (dist[v], prev[v]) = (d, u);
+            }
+        }
+    }
+    let mut way = vec![1];
+    while prev[*way.last().unwrap()] != usize::MAX {
+        way.push(prev[*way.last().unwrap()]);
+    }
+    way.reverse();
+    Some(way)
+}
+
+/// densify samples a polyline at about `n` evenly spaced points.
+fn densify(way: &[P], n: usize) -> Vec<P> {
+    let len: f64 = way.windows(2).map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1)).sum();
+    let mut out = vec![way[0]];
+    for w in way.windows(2) {
+        let k = (((w[1].0 - w[0].0).hypot(w[1].1 - w[0].1) / len * n as f64).ceil() as usize).max(1);
+        out.extend((1..=k).map(|i| {
+            let t = i as f64 / k as f64;
+            (w[0].0 + t * (w[1].0 - w[0].0), w[0].1 + t * (w[1].1 - w[0].1))
+        }));
+    }
+    out
+}
+
+/// smooth draws a centripetal Catmull-Rom spline through a polyline's points, which passes
+/// through every corner without loops or cusps.
+fn smooth(way: &[P], n: usize) -> Vec<P> {
+    let len: f64 = way.windows(2).map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1)).sum();
+    let at = |i: isize| way[i.clamp(0, way.len() as isize - 1) as usize];
+    let mut out = vec![way[0]];
+    for i in 0..way.len() - 1 {
+        let (p0, p1, p2, p3) = (at(i as isize - 1), at(i as isize), at(i as isize + 1), at(i as isize + 2));
+        let knot = |a: P, b: P| (b.0 - a.0).hypot(b.1 - a.1).sqrt().max(1e-6);
+        let (t1, t2, t3) = (knot(p0, p1), knot(p1, p2), knot(p2, p3));
+        let (t1, t2, t3) = (t1, t1 + t2, t1 + t2 + t3);
+        let lerp = |a: P, b: P, ta: f64, tb: f64, t: f64| {
+            let (u, w) = ((tb - t) / (tb - ta), (t - ta) / (tb - ta));
+            (u * a.0 + w * b.0, u * a.1 + w * b.1)
+        };
+        let k = (((p2.0 - p1.0).hypot(p2.1 - p1.1) / len * n as f64).ceil() as usize).max(1);
+        for j in 1..=k {
+            let t = t1 + (t2 - t1) * j as f64 / k as f64;
+            let (a1, a2, a3) = (lerp(p0, p1, 0.0, t1, t), lerp(p1, p2, t1, t2, t), lerp(p2, p3, t2, t3, t));
+            let (b1, b2) = (lerp(a1, a2, 0.0, t2, t), lerp(a2, a3, t1, t3, t));
+            out.push(lerp(b1, b2, t1, t2, t));
+        }
+    }
+    out
 }
 
 /// label_rect is the box of a label centered at fraction `t` of a path.
@@ -76,4 +176,24 @@ pub(super) fn bounds(p: &[P]) -> Rect {
         x1: r.x1.max(x),
         y1: r.y1.max(y),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detour_goes_around_a_box() {
+        let page = Rect::centered((0.0, 0.0), 200.0, 200.0);
+        let wall = Rect::centered((0.0, 0.0), 20.0, 120.0);
+        assert!(detours((-50.0, 0.0), (50.0, 30.0), &[Rect::centered((0.0, 90.0), 5.0, 5.0)], &page, 4.0).is_empty(), "straight line is clear");
+        let ways = detours((-50.0, 0.0), (50.0, 0.0), &[wall], &page, 4.0);
+        assert_eq!(ways.len(), 2);
+        for w in &ways {
+            assert_eq!((w[0], *w.last().unwrap()), ((-50.0, 0.0), (50.0, 0.0)));
+            assert!(w.windows(2).all(|s| !segment_hits_rect(s[0], s[1], &wall)), "{w:?}");
+        }
+        // A wall across the whole page leaves no way around.
+        assert!(detours((-50.0, 0.0), (50.0, 0.0), &[Rect::centered((0.0, 0.0), 20.0, 400.0)], &page, 4.0).is_empty());
+    }
 }

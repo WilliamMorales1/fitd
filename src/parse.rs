@@ -98,7 +98,7 @@ impl Parser<'_> {
 
     fn targets(&mut self) -> PResult<Vec<Name>> {
         let mut out = vec![self.name("a node name")?];
-        while *self.peek() == Tok::Ident || *self.peek() == Tok::Comma {
+        while (*self.peek() == Tok::Ident && *self.peek_at(1) != Tok::Eq) || *self.peek() == Tok::Comma {
             if *self.peek() == Tok::Comma {
                 self.bump();
             }
@@ -123,7 +123,24 @@ impl Parser<'_> {
             }
             _ => None,
         };
-        Ok(StmtKind::Edge { from, link, to, label })
+        let (classes, attrs) = self.looks()?;
+        Ok(StmtKind::Edge { from, link, to, label, classes, attrs })
+    }
+
+    /// looks reads the `.style` and `key=value` items that end a node or edge statement.
+    fn looks(&mut self) -> PResult<(Vec<Name>, Vec<Attr>)> {
+        let (mut classes, mut attrs) = (Vec::new(), Vec::new());
+        while !self.at_end() {
+            if *self.peek() == Tok::Dot {
+                self.bump();
+                classes.push(self.name("a style name after `.`")?);
+            } else {
+                let key = self.name("`.style` or `key=value`")?;
+                self.expect(Tok::Eq)?;
+                attrs.push(Attr { key, value: self.value()? });
+            }
+        }
+        Ok((classes, attrs))
     }
 
     fn rel(&mut self) -> PResult<Rel> {
@@ -192,23 +209,23 @@ impl Parser<'_> {
                     Tok::Str(s) => Some((s, self.bump().span)),
                     _ => None,
                 };
-                let (mut classes, mut attrs) = (Vec::new(), Vec::new());
-                while !self.at_end() {
-                    if *self.peek() == Tok::Dot {
-                        self.bump();
-                        classes.push(self.name("a style name after `.`")?);
-                    } else {
-                        let key = self.name("`.style` or `key=value`")?;
-                        self.expect(Tok::Eq)?;
-                        attrs.push(Attr { key, value: self.value()? });
-                    }
-                }
+                let (classes, attrs) = self.looks()?;
                 StmtKind::Node { id, title, classes, attrs }
+            }
+            "group" => {
+                let title = match self.peek().clone() {
+                    Tok::Str(s) => {
+                        self.bump();
+                        Some(s)
+                    }
+                    _ => None,
+                };
+                StmtKind::Group { title, items: self.targets()?, attrs: self.attrs()? }
             }
             "require" | "prefer" => StmtKind::Constraint { hard: kw.text == "require", rel: self.rel()?, attrs: self.attrs()? },
             _ => {
                 let d = Diag::error("E0002", format!("unknown statement `{}`", kw.text)).primary(kw.span, "not a statement");
-                return Err(d.help("statements: title, root, layout, page, font, theme, style, node, `|` body, `a -> b`, `a ..> b`, require, prefer"));
+                return Err(d.help("statements: title, root, layout, page, font, theme, style, node, `|` body, `a -> b`, `a ..> b`, group, require, prefer"));
             }
         })
     }
@@ -256,10 +273,12 @@ mod tests {
 
     #[test]
     fn parses_every_statement() {
-        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\" .hub color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\n";
+        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\" .hub color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\ngroup \"G\" b, c color=#123\na -> c \"x\" .hub color=#f00\n";
         let (stmts, errs) = parse(src);
         assert!(errs.is_empty(), "{:?}", errs.iter().map(|d| &d.msg).collect::<Vec<_>>());
-        assert_eq!(stmts.len(), 14);
+        assert_eq!(stmts.len(), 16);
+        assert!(matches!(&stmts[14].kind, StmtKind::Group { title: Some(_), items, attrs } if items.len() == 2 && attrs.len() == 1));
+        assert!(matches!(&stmts[15].kind, StmtKind::Edge { classes, attrs, .. } if classes.len() == 1 && attrs.len() == 1));
         assert!(matches!(&stmts[4].kind, StmtKind::Theme { preset: Some(_), attrs } if attrs.len() == 2));
         assert!(matches!(&stmts[8].kind, StmtKind::Edge { to, label: Some(_), link: false, .. } if to.len() == 2));
         assert!(matches!(&stmts[10].kind, StmtKind::Edge { link: true, .. }));
