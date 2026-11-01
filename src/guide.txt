@@ -1,7 +1,7 @@
-cmapc: .cmap text -> SVG/PNG/TikZ. The solver picks positions and the largest font that fits.
+fitd: .fitd text -> SVG/PNG/TikZ. The solver picks positions and the largest font that fits.
 
-Build:  cmapc FILE.cmap -o out.svg|out.png [--tikz out.tex] [--short]
-Stdin:  cmapc - -o out.svg <<'EOF' ... EOF
+Build:  fitd FILE.fitd -o out.svg|out.png [--tikz out.tex] [--short]
+Stdin:  fitd - -o out.svg <<'EOF' ... EOF
 Exit 0 = written. Errors and warnings go to stderr; --short prints one line each.
 
 Syntax: one statement per line, # comment. Only `node` lines and edges are needed.
@@ -48,6 +48,6 @@ Flowchart:
   check -> err "no"
   require out above err
 
-Fix loop: read the first error, edit that line, rebuild. `cmapc explain CODE` details a code.
+Fix loop: read the first error, edit that line, rebuild. `fitd explain CODE` details a code.
 Unsat (E0110): drop or `prefer` one listed constraint, or use a larger page.
 No layout fits: lower the font floor, use a larger page, or follow the printed help.

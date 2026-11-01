@@ -323,7 +323,7 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
         if first.is_none_or(|w| i <= w) {
             stats.search += *st;
         }
-        if std::env::var_os("CMAPC_DEBUG").is_some() {
+        if std::env::var_os("FITD_DEBUG").is_some() {
             let what = match out {
                 Outcome::Sat(_) => "sat",
                 Outcome::Unsat => "unsat",

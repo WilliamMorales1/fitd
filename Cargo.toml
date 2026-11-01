@@ -1,5 +1,5 @@
 [package]
-name = "cmapc"
+name = "fitd"
 version = "0.1.0"
 edition = "2024"
 description = "Constraint-diagram compiler: concept maps and flowcharts laid out by a CSP solver, with rustc-style diagnostics"

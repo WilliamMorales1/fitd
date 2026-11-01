@@ -182,7 +182,7 @@ mod tests {
                 let code = src.get(i + 1..i + 6).unwrap_or("");
                 if src.get(i + 6..i + 7) == Some("\"") && (code.starts_with('E') || code.starts_with('W')) && code[1..].chars().all(|c| c.is_ascii_digit()) {
                     seen += 1;
-                    assert!(EXPLAIN.iter().any(|(c, _)| *c == code), "{code} has no `cmapc explain` page");
+                    assert!(EXPLAIN.iter().any(|(c, _)| *c == code), "{code} has no `fitd explain` page");
                 }
             }
         }

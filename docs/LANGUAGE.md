@@ -1,9 +1,9 @@
-# The `.cmap` language
+# The `.fitd` language
 
 One statement per line. `#` starts a comment, except right after `=` where it starts a color (`color=#1565C0`). Names may contain letters, digits, `_`, and inner hyphens (`left-of`, `top-left`), but a hyphen never swallows an arrow, so `a->b` lexes as three tokens.
 
 ```
-title "How cmapc compiles a diagram"
+title "How fitd compiles a diagram"
 layout layered dir=down          # or: layout radial root=core
 page a3 portrait margin=1cm      # a0..a4 or WxH with one unit: 594x420mm, 2296x1524pt
 font 7pt..40pt wrap=16em         # body font range searched; leaf wrap width
@@ -64,7 +64,7 @@ Analysis runs in two passes. The first collects `node` and `style` declarations 
 |---|---|---|
 | `layout radial` | `root=NODE` | Default. Root defaults to the graph center (minimum eccentricity). |
 | `layout layered` | `dir=down\|right`, `bands=N` | Flowchart. Directed cycles are broken; back edges are drawn as links. A flow too long to reach a readable font in one line wraps into bands that run back and forth; `bands=N` allows at most N (`bands=1` never wraps). |
-| `page` | flags `portrait`, `landscape`; `margin=LEN` | Absolute lengths only. A paper name without a flag (and without `--portrait` or `--landscape`) leaves the orientation open: when a layout has warnings, cmapc also tries the turned page (and, in radial maps, branches reordered toward their links) and keeps the one with fewer. A flag or a `WxH` size fixes it. |
+| `page` | flags `portrait`, `landscape`; `margin=LEN` | Absolute lengths only. A paper name without a flag (and without `--portrait` or `--landscape`) leaves the orientation open: when a layout has warnings, fitd also tries the turned page (and, in radial maps, branches reordered toward their links) and keeps the one with fewer. A flag or a `WxH` size fixes it. |
 | `font LO..HI` or `font SIZE` | `wrap=EM`, `family="NAME"` | The solver maximizes the body font within the range. `family` must be installed; it is used for measuring and drawing. Default DejaVu Serif. |
 | `theme [light\|dark\|mono]` | `background`, `text`, `edge`, `link`, `label`, `root` (colors); `palette="#hex ..."` | Preset defaults to `light`; each attribute overrides one preset value. |
 | `node`, `style` | `color=#hex`, `fill=#hex`, `text=#hex`, `shape=circle\|box` | `color` is the accent (border, tint, branch); `fill` replaces the tint; `text` defaults to the theme text, or black/white by contrast on a solid fill. |
@@ -103,7 +103,7 @@ Before any search, hard orderings and alignments are checked for contradictions 
 
 ```
 error[E0008]: contradictory vertical constraints
-  --> bad.cmap:10:1
+  --> bad.fitd:10:1
    |
  9 | require align row(left, core)
    | -----------------------------
@@ -115,7 +115,7 @@ Contradictions that depend on geometry (sizes, page bounds, the strategy's candi
 
 ## Diagnostics
 
-Codes run `E00xx` (front end), `E01xx` (layout), `W02xx` (warnings). `cmapc explain CODE` prints the long form.
+Codes run `E00xx` (front end), `E01xx` (layout), `W02xx` (warnings). `fitd explain CODE` prints the long form.
 
 | Code | Meaning |
 |---|---|

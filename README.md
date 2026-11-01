@@ -1,9 +1,9 @@
-# cmapc
+# fitd
 
-A small diagram language with a constraint solver for layout. Write nodes, edges, and layout constraints in a plain text file; cmapc finds the largest font that fits a fixed page, satisfies every `require`, trades off every `prefer`, then verifies the result before writing SVG, PNG, or TikZ.
+A small diagram language with a constraint solver for layout. Write nodes, edges, and layout constraints in a plain text file; fitd finds the largest font that fits a fixed page, satisfies every `require`, trades off every `prefer`, then verifies the result before writing SVG, PNG, or TikZ.
 
 ```
-title "How cmapc compiles a diagram"
+title "How fitd compiles a diagram"
 layout layered
 page a3
 
@@ -22,32 +22,32 @@ require align row(bnb, core)
 prefer core at bottom-right weight=2
 ```
 
-![examples/compiler.cmap rendered to PNG](docs/compiler.png)
+![examples/compiler.fitd rendered to PNG](docs/compiler.png)
 
 ```fish
 cargo build --release
-./target/release/cmapc examples/compiler.cmap --tikz out/compiler.tex
-./target/release/cmapc examples/compiler.cmap -o docs/compiler.png
-./target/release/cmapc examples/group_theory.cmap --page 2296x1524pt
-./target/release/cmapc explain E0110
-./target/release/cmapc guide          # the language on one page
+./target/release/fitd examples/compiler.fitd --tikz out/compiler.tex
+./target/release/fitd examples/compiler.fitd -o docs/compiler.png
+./target/release/fitd examples/group_theory.fitd --page 2296x1524pt
+./target/release/fitd explain E0110
+./target/release/fitd guide          # the language on one page
 ```
 
 ## For AI agents
 
 An agent can draw a described diagram with two commands and a few hundred tokens of context:
 
-1. `cmapc guide` prints the whole language on one page, with a concept map and a flowchart example: about 2.2 KB (roughly 600 tokens), against 8 KB for `LANGUAGE.md`. An e2e test builds both examples and caps the size.
+1. `fitd guide` prints the whole language on one page, with a concept map and a flowchart example: about 2.2 KB (roughly 600 tokens), against 8 KB for `LANGUAGE.md`. An e2e test builds both examples and caps the size.
 2. Write and build in one command, reading the source from stdin:
 
 ```fish
 printf '%s\n' 'node leaf "Leaf"' 'node sun "Light"' 'node sugar "Glucose"' 'leaf -> sun, sugar' \
-    | cmapc - -o out/leaf.png --short
+    | fitd - -o out/leaf.png --short
 ```
 
 `--short` prints one line per error or warning (`<stdin>:2:6: error[E0001]: unknown node ...`, plus the other lines involved and the fix hint) and a one-line summary on success, so each mistake in a fix loop costs one line instead of a rustc-style block. Exit status 0 means the file was written.
 
-Measured with pi and `gemma4:cloud`, given only a one-sentence request that names `cmapc guide`: a flowchart and a concept map each built on the first try, in 2 tool calls and about 4.7k tokens total.
+Measured with pi and `gemma4:cloud`, given only a one-sentence request that names `fitd guide`: a flowchart and a concept map each built on the first try, in 2 tool calls and about 4.7k tokens total.
 
 ## Pipeline
 
@@ -66,7 +66,7 @@ Errors point into the source, rustc style:
 
 ```
 error[E0110]: these 2 constraints cannot all hold at 7pt on this page
-  --> core.cmap:11:1
+  --> core.fitd:11:1
    |
 11 | require c at left
    | ^^^^^^^^^^^^^^^^^
@@ -82,7 +82,7 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 
 An input of `-` reads the source from stdin and then needs `-o`. `-o FILE` picks the format by extension: `.svg` (default, `<input>.svg`) is page-sized; `.png` is cropped to the drawing plus `--margin` of padding, at `--scale PX` pixels per point (default 2). `--tikz FILE` also writes a standalone LaTeX file.
 
-`--page a0..a4 | WxH[pt|mm]`, `--portrait`/`--landscape` (fix the orientation; otherwise a named paper may be turned when that clears warnings), `--bands N` (most bands a long flowchart wraps into; 1 never wraps), `--margin PT`, `--min-font PT` (hard floor; also raises the legibility floor of the font trade-off, default 16pt per meter of page diagonal), `--max-font PT`, `--wrap EM`, `--budget CHECKS` (default 20M per probe), `--force` (write output despite checker errors), `--short` (one line per diagnostic, for agents and editors), `--draft` (coarser font search, one font, short polish: 2 to 6 times faster for editing). `--theme light|dark|mono`, `--font-family NAME`. Flags override settings in the file. `CMAPC_DEBUG=1` traces each probe.
+`--page a0..a4 | WxH[pt|mm]`, `--portrait`/`--landscape` (fix the orientation; otherwise a named paper may be turned when that clears warnings), `--bands N` (most bands a long flowchart wraps into; 1 never wraps), `--margin PT`, `--min-font PT` (hard floor; also raises the legibility floor of the font trade-off, default 16pt per meter of page diagonal), `--max-font PT`, `--wrap EM`, `--budget CHECKS` (default 20M per probe), `--force` (write output despite checker errors), `--short` (one line per diagnostic, for agents and editors), `--draft` (coarser font search, one font, short polish: 2 to 6 times faster for editing). `--theme light|dark|mono`, `--font-family NAME`. Flags override settings in the file. `FITD_DEBUG=1` traces each probe.
 
 ## Theming
 
@@ -118,7 +118,7 @@ node a "Alpha" .warm
 
 ## Tests
 
-`cargo test --release`: unit tests for the lexer, parser, semantic checks, geometry, the solver (queens, pigeonhole, branch and bound, spatial index equivalence), layering, and QuickXplain; end-to-end runs of every example (zero errors, a warning baseline, a CPU-time budget, and two concurrent builds that must match byte for byte), unsat cores, static contradictions, and parse errors. A fuzzer feeds mutated sources to the front end for 2 seconds; `CMAPC_FUZZ_SECS=1800 cargo test --release fuzz` runs it longer.
+`cargo test --release`: unit tests for the lexer, parser, semantic checks, geometry, the solver (queens, pigeonhole, branch and bound, spatial index equivalence), layering, and QuickXplain; end-to-end runs of every example (zero errors, a warning baseline, a CPU-time budget, and two concurrent builds that must match byte for byte), unsat cores, static contradictions, and parse errors. A fuzzer feeds mutated sources to the front end for 2 seconds; `FITD_FUZZ_SECS=1800 cargo test --release fuzz` runs it longer.
 
 ## Docs
 
@@ -133,10 +133,10 @@ node a "Alpha" .warm
 
 | File | Shows |
 | --- | --- |
-| `group_theory.cmap` | group theory notes with no settings at all: a large radial map on the defaults, with bodies, math markup, and cross links |
-| `french_history.cmap` | real course notes: a layered timeline (down) on a portrait page, colored `group` frames per period, styles, a colored link, `require ... at` and `prefer ... at` |
-| `earth_science.cmap` | radial map: `root=`, theme overrides (`root=`, `link=`), styles on nodes and edges, a node `fill`, labeled links, `require` and `prefer` |
-| `compiler.cmap` | layered flowchart (down): `theme dark`, `page ... margin=`, `shape=circle` terminals, two groups, a row alignment, `gap=`, `near ... within=` |
-| `cell_biology.cmap` | layered flowchart (right) that wraps into two bands: a group frame, circle molecules, a solid `fill` (text turns white), labeled arrows, an edge `color=` |
+| `group_theory.fitd` | group theory notes with no settings at all: a large radial map on the defaults, with bodies, math markup, and cross links |
+| `french_history.fitd` | real course notes: a layered timeline (down) on a portrait page, colored `group` frames per period, styles, a colored link, `require ... at` and `prefer ... at` |
+| `earth_science.fitd` | radial map: `root=`, theme overrides (`root=`, `link=`), styles on nodes and edges, a node `fill`, labeled links, `require` and `prefer` |
+| `compiler.fitd` | layered flowchart (down): `theme dark`, `page ... margin=`, `shape=circle` terminals, two groups, a row alignment, `gap=`, `near ... within=` |
+| `cell_biology.fitd` | layered flowchart (right) that wraps into two bands: a group frame, circle molecules, a solid `fill` (text turns white), labeled arrows, an edge `color=` |
 
 `tests/fixtures/` holds inputs that fail or strain the solver on purpose.

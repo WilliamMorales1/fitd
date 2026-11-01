@@ -235,16 +235,16 @@ mod tests {
 
     #[test]
     fn renders_caret_under_span() {
-        let src = Source::new("t.cmap", "node a\na -> bb\n");
+        let src = Source::new("t.fitd", "node a\na -> bb\n");
         let d = Diag::error("E0001", "unknown node `bb`").primary(Span::new(12, 14), "not declared");
         let out = render(&src, &[d]);
-        assert!(out.contains(" --> t.cmap:2:6"), "{out}");
+        assert!(out.contains(" --> t.fitd:2:6"), "{out}");
         assert!(out.contains("2 | a -> bb\n  |      ^^ not declared"), "{out}");
     }
 
     #[test]
     fn unlabeled_marks_share_a_row() {
-        let src = Source::new("t.cmap", "a x b y c\n");
+        let src = Source::new("t.fitd", "a x b y c\n");
         let d = Diag::error("E0008", "m").secondary(Span::new(2, 3), "").secondary(Span::new(6, 7), "");
         let out = render(&src, &[d]);
         assert!(out.contains("1 | a x b y c\n  |   -   -\n"), "{out}");
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn left_message_hangs_on_a_connector() {
-        let src = Source::new("t.cmap", "a x b y c\n");
+        let src = Source::new("t.fitd", "a x b y c\n");
         let d = Diag::error("E0008", "m").primary(Span::new(2, 3), "here").secondary(Span::new(6, 7), "");
         let out = render(&src, &[d]);
         assert!(out.contains("  |   ^   -\n  |   |\n  |   here\n"), "{out}");
@@ -260,9 +260,9 @@ mod tests {
 
     #[test]
     fn short_form_is_one_line_per_diagnostic() {
-        let src = Source::new("t.cmap", "node a\na -> bb\nrequire a above bb\n");
+        let src = Source::new("t.fitd", "node a\na -> bb\nrequire a above bb\n");
         let d = Diag::error("E0110", "m").primary(Span::new(7, 8), "").secondary(Span::new(15, 33), "").help("h");
         let out = render_short(&src, &[d, Diag::info("skipped")]);
-        assert_eq!(out, "t.cmap:2:1: error[E0110]: m; also line 3; h\n");
+        assert_eq!(out, "t.fitd:2:1: error[E0110]: m; also line 3; h\n");
     }
 }

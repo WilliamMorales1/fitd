@@ -2,13 +2,13 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn tmp(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("cmapc-test-{}", std::process::id()));
+    let d = std::env::temp_dir().join(format!("fitd-test-{}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
     d.join(name)
 }
 
-fn cmapc(args: &[&str]) -> (bool, String) {
-    let out = Command::new(env!("CARGO_BIN_EXE_cmapc")).args(args).output().unwrap();
+fn fitd(args: &[&str]) -> (bool, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_fitd")).args(args).output().unwrap();
     (out.status.success(), String::from_utf8_lossy(&out.stderr).into_owned())
 }
 
@@ -16,8 +16,8 @@ fn cmapc(args: &[&str]) -> (bool, String) {
 fn builds_example_with_zero_errors() {
     let svg = tmp("group_theory.svg");
     let tex = tmp("group_theory.tex");
-    // The hand-made map this tool replaces reached 16pt on this page; cmapc must fit 19.2pt.
-    let (ok, log) = cmapc(&["examples/group_theory.cmap", "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap(), "--page", "2296x1524", "--min-font", "19.2"]);
+    // The hand-made map this tool replaces reached 16pt on this page; fitd must fit 19.2pt.
+    let (ok, log) = fitd(&["examples/group_theory.fitd", "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap(), "--page", "2296x1524", "--min-font", "19.2"]);
     assert!(ok, "{log}");
     assert!(log.contains(" 0 errors"), "{log}");
     let body: f64 = log.split("body font ").nth(1).unwrap().split("pt").next().unwrap().parse().unwrap();
@@ -29,9 +29,9 @@ fn builds_example_with_zero_errors() {
 
 #[test]
 fn general_graph_with_cycle_and_no_root() {
-    let src = tmp("cycle.cmap");
+    let src = tmp("cycle.fitd");
     std::fs::write(&src, "node a \"Alpha\"\nnode b \"Beta\"\n| detail\nnode c \"Gamma\"\nnode d \"Delta\"\na -- b\nb -- c\nc -- a\nc -- d\n").unwrap();
-    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", tmp("cycle.svg").to_str().unwrap(), "--page", "a4"]);
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", tmp("cycle.svg").to_str().unwrap(), "--page", "a4"]);
     assert!(ok, "{log}");
     assert!(log.contains("chose graph center"), "{log}");
     assert!(log.contains("closes a cycle"), "{log}");
@@ -40,10 +40,10 @@ fn general_graph_with_cycle_and_no_root() {
 #[test]
 fn radial_tree_edges_keep_their_labels() {
     // `d` is reachable only by its link, which becomes its tree edge.
-    let src = tmp("labels.cmap");
+    let src = tmp("labels.fitd");
     std::fs::write(&src, "layout radial root=a\nnode a \"Alpha\"\nnode b \"Beta\"\nnode c \"Gamma\"\nnode d \"Delta\"\na -> b \"feeds\"\na -> c\nd ..> c \"pumps\"\n").unwrap();
     let svg = tmp("labels.svg");
-    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--page", "a4"]);
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--page", "a4"]);
     assert!(ok && log.contains(" 0 warnings"), "{log}");
     let s = std::fs::read_to_string(&svg).unwrap();
     assert!(s.contains(">feeds<") && s.contains(">pumps<"), "labels missing");
@@ -51,10 +51,10 @@ fn radial_tree_edges_keep_their_labels() {
 
 #[test]
 fn labeled_arrows_get_room_between_layers() {
-    let src = tmp("bill.cmap");
+    let src = tmp("bill.fitd");
     std::fs::write(&src, "layout layered dir=down\npage a4\nnode a \"Bill Introduced\"\nnode b \"Committee Review\"\nnode c \"Floor Vote\"\nnode d \"President\"\na -> b\nb -> c \"approved\"\nc -> d\n").unwrap();
     let svg = tmp("bill.svg");
-    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
     assert!(ok && log.contains(" 0 warnings"), "{log}");
     let s = std::fs::read_to_string(&svg).unwrap();
     let y = |title: &str| -> f64 {
@@ -69,30 +69,30 @@ fn labeled_arrows_get_room_between_layers() {
 
 #[test]
 fn impossible_page_is_rejected() {
-    let (ok, log) = cmapc(&["examples/group_theory.cmap", "-o", tmp("x.svg").to_str().unwrap(), "--page", "200x150"]);
+    let (ok, log) = fitd(&["examples/group_theory.fitd", "-o", tmp("x.svg").to_str().unwrap(), "--page", "200x150"]);
     assert!(!ok);
     assert!(log.contains("no layout fits"), "{log}");
 }
 
 #[test]
 fn parse_errors_point_at_line() {
-    let src = tmp("bad.cmap");
+    let src = tmp("bad.fitd");
     std::fs::write(&src, "node a\na -> ghost\n").unwrap();
-    let (ok, log) = cmapc(&[src.to_str().unwrap()]);
+    let (ok, log) = fitd(&[src.to_str().unwrap()]);
     assert!(!ok);
-    assert!(log.contains("error[E0001]: unknown node `ghost`") && log.contains("bad.cmap:2"), "{log}");
+    assert!(log.contains("error[E0001]: unknown node `ghost`") && log.contains("bad.fitd:2"), "{log}");
 }
 
 #[test]
 fn explain_known_code() {
-    let out = Command::new(env!("CARGO_BIN_EXE_cmapc")).args(["explain", "e0101"]).output().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_fitd")).args(["explain", "e0101"]).output().unwrap();
     assert!(String::from_utf8_lossy(&out.stdout).contains("overlapping regions"));
 }
 
 #[test]
 fn layered_example_meets_required_constraints() {
     let svg = tmp("compiler.svg");
-    let (ok, log) = cmapc(&["examples/compiler.cmap", "-o", svg.to_str().unwrap()]);
+    let (ok, log) = fitd(&["examples/compiler.fitd", "-o", svg.to_str().unwrap()]);
     assert!(ok, "{log}");
     assert!(log.contains(" 0 errors") && !log.contains("E0108"), "{log}");
     assert!(std::fs::read_to_string(&svg).unwrap().contains("marker-end"));
@@ -100,10 +100,10 @@ fn layered_example_meets_required_constraints() {
 
 #[test]
 fn groups_frame_members_and_edges_take_colors() {
-    let src = tmp("group.cmap");
+    let src = tmp("group.fitd");
     std::fs::write(&src, "layout layered\npage a4\nstyle hot color=#C62828\nnode a\nnode b\nnode c\nnode d\na -> b .hot\nb -> c, d\nc ..> a color=#2E7D32\ngroup \"Pair\" c, d color=#1565C0\n").unwrap();
     let (svg, tex) = (tmp("group.svg"), tmp("group.tex"));
-    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap()]);
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap()]);
     assert!(ok, "{log}");
     assert!(log.contains(" 0 errors, 0 warnings"), "{log}");
     let s = std::fs::read_to_string(&svg).unwrap();
@@ -112,18 +112,18 @@ fn groups_frame_members_and_edges_take_colors() {
     assert!(std::fs::read_to_string(&tex).unwrap().contains("Pair"));
     // A group whose members must sit around a non-member cannot hold.
     std::fs::write(&src, "layout layered\npage a4\nnode a\nnode b\nnode c\na -> b\nb -> c\ngroup a, c\nrequire align column(a, b, c)\n").unwrap();
-    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
     assert!(!ok);
     assert!(log.contains("error[E0110]: these 2 constraints") && log.contains("8 | group a, c"), "{log}");
 }
 
 #[test]
 fn unsat_constraints_report_minimal_core() {
-    let src = tmp("core.cmap");
+    let src = tmp("core.fitd");
     let text = "layout layered\npage 420x300pt\nnode a\nnode b\nnode c\nnode d\na -> b, c\nc -> d\n\
                 require b at left\nrequire align column(c, d)\nrequire c at left\nrequire d at bottom-left\nrequire b left-of c gap=20em\n";
     std::fs::write(&src, text).unwrap();
-    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", tmp("core.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", tmp("core.svg").to_str().unwrap()]);
     assert!(!ok);
     assert!(log.contains("error[E0110]: these 2 constraints"), "{log}");
     assert!(log.contains("11 | require c at left") && log.contains("13 | require b left-of c gap=20em"), "{log}");
@@ -134,25 +134,25 @@ fn unsat_constraints_report_minimal_core() {
 fn chained_orderings_fit_and_overlong_chains_fail_fast() {
     // Forward checking sees one link of a chain at a time, so without arc consistency a
     // satisfiable two-link chain ran out of budget and was reported as an unsat core.
-    let base = std::fs::read_to_string("examples/cell_biology.cmap").unwrap();
+    let base = std::fs::read_to_string("examples/cell_biology.fitd").unwrap();
     let chain = |gaps: &[(&str, &str)], gap: u32| gaps.iter().map(|(a, b)| format!("require {a} above {b} gap={gap}em\n")).collect::<String>();
     let links = [("anaerobic", "regulation"), ("regulation", "yield"), ("yield", "water"), ("water", "oxygen")];
-    let fits = tmp("chain-fits.cmap");
+    let fits = tmp("chain-fits.fitd");
     std::fs::write(&fits, base.clone() + &chain(&links[1..3], 30)).unwrap();
-    let (ok, log, _) = cmapc_cpu(&[fits.to_str().unwrap(), "-o", tmp("chain-fits.svg").to_str().unwrap()]);
+    let (ok, log, _) = fitd_cpu(&[fits.to_str().unwrap(), "-o", tmp("chain-fits.svg").to_str().unwrap()]);
     assert!(ok && log.contains(" 0 errors"), "{log}");
-    let tall = tmp("chain-tall.cmap");
+    let tall = tmp("chain-tall.fitd");
     std::fs::write(&tall, base + &chain(&links, 40)).unwrap();
-    let (ok, log, took) = cmapc_cpu(&[tall.to_str().unwrap(), "-o", tmp("chain-tall.svg").to_str().unwrap()]);
+    let (ok, log, took) = fitd_cpu(&[tall.to_str().unwrap(), "-o", tmp("chain-tall.svg").to_str().unwrap()]);
     assert!(!ok && log.contains("error[E0110]: these 3 constraints"), "{log}");
     assert!(took <= 3.0, "unsat core took {took:.1} CPU s");
 }
 
 #[test]
 fn contradictory_orderings_fail_before_search() {
-    let src = tmp("cycle-order.cmap");
+    let src = tmp("cycle-order.fitd");
     std::fs::write(&src, "node a\nnode b\nnode c\nrequire a left-of b\nrequire b left-of c\nrequire c left-of a\n").unwrap();
-    let (ok, log) = cmapc(&[src.to_str().unwrap()]);
+    let (ok, log) = fitd(&[src.to_str().unwrap()]);
     assert!(!ok);
     assert!(log.contains("error[E0008]: contradictory horizontal constraints"), "{log}");
     assert!(!log.contains("body font"), "search should not run\n{log}");
@@ -161,7 +161,7 @@ fn contradictory_orderings_fail_before_search() {
 #[test]
 fn png_is_cropped_to_drawing() {
     let png = tmp("compiler.png");
-    let (ok, log) = cmapc(&["examples/compiler.cmap", "-o", png.to_str().unwrap(), "--page", "a3", "--scale", "1"]);
+    let (ok, log) = fitd(&["examples/compiler.fitd", "-o", png.to_str().unwrap(), "--page", "a3", "--scale", "1"]);
     assert!(ok, "{log}");
     let b = std::fs::read(&png).unwrap();
     assert_eq!(&b[..8], b"\x89PNG\r\n\x1a\n");
@@ -172,17 +172,17 @@ fn png_is_cropped_to_drawing() {
 
 #[test]
 fn theme_colors_reach_svg_and_tikz() {
-    let src = tmp("theme.cmap");
+    let src = tmp("theme.fitd");
     std::fs::write(&src, "theme dark background=#102030 palette=\"#FFB74D #4DD0E1\"\nnode c\nnode a fill=#FFE0B2 text=#3E2723\nnode b\nc -> a, b\n").unwrap();
     let (svg, tex) = (tmp("theme.svg"), tmp("theme.tex"));
-    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap()]);
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap()]);
     assert!(ok, "{log}");
     let s = std::fs::read_to_string(&svg).unwrap();
     for c in ["#102030", "#4DD0E1", "#FFE0B2", "#3E2723", "#E6E6E6"] {
         assert!(s.contains(c), "{c} missing from svg");
     }
     assert!(std::fs::read_to_string(&tex).unwrap().contains("\\definecolor{c102030}"));
-    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--theme", "neon"]);
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--theme", "neon"]);
     assert!(!ok && log.contains("unknown theme `neon`"), "{log}");
 }
 
@@ -212,11 +212,11 @@ unsafe extern "C" {
     fn wait4(pid: i32, status: *mut i32, options: i32, usage: *mut Rusage) -> i32;
 }
 
-/// cmapc_cpu runs cmapc and also returns the CPU seconds it used across all its threads.
+/// fitd_cpu runs fitd and also returns the CPU seconds it used across all its threads.
 #[allow(clippy::zombie_processes, reason = "reaped by wait4")]
-fn cmapc_cpu(args: &[&str]) -> (bool, String, f64) {
+fn fitd_cpu(args: &[&str]) -> (bool, String, f64) {
     use std::io::Read;
-    let mut child = Command::new(env!("CARGO_BIN_EXE_cmapc")).args(args).stderr(std::process::Stdio::piped()).spawn().unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fitd")).args(args).stderr(std::process::Stdio::piped()).spawn().unwrap();
     let mut log = String::new();
     child.stderr.take().unwrap().read_to_string(&mut log).unwrap();
     let (mut status, mut ru) = (0, Rusage { utime: [0; 2], stime: [0; 2], rest: [0; 14] });
@@ -230,12 +230,12 @@ fn cmapc_cpu(args: &[&str]) -> (bool, String, f64) {
 #[test]
 fn every_example_builds_within_baseline() {
     for (name, warnings, budget) in EXAMPLES {
-        let src = format!("examples/{name}.cmap");
+        let src = format!("examples/{name}.fitd");
         let outs = [tmp(&format!("{name}-a.svg")), tmp(&format!("{name}-b.svg"))];
         // A second build runs alongside to catch HashMap order or thread timing leaking into
         // the layout.
-        let twin = Command::new(env!("CARGO_BIN_EXE_cmapc")).args([&src, "-o", outs[1].to_str().unwrap()]).stderr(std::process::Stdio::null()).spawn().unwrap();
-        let (ok, log, took) = cmapc_cpu(&[&src, "-o", outs[0].to_str().unwrap()]);
+        let twin = Command::new(env!("CARGO_BIN_EXE_fitd")).args([&src, "-o", outs[1].to_str().unwrap()]).stderr(std::process::Stdio::null()).spawn().unwrap();
+        let (ok, log, took) = fitd_cpu(&[&src, "-o", outs[0].to_str().unwrap()]);
         assert!(twin.wait_with_output().unwrap().status.success(), "{name}: second build failed");
         assert!(ok && log.contains(" 0 errors"), "{name}\n{log}");
         let got: usize = log.split(" errors, ").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap();
@@ -249,26 +249,26 @@ fn every_example_builds_within_baseline() {
 
 #[test]
 fn fixtures_fail_or_build_as_designed() {
-    let (ok, log) = cmapc(&["tests/fixtures/stress_test.cmap", "-o", tmp("stress.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&["tests/fixtures/stress_test.fitd", "-o", tmp("stress.svg").to_str().unwrap()]);
     assert!(!ok && log.contains("error[E0008]"), "{log}");
-    let (ok, log) = cmapc(&["tests/fixtures/complex_constraints.cmap", "-o", tmp("complex.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&["tests/fixtures/complex_constraints.fitd", "-o", tmp("complex.svg").to_str().unwrap()]);
     assert!(ok && log.contains(" 0 errors"), "{log}");
 }
 
 #[test]
 fn open_orientation_turns_and_flags_fix_it() {
     // `compiler` keeps warnings on landscape a3 and has none on portrait.
-    let (ok, log) = cmapc(&["examples/compiler.cmap", "-o", tmp("turn.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&["examples/compiler.fitd", "-o", tmp("turn.svg").to_str().unwrap()]);
     assert!(ok && log.contains("turned the page to portrait") && log.contains("on 842x1191pt"), "{log}");
-    let (ok, log) = cmapc(&["examples/compiler.cmap", "-o", tmp("turn.svg").to_str().unwrap(), "--landscape"]);
+    let (ok, log) = fitd(&["examples/compiler.fitd", "-o", tmp("turn.svg").to_str().unwrap(), "--landscape"]);
     assert!(ok && !log.contains("turned the page") && log.contains("on 1191x842pt"), "{log}");
 }
 
 #[test]
 fn row_alignment_merges_layers_in_flowchart() {
-    let src = tmp("row.cmap");
+    let src = tmp("row.fitd");
     std::fs::write(&src, "layout layered\npage a4\nnode a\nnode b\nnode c\nnode d\na -> b\nb -> c\nc -> d\nrequire align row(b, c, d)\nrequire b left-of c left-of d\n").unwrap();
-    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", tmp("row.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", tmp("row.svg").to_str().unwrap()]);
     assert!(ok, "{log}");
     assert!(log.contains(" 0 errors"), "{log}");
 }
@@ -279,7 +279,7 @@ fn output_directories_are_created() {
     let dir = tmp("fresh").join("out");
     let _ = std::fs::remove_dir_all(&dir);
     let tex = dir.join("compiler.tex");
-    let (ok, log) = cmapc(&["examples/compiler.cmap", "-o", dir.join("c.svg").to_str().unwrap(), "--tikz", tex.to_str().unwrap()]);
+    let (ok, log) = fitd(&["examples/compiler.fitd", "-o", dir.join("c.svg").to_str().unwrap(), "--tikz", tex.to_str().unwrap()]);
     assert!(ok, "{log}");
     assert!(tex.exists());
 }
@@ -287,14 +287,14 @@ fn output_directories_are_created() {
 #[test]
 fn guide_examples_build_from_stdin() {
     use std::io::Write;
-    let out = Command::new(env!("CARGO_BIN_EXE_cmapc")).arg("guide").output().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_fitd")).arg("guide").output().unwrap();
     let guide = String::from_utf8(out.stdout).unwrap();
     // The guide is what an agent reads instead of LANGUAGE.md, so it must stay small.
     assert!(guide.len() <= 2500, "guide grew to {} bytes", guide.len());
     for name in ["Concept map:", "Flowchart:"] {
         let body: String = guide.split(name).nth(1).unwrap().trim_start_matches('\n').lines().take_while(|l| !l.is_empty()).map(|l| l.trim_start().to_string() + "\n").collect();
         let svg = tmp(&format!("guide-{}.svg", name.len()));
-        let mut child = Command::new(env!("CARGO_BIN_EXE_cmapc")).args(["-", "-o", svg.to_str().unwrap(), "--short"]).stdin(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+        let mut child = Command::new(env!("CARGO_BIN_EXE_fitd")).args(["-", "-o", svg.to_str().unwrap(), "--short"]).stdin(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
         child.stdin.take().unwrap().write_all(body.as_bytes()).unwrap();
         let out = child.wait_with_output().unwrap();
         let log = String::from_utf8_lossy(&out.stderr);
@@ -306,7 +306,7 @@ fn guide_examples_build_from_stdin() {
 #[test]
 fn layers_that_exactly_fill_the_page_fit_and_crowded_flows_say_why() {
     // An agent's first flowchart: at 8pt the layer gaps fill a4 exactly, and rounding once put
-    // the last layer a hair off the page, so cmapc wrongly said nothing fits.
+    // the last layer a hair off the page, so fitd wrongly said nothing fits.
     let nodes = [
         ("intro", "Bill Introduced", "Introduced in House or Senate"),
         ("committee", "Committee Action", "Review, Markup, and Vote"),
@@ -323,24 +323,24 @@ fn layers_that_exactly_fill_the_page_fit_and_crowded_flows_say_why() {
         text += &format!("node {id} \"{title}\"\n| {body}\n");
     }
     text += "intro -> committee\ncommittee -> floor\nfloor -> other\nother -> conference\nconference -> president\npresident -> law, veto\nveto -> override\noverride -> law\n";
-    let down = tmp("bill-down.cmap");
+    let down = tmp("bill-down.fitd");
     std::fs::write(&down, &text).unwrap();
-    let (ok, log) = cmapc(&[down.to_str().unwrap(), "-o", tmp("bill-down.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&[down.to_str().unwrap(), "-o", tmp("bill-down.svg").to_str().unwrap()]);
     assert!(ok && log.contains("body font 8.0pt"), "{log}");
     // Across a portrait page the nine layers do not fit in one line, so the flow wraps.
-    let right = tmp("bill-right.cmap");
+    let right = tmp("bill-right.fitd");
     std::fs::write(&right, text.replace("dir=down", "dir=right")).unwrap();
-    let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
     assert!(ok && log.contains("body font 8.0pt") && log.contains(" 0 errors"), "{log}");
     // `bands=1` and `--bands 1` keep the flow in one line, which does not fit here.
     std::fs::write(&right, text.replace("dir=down", "dir=right bands=1")).unwrap();
-    let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
     assert!(!ok && log.contains("the longest path has 9 layers"), "{log}");
     std::fs::write(&right, text.replace("dir=down", "dir=right")).unwrap();
-    let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap(), "--bands", "1"]);
+    let (ok, log) = fitd(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap(), "--bands", "1"]);
     assert!(!ok && log.contains("the longest path has 9 layers"), "{log}");
     // On a strip too small to wrap into, the error says why.
     std::fs::write(&right, text.replace("dir=down", "dir=right").replace("page a4 portrait", "page 400x150pt")).unwrap();
-    let (ok, log) = cmapc(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
     assert!(!ok && log.contains("the longest path has 9 layers") && log.contains("dir=down"), "{log}");
 }

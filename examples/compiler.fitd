@@ -1,5 +1,5 @@
-# The cmapc pipeline itself, as a layered flowchart with layout constraints.
-title "How cmapc compiles a diagram"
+# The fitd pipeline itself, as a layered flowchart with layout constraints.
+title "How fitd compiles a diagram"
 layout layered dir=down
 page a3 margin=1cm
 font 7pt..40pt wrap=16em
@@ -9,7 +9,7 @@ style stage color=#42A5F5
 style check color=#EF5350
 style io color=#26A69A shape=circle
 
-node src "Source .cmap" .io
+node src "Source .fitd" .io
 | one statement per line
 node lex "Lexer" .stage
 | tokens with byte spans

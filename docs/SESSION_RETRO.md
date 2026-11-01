@@ -1,6 +1,6 @@
 # Retro: the hand-made MATH 4200 concept map
 
-The session that motivated cmapc produced, in order, a theorem/definition cheatsheet (Markdown to PDF), a radial concept map in TikZ, and then "increase the font as much as possible without overlap." These notes cover what happened, what it cost, and what to do instead. Counts are approximate and were reconstructed from the transcript.
+The session that motivated fitd produced, in order, a theorem/definition cheatsheet (Markdown to PDF), a radial concept map in TikZ, and then "increase the font as much as possible without overlap." These notes cover what happened, what it cost, and what to do instead. Counts are approximate and were reconstructed from the transcript.
 
 ## What happened
 
@@ -32,7 +32,7 @@ About 150 tectonic compiles and about 20 page-image reads (images are the costli
 
 Result: 16pt body font on a 2296×1524pt page.
 
-**cmapc on the same input and page:** 19.8pt body font, 0 errors, about 5 s, one preview image. Its constraints are also stricter, because it forbids crossing tree edges and edges through *any* box.
+**fitd on the same input and page:** 19.8pt body font, 0 errors, about 5 s, one preview image. Its constraints are also stricter, because it forbids crossing tree edges and edges through *any* box.
 
 ## What would have saved tokens
 
@@ -51,7 +51,7 @@ Result: 16pt body font on a 2296×1524pt page.
 ```fish
 # 1. Write the graph (nodes, bodies, edge/link lines) — usually generated from notes by a script.
 # 2. Lay out, verify, emit:
-~/Projects/cmapc/target/release/cmapc build map.cmap --page a1 --tikz map.tex
+~/Projects/fitd/target/release/fitd build map.fitd --page a1 --tikz map.tex
 # 3. Only if 0 errors: one low-res look.
 rsvg-convert -z 0.3 map.svg -o /tmp/map.png
 ```

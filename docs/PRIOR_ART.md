@@ -1,6 +1,6 @@
 # Prior art
 
-These are tools that overlap with cmapc, grouped by approach. The notes say what each does well and what it lacks compared with cmapc's goal: exact text measurement, a maximal font on a fixed page, hard readability constraints, and an independent verifier. Check the details against current docs before relying on them.
+These are tools that overlap with fitd, grouped by approach. The notes say what each does well and what it lacks compared with fitd's goal: exact text measurement, a maximal font on a fixed page, hard readability constraints, and an independent verifier. Check the details against current docs before relying on them.
 
 ## Graph layout engines
 
@@ -45,6 +45,6 @@ These are tools that overlap with cmapc, grouped by approach. The notes say what
 - Conflict-directed backjumping (Prosser) and nogood learning in CSP search.
 - Readability metrics for node-link diagrams (crossings, angular resolution, edge length uniformity).
 
-## Gap cmapc targets
+## Gap fitd targets
 
 None of the above combine (1) real font metrics at layout time, (2) a fixed canvas with the *font size* as the objective, (3) hard "no edge through a box" and planarity constraints, and (4) a separate checker that refuses to emit a broken layout and points at source lines.

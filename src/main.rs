@@ -25,11 +25,11 @@ use layout::{Config, Failure};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
-  cmapc <input[.cmap]|-> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
+  fitd <input[.fitd]|-> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
               [--portrait|--landscape] [--bands N] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
               [--short] [--budget CHECKS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
-  cmapc explain <CODE>
-  cmapc guide            the whole language on one page, with examples";
+  fitd explain <CODE>
+  fitd guide            the whole language on one page, with examples";
 
 /// GUIDE is the language reference sized for an agent's context: everything needed to write a
 /// diagram, in a few hundred tokens.
@@ -97,8 +97,8 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         }
     }
     let mut input = input.ok_or(USAGE)?;
-    if !std::path::Path::new(&input).exists() && std::path::Path::new(&format!("{input}.cmap")).exists() {
-        input.push_str(".cmap");
+    if !std::path::Path::new(&input).exists() && std::path::Path::new(&format!("{input}.fitd")).exists() {
+        input.push_str(".fitd");
     }
     let text = if input == "-" {
         if svg_out.is_none() {
@@ -255,7 +255,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         eprintln!("error: aborting due to {errors} previous errors; no output written (use --force to write anyway)");
         return Ok(ExitCode::FAILURE);
     }
-    let stem = input.strip_suffix(".cmap").unwrap_or(&input).to_string();
+    let stem = input.strip_suffix(".fitd").unwrap_or(&input).to_string();
     let out = svg_out.unwrap_or(format!("{stem}.svg"));
     let bytes = if out.to_ascii_lowercase().ends_with(".png") {
         // A PNG is cropped to the drawing, with the margin as padding, not sized to the page.

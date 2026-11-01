@@ -8,15 +8,15 @@ Open problems found by review, most serious first. Measured 2026-10-30 and 2026-
 
 ### Two layered groups that share a layer fail on any page
 
-In `cell_biology.cmap`, making `glycolysis -> anaerobic` a flow edge and adding `group "Cytosol" glycolysis, anaerobic` next to the existing Mitochondrion group gives E0110 on the Mitochondrion group, even on `--page a0`. `anaerobic` and `pyruvate` land in the same layer, one in each frame, and the frames cannot be separated across the flow; each group alone builds. The example keeps fermentation as a link and only the Mitochondrion group. Fix: let layered candidates split a shared layer between frames (order the layer by group), or report which groups collide instead of a one-group core.
+In `cell_biology.fitd`, making `glycolysis -> anaerobic` a flow edge and adding `group "Cytosol" glycolysis, anaerobic` next to the existing Mitochondrion group gives E0110 on the Mitochondrion group, even on `--page a0`. `anaerobic` and `pyruvate` land in the same layer, one in each frame, and the frames cannot be separated across the flow; each group alone builds. The example keeps fermentation as a link and only the Mitochondrion group. Fix: let layered candidates split a shared layer between frames (order the layer by group), or report which groups collide instead of a one-group core.
 
 ### Open orientation keeps a tiny landscape page for tall flows
 
-An open page (`page a2`, no orientation) is solved landscape first and turned only when warnings remain (`main::retry`). A clean but cramped layout is kept: `french_history.cmap` (17 layers, `dir=down`) builds at 8.2pt landscape with 0 warnings, but 11.7pt on `page a2 portrait`. Reproduce: drop `portrait` from its `page` line. The example states `portrait` to work around it. Fix: start `dir=down` flows portrait and `dir=right` landscape, or solve both orientations when the page is open and keep the better merit.
+An open page (`page a2`, no orientation) is solved landscape first and turned only when warnings remain (`main::retry`). A clean but cramped layout is kept: `french_history.fitd` (17 layers, `dir=down`) builds at 8.2pt landscape with 0 warnings, but 11.7pt on `page a2 portrait`. Reproduce: drop `portrait` from its `page` line. The example states `portrait` to work around it. Fix: start `dir=down` flows portrait and `dir=right` landscape, or solve both orientations when the page is open and keep the better merit.
 
 ### Link labels and edges cover group titles
 
-In `french_history.cmap` the labels of `palsgrave ..> vaugelas` and `dubellay ..> malherbe` sit on the top edge of the "Français moderne" frame and hide its title, and the edge `francien -> relatin` runs through the "Moyen français" title. The checker does not treat frame titles as obstacles, so neither warns. Fix: add each frame's title box to the label placement obstacles, and penalize edges through it in polish.
+In `french_history.fitd` the labels of `palsgrave ..> vaugelas` and `dubellay ..> malherbe` sit on the top edge of the "Français moderne" frame and hide its title, and the edge `francien -> relatin` runs through the "Moyen français" title. The checker does not treat frame titles as obstacles, so neither warns. Fix: add each frame's title box to the label placement obstacles, and penalize edges through it in polish.
 
 ### Links forced to cross in `earth_science`
 

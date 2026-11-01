@@ -1,20 +1,20 @@
 //! Randomized robustness test of the front end: mutated sources must never panic the lexer,
 //! parser, semantic analysis, tree building, or diagnostic rendering.
 //!
-//! `cargo test --release fuzz` runs it for 2 seconds; set `CMAPC_FUZZ_SECS` to run longer.
+//! `cargo test --release fuzz` runs it for 2 seconds; set `FITD_FUZZ_SECS` to run longer.
 //! A failure prints the seed and saves the input, so it can be replayed.
 
 use crate::{diag, parse, sema, tree};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 const SEEDS: [&str; 7] = [
-    include_str!("../examples/cell_biology.cmap"),
-    include_str!("../examples/compiler.cmap"),
-    include_str!("../examples/earth_science.cmap"),
-    include_str!("../examples/french_history.cmap"),
-    include_str!("../examples/group_theory.cmap"),
-    include_str!("../tests/fixtures/stress_test.cmap"),
-    include_str!("../tests/fixtures/complex_constraints.cmap"),
+    include_str!("../examples/cell_biology.fitd"),
+    include_str!("../examples/compiler.fitd"),
+    include_str!("../examples/earth_science.fitd"),
+    include_str!("../examples/french_history.fitd"),
+    include_str!("../examples/group_theory.fitd"),
+    include_str!("../tests/fixtures/stress_test.fitd"),
+    include_str!("../tests/fixtures/complex_constraints.fitd"),
 ];
 
 /// Tokens and fragments worth splicing in: keywords, operators, units, and odd values.
@@ -27,7 +27,7 @@ const WORDS: &[&str] = &[
 ];
 
 fn front_end(text: &str) {
-    let src = diag::Source::new("fuzz.cmap", text);
+    let src = diag::Source::new("fuzz.fitd", text);
     let (stmts, mut diags) = parse::parse(text);
     let (g, more) = sema::analyze(&stmts);
     diags.extend(more);
@@ -84,7 +84,7 @@ fn mutate(seed: u64) -> String {
 
 #[test]
 fn fuzz_front_end() {
-    let secs: u64 = std::env::var("CMAPC_FUZZ_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(2);
+    let secs: u64 = std::env::var("FITD_FUZZ_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(2);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
     // Half the cores, so a long run leaves the machine usable.
     let threads = (std::thread::available_parallelism().map_or(2, |n| n.get()) / 2).max(1) as u64;
@@ -96,7 +96,7 @@ fn fuzz_front_end() {
                     while std::time::Instant::now() < deadline {
                         let text = mutate(seed);
                         if catch_unwind(AssertUnwindSafe(|| front_end(&text))).is_err() {
-                            let path = std::env::temp_dir().join(format!("cmapc-fuzz-{seed}.cmap"));
+                            let path = std::env::temp_dir().join(format!("fitd-fuzz-{seed}.fitd"));
                             std::fs::write(&path, &text).unwrap();
                             panic!("front end panicked on seed {seed}; input saved to {}", path.display());
                         }
