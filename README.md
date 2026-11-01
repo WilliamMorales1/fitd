@@ -28,7 +28,7 @@ prefer core at bottom-right weight=2
 cargo build --release
 ./target/release/cmapc examples/compiler.cmap --tikz out/compiler.tex
 ./target/release/cmapc examples/compiler.cmap -o docs/compiler.png
-./target/release/cmapc examples/math4200.cmap --page 2296x1524pt
+./target/release/cmapc examples/group_theory.cmap --page 2296x1524pt
 ./target/release/cmapc explain E0110
 ./target/release/cmapc guide          # the language on one page
 ```
@@ -133,9 +133,10 @@ node a "Alpha" .warm
 
 | File | Shows |
 | --- | --- |
-| `math4200.cmap`, `math4200-v2.cmap` | real course notes: a large radial map with bodies, math markup, and cross links |
-| `earth_science.cmap` | radial map with styles, labeled links, `require` and `prefer` |
-| `compiler.cmap` | layered flowchart (down) with a row alignment and links |
-| `cell_biology.cmap` | layered flowchart (right) |
+| `group_theory.cmap` | group theory notes with no settings at all: a large radial map on the defaults, with bodies, math markup, and cross links |
+| `french_history.cmap` | real course notes: a layered timeline (down) on a portrait page, colored `group` frames per period, styles, a colored link, `require ... at` and `prefer ... at` |
+| `earth_science.cmap` | radial map: `root=`, theme overrides (`root=`, `link=`), styles on nodes and edges, a node `fill`, labeled links, `require` and `prefer` |
+| `compiler.cmap` | layered flowchart (down): `theme dark`, `page ... margin=`, `shape=circle` terminals, two groups, a row alignment, `gap=`, `near ... within=` |
+| `cell_biology.cmap` | layered flowchart (right) that wraps into two bands: a group frame, circle molecules, a solid `fill` (text turns white), labeled arrows, an edge `color=` |
 
 `tests/fixtures/` holds inputs that fail or strain the solver on purpose.

@@ -146,6 +146,8 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         wrap_em: wrap.or(set.wrap_em).unwrap_or(24.0),
         budget,
         opt_budget: budget / if draft { 32 } else { 16 },
+        // A draft gives up sooner on the first, usually too large, fonts.
+        first_cap: budget / if draft { 20 } else { 4 },
         legible: legible(page_w, page_h, min_font.unwrap_or(font.0)),
         draft,
     };
@@ -277,11 +279,14 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
 /// winner's config and a note saying what changed.
 fn retry(g: &graph::Graph, t: &tree::Tree, fonts: &metrics::Fonts, cfg: Config, page_fixed: bool, lay: &mut layout::Layout, diags: &mut Vec<Diag>) -> (Config, Vec<Diag>) {
     let arranged = if lay.kind == LayoutKind::Radial { radial::arrange(g, t, &cfg) } else { None };
-    let turned = Config { page_w: cfg.page_h, page_h: cfg.page_w, ..cfg };
+    // The first build already found about where the font lands, so the variants give up on
+    // fonts far above it as soon as a draft would.
+    let quick = Config { first_cap: cfg.budget / 20, ..cfg };
+    let turned = Config { page_w: cfg.page_h, page_h: cfg.page_w, ..quick };
     let mut tries: Vec<(&tree::Tree, Config, String)> = Vec::new();
     if let Some(a) = &arranged {
         let moved: Vec<String> = (0..t.children.len()).filter(|&v| a.children[v] != t.children[v]).map(|v| format!("`{}`", g.nodes[v].id)).collect();
-        tries.push((a, cfg, format!("reordered the branches under {}", moved.join(", "))));
+        tries.push((a, quick, format!("reordered the branches under {}", moved.join(", "))));
     }
     if !page_fixed && cfg.page_w != cfg.page_h {
         tries.push((t, turned, format!("turned the page to {}", if turned.page_w < turned.page_h { "portrait" } else { "landscape" })));

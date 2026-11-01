@@ -16,9 +16,9 @@ Next:
 cmapc is done when every item below holds. Each is measurable and tied to real use; anything not listed here (including sections 1 to 7 below) is v2.
 
 1. **Real use.** Three new diagrams from actual coursework or notes, each built start to finish without changing cmapc source and without hand-editing the SVG or TikZ. A tool change forced by a diagram resets that diagram's count.
-2. **Original job beaten.** The MATH 4200 map builds at 19.8pt body font or larger with 0 errors, locked in by an e2e test.
+2. **Original job beaten.** The group theory map (`group_theory.cmap`) builds at 19.2pt body font or larger with 0 errors (the hand-made map reached 16pt), locked in by an e2e test. The first version reached 19.8pt; the current, larger map reaches 19.2pt.
 3. **Clean output.** Every example builds with 0 warnings, or each remaining warning has a documented reason it is accepted. Now: 2, both in earth_science (see `PROBLEMS.md`).
-4. **Edit-loop speed.** On the largest example, idle X280: `--draft` under 1 s, full build under 3 s. Last measured under load: about 0.6 to 0.8 s and 1.6 to 2.5 s; re-measure idle.
+4. **Edit-loop speed.** On the largest example, idle X280: `--draft` under 1 s, full build under 3 s. Measured idle 2026-10-31 on `group_theory`: 0.83 to 0.90 s and 2.1 s.
 5. **No hangs, no panics.** 30 minutes of fuzzing the lexer, parser, and sema with 0 panics. Every unsatisfiable input returns an unsat core or a static contradiction in bounded time.
 6. **Language frozen.** `group` and per-edge color are implemented; per-edge width and arrowheads are cut for good (the layout decides them). `LANGUAGE.md` matches the parser, and every diagnostic code has an `explain` page.
 7. **Trustworthy tests.** `cargo test --release` passes 10 runs in a row. Time budgets use CPU time or check counts instead of wall-clock time.
@@ -26,7 +26,7 @@ cmapc is done when every item below holds. Each is measurable and tied to real u
 9. **Agent use.** `cmapc guide` fits in 2.5 KB and its examples build (e2e test); an agent given only the guide and a one-sentence description writes a concept map and a flowchart that build on the first or second try, through stdin and `--short`.
 10. **No open problems.** The Output quality and Speed sections of `PROBLEMS.md` are empty; anything left under Minor is marked won't-fix.
 
-Real-use log (item 1). 2026-10-31, no cmapc source change for any of them: `CSC4343/TransformerNotes/transformer.cmap` (decoder flowchart, 0 warnings first build), `CSC4343/TransformerNotes/generative.cmap` (generative-model map; 2 warnings on landscape, 0 after switching to portrait), `HNRS2000/Justice/justice-map.cmap` (Sandel's three approaches; 2 warnings, 0 after reordering one branch line). Visual flaws the checker misses are in `PROBLEMS.md`.
+Real-use log (item 1). 2026-10-31, no cmapc source change for any of them: `CSC4343/TransformerNotes/transformer.cmap` (decoder flowchart, 0 warnings first build), `CSC4343/TransformerNotes/generative.cmap` (generative-model map; 2 warnings on landscape, 0 after switching to portrait), `HNRS2000/Justice/justice-map.cmap` (Sandel's three approaches; 2 warnings, 0 after reordering one branch line). Visual flaws the checker misses are in `PROBLEMS.md`. Confirmed by the user as real use, 2026-10-31; all three still build with 0 warnings after that day's label and layer-gap changes.
 
 Agent log (item 9). 2026-10-31, pi with `ollama/gemma4:cloud`, bash tool only, no context files, prompt naming only `cmapc guide`: a bill-to-law flowchart and a WWI causes concept map each built on the first try in 2 tool calls (about 4.3k input and 0.4k output tokens). An earlier run of the flowchart failed twice with "no layout fits" before passing; the first failure was a fixed `font 12pt`, and the second was a cmapc bug (layer gaps that exactly fill the page put the last layer off it by rounding), both fixed. The local `qwen3.5:4b` model is too slow on the X280 CPU; run local-model evals on Colab.
 

@@ -10,7 +10,8 @@
 
 use crate::geom::Rect;
 use crate::graph::{Dir, EdgeKind, Graph, Relation, Side};
-use crate::layout::{Boxed, Cand, Config, Drawn, EdgeStyle, FRAME_PAD, Kind, Plan, TITLE_BAND};
+use crate::layout::{label_size, Boxed, Cand, Config, Drawn, EdgeStyle, FRAME_PAD, Kind, Plan, TITLE_BAND};
+use crate::metrics::Fonts;
 
 /// back_edges returns the indices of tree edges that close a directed cycle in DFS order.
 fn back_edges(n: usize, edges: &[(usize, usize)]) -> Vec<bool> {
@@ -134,7 +135,7 @@ fn merged(g: &Graph, dir: Dir) -> Vec<usize> {
     (0..rep.len()).map(|v| find(&mut rep, v)).collect()
 }
 
-pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan {
+pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan {
     let n = boxes.len();
     let page = cfg.page();
     // Layers fill the page along the flow, so leave room at both ends for group frames.
@@ -178,11 +179,22 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     let along: Vec<(usize, usize)> = (0..tree.len()).filter(|&i| flat[i]).map(|i| tree[i]).collect();
     let rows = order(n, &layer, &dag);
 
-    // Spread layers over the page, with at least two ems between them for arrows. When the
-    // flow is too long to reach the legibility floor in one line, it wraps into bands that
+    // Spread layers over the page, with at least two ems between them for arrows, and room
+    // for a label plus an em on each side where an arrow to the next layer carries one. When
+    // the flow is too long to reach the legibility floor in one line, it wraps into bands that
     // run back and forth (a snake), so each band's last layer sits beside the next one's first.
     let sep = (0.6 * b).max(3.0);
     let thick: Vec<f64> = rows.iter().map(|r| r.iter().map(|&v| size(v).0).fold(0.0, f64::max)).collect();
+    let mut room = vec![2.0 * b; rows.len()];
+    for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Tree) {
+        let (la, lb) = (layer[e.a].min(layer[e.b]), layer[e.a].max(layer[e.b]));
+        if let (Some(l), true) = (&e.label, lb == la + 1) {
+            let (w, h) = label_size(fonts, l, b);
+            room[la] = room[la].max(if dir == Dir::Down { h } else { w } + 2.0 * b);
+        }
+    }
+    // Room needed between the layers of a band, beyond their thickness.
+    let gaps = |r: &std::ops::Range<usize>| room[r.start..r.end - 1].iter().sum::<f64>();
     let span: Vec<f64> = rows.iter().map(|r| r.iter().map(|&v| size(v).1).sum::<f64>() + sep * r.len().saturating_sub(1) as f64).collect();
     let bands = |k: usize| -> Vec<std::ops::Range<usize>> {
         let per = rows.len().div_ceil(k.max(1)).max(1);
@@ -191,7 +203,7 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     // Whether `k` bands fit with every length scaled by `scale`.
     let fits = |k: usize, scale: f64| {
         let bs = bands(k);
-        let along = bs.iter().all(|r| scale * (thick[r.clone()].iter().sum::<f64>() + 2.0 * b * (r.len() - 1) as f64) <= main_len);
+        let along = bs.iter().all(|r| scale * (thick[r.clone()].iter().sum::<f64>() + gaps(r)) <= main_len);
         let across = scale * (bs.iter().map(|r| span[r.clone()].iter().copied().fold(0.0, f64::max)).sum::<f64>() + 2.0 * b * (bs.len() - 1) as f64);
         along && (bs.len() == 1 || across <= cross_len)
     };
@@ -201,16 +213,16 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     let bands = bands(k);
     let feasible = fits(k, 1.0);
     let band: Vec<usize> = (0..rows.len()).map(|l| bands.iter().position(|r| r.contains(&l)).unwrap()).collect();
-    // One gap for every band, so their layers line up.
-    let gap = bands.iter().filter(|r| r.len() > 1).map(|r| (main_len - thick[r.clone()].iter().sum::<f64>()) / (r.len() - 1) as f64 - 1e-6).fold(6.0 * b, f64::min);
+    // Each gap grows by one shared amount above its room, so the bands' layers line up.
+    let extra = bands.iter().filter(|r| r.len() > 1).map(|r| (main_len - thick[r.clone()].iter().sum::<f64>() - gaps(r)) / (r.len() - 1) as f64 - 1e-6).fold(4.0 * b, f64::min).max(0.0);
     let mut center = vec![0.0; rows.len()];
     for (i, r) in bands.iter().enumerate() {
-        let used: f64 = thick[r.clone()].iter().sum();
-        let mut m = lead + (main_len - used - gap * (r.len() - 1) as f64).max(0.0) / 2.0;
+        let used = thick[r.clone()].iter().sum::<f64>() + gaps(r) + extra * (r.len() - 1) as f64;
+        let mut m = lead + (main_len - used).max(0.0) / 2.0;
         for l in r.clone() {
             // A hair under an exact fill, so rounding never pushes the last layer off the page.
             center[l] = if i % 2 == 0 { m + thick[l] / 2.0 } else { 2.0 * lead + main_len - m - thick[l] / 2.0 };
-            m += thick[l] + gap;
+            m += thick[l] + room[l] + extra;
         }
     }
     // Each band owns a slice of the cross axis, as wide as its widest layer plus a share of
@@ -292,7 +304,7 @@ pub fn plan(g: &Graph, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan 
     let member = |v: usize| g.constraints.iter().any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)));
     let (mut order, rest): (Vec<usize>, Vec<usize>) = rows.concat().into_iter().partition(|&v| member(v));
     order.extend(rest);
-    let crowded = (!feasible).then(|| (rows.len(), thick.iter().sum::<f64>() + 2.0 * b * (rows.len() - 1) as f64, main_len));
+    let crowded = (!feasible).then(|| (rows.len(), thick.iter().sum::<f64>() + gaps(&(0..rows.len())), main_len));
     Plan { order, cands, cons, edges, kx: 1.0, ky: 1.0, tol: 0.5 * step, crowded }
 }
 

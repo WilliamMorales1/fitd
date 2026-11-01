@@ -57,6 +57,9 @@ pub struct Config {
     pub budget: u64,
     /// Constraint checks spent improving soft preferences once the font is fixed.
     pub opt_budget: u64,
+    /// Constraint checks for font probes until one fits; later probes get twice the last
+    /// fit's cost.
+    pub first_cap: u64,
     /// Smallest body font readable at the page's viewing distance; also the length unit of
     /// readability scores.
     pub legible: f64,
@@ -394,10 +397,9 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
     let probe = |b: f64, set: &[usize], budget: u64, stats: &mut Stats| attempt(g, t, fonts, &Config { budget, ..*cfg }, b, Users::Hard(set), stats);
 
     // Near the largest font that fits, a probe either succeeds quickly or runs until the
-    // budget is gone. So once a probe succeeds, later probes get twice its cost. A draft
-    // gives up sooner on the first, usually too large, fonts.
+    // budget is gone. So once a probe succeeds, later probes get twice its cost.
     let (mut lo, mut hi) = (cfg.min_font, cfg.max_font);
-    let (mut found, mut next, mut cap) = (None, hi, cfg.budget / if cfg.draft { 20 } else { 4 });
+    let (mut found, mut next, mut cap) = (None, hi, cfg.first_cap);
     loop {
         match probe(next, &hard, cap, &mut stats) {
             Some(l) => {
@@ -428,7 +430,7 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
         None => {
             if hard.is_empty() || probe(cfg.min_font, &[], cfg.budget, &mut stats).is_none() {
                 let crowded = match g.settings.layout {
-                    Some(LayoutKind::Layered(dir)) => layered::plan(g, &measure_all(g, t, fonts, cfg, cfg.min_font), cfg, cfg.min_font, dir).crowded,
+                    Some(LayoutKind::Layered(dir)) => layered::plan(g, fonts, &measure_all(g, t, fonts, cfg, cfg.min_font), cfg, cfg.min_font, dir).crowded,
                     _ => None,
                 };
                 return Err(Failure::NoRoom(crowded));

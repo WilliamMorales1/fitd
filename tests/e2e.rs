@@ -14,14 +14,14 @@ fn cmapc(args: &[&str]) -> (bool, String) {
 
 #[test]
 fn builds_example_with_zero_errors() {
-    let svg = tmp("math4200.svg");
-    let tex = tmp("math4200.tex");
-    // The hand-made map this tool replaces reached 16pt on this page; cmapc must fit 19.8pt.
-    let (ok, log) = cmapc(&["examples/math4200.cmap", "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap(), "--page", "2296x1524", "--min-font", "19.8"]);
+    let svg = tmp("group_theory.svg");
+    let tex = tmp("group_theory.tex");
+    // The hand-made map this tool replaces reached 16pt on this page; cmapc must fit 19.2pt.
+    let (ok, log) = cmapc(&["examples/group_theory.cmap", "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap(), "--page", "2296x1524", "--min-font", "19.2"]);
     assert!(ok, "{log}");
     assert!(log.contains(" 0 errors"), "{log}");
     let body: f64 = log.split("body font ").nth(1).unwrap().split("pt").next().unwrap().parse().unwrap();
-    assert!(body >= 19.8, "body font regressed to {body}pt\n{log}");
+    assert!(body >= 19.2, "body font regressed to {body}pt\n{log}");
     let s = std::fs::read_to_string(&svg).unwrap();
     assert!(s.starts_with("<svg") && s.contains("Groups"));
     assert!(std::fs::read_to_string(&tex).unwrap().contains("\\begin{tikzpicture}"));
@@ -38,8 +38,38 @@ fn general_graph_with_cycle_and_no_root() {
 }
 
 #[test]
+fn radial_tree_edges_keep_their_labels() {
+    // `d` is reachable only by its link, which becomes its tree edge.
+    let src = tmp("labels.cmap");
+    std::fs::write(&src, "layout radial root=a\nnode a \"Alpha\"\nnode b \"Beta\"\nnode c \"Gamma\"\nnode d \"Delta\"\na -> b \"feeds\"\na -> c\nd ..> c \"pumps\"\n").unwrap();
+    let svg = tmp("labels.svg");
+    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--page", "a4"]);
+    assert!(ok && log.contains(" 0 warnings"), "{log}");
+    let s = std::fs::read_to_string(&svg).unwrap();
+    assert!(s.contains(">feeds<") && s.contains(">pumps<"), "labels missing");
+}
+
+#[test]
+fn labeled_arrows_get_room_between_layers() {
+    let src = tmp("bill.cmap");
+    std::fs::write(&src, "layout layered dir=down\npage a4\nnode a \"Bill Introduced\"\nnode b \"Committee Review\"\nnode c \"Floor Vote\"\nnode d \"President\"\na -> b\nb -> c \"approved\"\nc -> d\n").unwrap();
+    let svg = tmp("bill.svg");
+    let (ok, log) = cmapc(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
+    assert!(ok && log.contains(" 0 warnings"), "{log}");
+    let s = std::fs::read_to_string(&svg).unwrap();
+    let y = |title: &str| -> f64 {
+        let line = s.lines().find(|l| l.contains(&format!(">{title}<"))).unwrap();
+        line.split("y=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap()
+    };
+    let body: f64 = log.split("body font ").nth(1).unwrap().split("pt").next().unwrap().parse().unwrap();
+    // One-line boxes of equal height, so the labeled step is longer by the label and its margins.
+    let (plain, labeled) = (y("Committee Review") - y("Bill Introduced"), y("Floor Vote") - y("Committee Review"));
+    assert!(labeled >= plain + body, "plain {plain}, labeled {labeled}, body {body}");
+}
+
+#[test]
 fn impossible_page_is_rejected() {
-    let (ok, log) = cmapc(&["examples/math4200.cmap", "-o", tmp("x.svg").to_str().unwrap(), "--page", "200x150"]);
+    let (ok, log) = cmapc(&["examples/group_theory.cmap", "-o", tmp("x.svg").to_str().unwrap(), "--page", "200x150"]);
     assert!(!ok);
     assert!(log.contains("no layout fits"), "{log}");
 }
@@ -162,11 +192,11 @@ fn theme_colors_reach_svg_and_tikz() {
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
 const EXAMPLES: [(&str, usize, u64); 5] = [
-    ("cell_biology", 0, 4_300_000),
+    ("cell_biology", 0, 2_400_000),
     ("compiler", 0, 4_600_000),
-    ("earth_science", 2, 128_000_000),
-    ("math4200", 0, 40_000_000),
-    ("math4200-v2", 0, 56_000_000),
+    ("earth_science", 2, 89_000_000),
+    ("french_history", 0, 2_600_000),
+    ("group_theory", 0, 50_000_000),
 ];
 
 const HANG_SECS: f64 = 60.0;

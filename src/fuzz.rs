@@ -11,8 +11,8 @@ const SEEDS: [&str; 7] = [
     include_str!("../examples/cell_biology.cmap"),
     include_str!("../examples/compiler.cmap"),
     include_str!("../examples/earth_science.cmap"),
-    include_str!("../examples/math4200.cmap"),
-    include_str!("../examples/math4200-v2.cmap"),
+    include_str!("../examples/french_history.cmap"),
+    include_str!("../examples/group_theory.cmap"),
     include_str!("../tests/fixtures/stress_test.cmap"),
     include_str!("../tests/fixtures/complex_constraints.cmap"),
 ];

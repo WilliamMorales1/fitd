@@ -1,0 +1,94 @@
+# FREN 4014 Exam 1: external history of French, from Gaulish to the standard (course notes, termes_examen_1).
+title "Histoire externe du français"
+layout layered dir=down
+page a2 portrait
+font 8pt..34pt wrap=16em
+
+style selection color=#2E7D32
+style codification color=#1565C0
+style elaboration color=#EF6C00
+style diffusion color=#6A1B9A
+
+node gaulois "Les Gaulois"
+| peuple celte, arrivé vers 400 av. J.-C.
+| substrat : une centaine de mots (chêne, druide)
+node latin "Conquête romaine"
+| IIe–Ier s. av. J.-C.
+| le latin vulgaire remplace le gaulois
+node francs "Invasions germaniques"
+| Ve–VIIIe s. : Wisigoths, Burgondes, Francs
+| superstrat francique : 10 % du lexique, h aspiré
+node roman "Roman (gallo-roman)"
+| le latin parlé s'éloigne du latin écrit
+node tours "Concile de Tours (813)"
+| prêcher en rustica romana lingua
+| diglossie : latin écrit, roman oral
+node strasbourg "Serments de Strasbourg (842)"
+| premier texte écrit en roman
+
+node dialectes "Ancien français"
+| oïl, oc, franco-provençal
+| cas sujet et cas régime
+node francien "Île-de-France (XIIe s.)" .selection
+| roi, Cour, démographie, littérature
+| le francien gagne en prestige
+
+node relatin "Relatinisation"
+| doublets : chose / cause, frêle / fragile
+| orthographe étymologique (temps)
+node villers "Villers-Cotterêts (1539)" .elaboration
+| français, langue de l'administration
+| et de la justice, à la place du latin
+node palsgrave "Palsgrave, Estienne" .codification
+| 1530 : grammaire pour étrangers
+| 1539 : premier dictionnaire
+node dubellay "Du Bellay (1549)" .elaboration
+| Défense et illustration de la langue
+| enrichir : emprunts, néologismes
+node italien "Emprunts à l'italien"
+| guerres d'Italie, Catherine de Médicis
+| balcon, soldat, banque, sonnet
+
+node malherbe "Malherbe" .codification
+| clarté, pureté, précision
+| contre archaïsmes et emprunts
+node academie "Académie française (1635)" .codification
+| Richelieu ; prescriptive
+| premier dictionnaire en 1694
+node vaugelas "Vaugelas (1647)" .codification
+| le bon usage : la plus saine
+| partie de la Cour et des auteurs
+node revolution "Révolution (1789)" .diffusion
+| une nation, une langue
+| abbé Grégoire : anéantir les patois
+node ferry "Lois Ferry" .diffusion
+| école gratuite, obligatoire, laïque
+| uniquement en français standard
+node francophonie "Francophonie"
+| plusieurs normes : Québec, Belgique,
+| Suisse, Afrique
+
+group "Ancien français, 842–1350" dialectes, francien color=#8D6E63
+group "Moyen français, 1350–1600" relatin, villers, palsgrave, dubellay, italien color=#00838F
+group "Français moderne, 1600–" malherbe, academie, vaugelas, revolution, ferry, francophonie color=#3949AB
+
+gaulois -> latin
+latin -> francs, roman
+francs -> roman "superstrat"
+roman -> tours
+tours -> strasbourg
+strasbourg -> dialectes
+dialectes -> francien
+francien -> relatin, villers
+villers -> palsgrave, dubellay
+relatin -> italien
+palsgrave -> malherbe
+malherbe -> academie, vaugelas
+vaugelas -> revolution
+revolution -> ferry
+ferry -> francophonie
+dubellay ..> malherbe "l'opposé" color=#C62828
+palsgrave ..> vaugelas "norme régionale, puis sociale"
+
+require gaulois at top
+prefer francophonie at bottom-right

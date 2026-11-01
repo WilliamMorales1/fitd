@@ -2,10 +2,12 @@ title "The water cycle"
 layout radial root=water
 page a3
 font 8pt..34pt wrap=16em
+theme light root=#0D47A1 link=#546E7A
 
 style reservoir color=#1565C0
 style process color=#2E7D32
 style atmosphere color=#6A1B9A
+style impact color=#C62828
 
 node water "Water" .reservoir
 | solid, liquid, and vapor
@@ -43,13 +45,13 @@ node transpiration "Transpiration" .process
 node storage "Surface storage" .reservoir
 | lakes, wetlands, and soil moisture
 | buffers floods and droughts
-node human "Human withdrawals" .process
+node human "Human withdrawals" .impact
 | irrigation and pumping move water
 | use can exceed natural recharge
 node balance "Water balance" .process
 | input - output = change in storage
 | basin budgets expose unsustainable use
-node climate "Climate feedback" .atmosphere
+node climate "Climate feedback" .impact fill=#FFEBEE
 | warming changes vapor capacity and ice melt
 | circulation shifts precipitation patterns
 
@@ -70,10 +72,10 @@ runoff -> ocean
 infiltration -> ground
 runoff -> storage
 storage -> evaporation
-human ..> ground "pumping"
-human ..> storage "withdrawal"
-climate ..> evaporation "warming"
-climate ..> ice "melting"
+human ..> ground "pumping" .impact
+human ..> storage "withdrawal" .impact
+climate ..> evaporation "warming" .impact
+climate ..> ice "melting" .impact
 ocean ..> balance "reservoir"
 ground ..> balance "reservoir"
 

@@ -232,7 +232,10 @@ pub fn plan(g: &Graph, t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64, rot: f64
             }
         }
     }
-    let mut drawn: Vec<Drawn> = edges.iter().map(|&(p, v)| Drawn::new(p, v, EdgeStyle::Line, if t.depth[v] == 1 { 0.45 } else { 0.18 }, None)).collect();
+    // A tree edge keeps the label of the source edge it came from, a link too when the link
+    // is what attached the node.
+    let label = |p: usize, v: usize| g.edges.iter().find(|e| (e.a, e.b) == (p, v) || (e.a, e.b) == (v, p)).and_then(|e| e.label.clone());
+    let mut drawn: Vec<Drawn> = edges.iter().map(|&(p, v)| Drawn::new(p, v, EdgeStyle::Line, if t.depth[v] == 1 { 0.45 } else { 0.18 }, label(p, v))).collect();
     drawn.extend(t.links.iter().map(|l| Drawn::new(l.a, l.b, EdgeStyle::Link, 0.1, l.label.clone())));
     // Group members go first, as in layered layouts: once a frame is known, forward checking
     // keeps everyone else off it.

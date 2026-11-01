@@ -1,5 +1,5 @@
-# MATH 4200 Exam 2 concept map, v2: synced to the practice bank (Judson Ch 4, 5, 6, 9; PSET 5-7).
-title "MATH 4200 Exam 2"
+# Introductory group theory: cyclic and permutation groups, cosets and Lagrange, isomorphisms and products.
+title "Group theory"
 root core
 
 node core "Groups"
@@ -12,7 +12,7 @@ node cyc "Cyclic\ngroups"
 node perm "Permutation\ngroups"
 node cos "Cosets and\nLagrange"
 node iso "Isomorphisms\nand products"
-node pset "PSET 5-7\nproofs"
+node proofs "Proof\ntechniques"
 
 node gen "Cyclic subgroup ⟨a⟩"
 | ⟨a⟩ = {aᵏ : k ∈ ℤ}, negative k too.
@@ -94,7 +94,7 @@ node cosets "Cosets"
 | Cosets partition G; |gH| = |H|.
 | [G : H] = #left = #right cosets.
 
-node crit "Coset criteria (PSET 6 #6)"
+node crit "Coset criteria"
 | g₁H = g₂H ⟺ Hg₁⁻¹ = Hg₂⁻¹
 | ⟺ g₁H ⊆ g₂H ⟺ g₂ ∈ g₁H
 | ⟺ g₁⁻¹g₂ ∈ H. So gH = H ⟺ g ∈ H.
@@ -103,11 +103,11 @@ node ex "Cosets in examples"
 | List: take uncovered g, form gH, repeat.
 | In Sₙ, gH: h acts first, then g.
 | S₄ by ⟨(1234)⟩, V, ⟨(123)⟩.
-| S₃ ≤ S₄: left ≠ right (PSET 6 #3).
+| S₃ ≤ S₄: left ≠ right cosets.
 
 node normal "Normal subgroups"
 | H ⊴ G: ghg⁻¹ ∈ H for all g, h.
-| ⇒ gH = Hg for all g (PSET 6 #7).
+| ⇒ gH = Hg for all g.
 | Abelian or index 2 ⇒ normal.
 | gH = Hg does not force gh = hg.
 
@@ -145,8 +145,8 @@ node invar "Invariants (prove ≇)"
 
 node classif "Classification"
 | Infinite cyclic ≅ ℤ; order n ≅ ℤ/nℤ.
-| |G| = p ⇒ G ≅ ℤ/pℤ (PSET 7 #4).
-| Order 6: ℤ/6ℤ or S₃ (PSET 7 #3).
+| |G| = p ⇒ G ≅ ℤ/pℤ.
+| Order 6: ℤ/6ℤ or S₃.
 
 node cayley "Cayley's Theorem"
 | Every group ≅ a group of
@@ -158,35 +158,36 @@ node prod "Direct products"
 | Internal: G = HK, H ∩ K = {e},
 | hk = kh ⇒ G ≅ H × K.
 
-node units "Unit groups (PSET 7 #1-2)"
+node units "Unit groups"
 | (ℤ/nℤ)ˣ: units mod n, order φ(n).
 | Identify: list unit orders, match
 | against products of ℤ/dℤ.
 | (ℤ/8ℤ)ˣ ≅ (ℤ/12ℤ)ˣ; (ℤ/24ℤ)ˣ ≅ (ℤ/2ℤ)³.
 
-node p5 "PSET 5"
-| #5(a): ℤ/mℤ has φ(m) generators.
-| #5(b): cyclic (ℤ/mℤ)ˣ: φ(φ(m)).
-| #6: no proper nontrivial subgroups
+node subtest "Subgroup tests"
+| H ≠ ∅ and ab⁻¹ ∈ H ⇒ H ≤ G.
+| Finite H: closure is enough.
+| Intersections of subgroups
+| are subgroups.
+
+node counting "Counting arguments"
+| Cosets partition G: sum their sizes.
+| Order-p elements come in
+| groups of p − 1.
+| |G| even ⇒ some g ≠ e has g = g⁻¹.
+
+node structure "Proving structure"
+| Exhibit a generator ⇒ cyclic.
+| Every g² = e ⇒ abelian.
+| No proper nontrivial subgroups
 | ⇒ cyclic of prime order.
-| #7: k-cycle even ⟺ k odd.
-
-node p6 "PSET 6"
-| #5: σ ∈ Aₙ ⟺ product of 3-cycles.
-| #6: coset criteria, a ⇒ c ⇒ d ⇒ e ⇒ a.
-| #7: normal ⇒ gH = Hg.
-
-node p7 "PSET 7"
-| #3: order 6 ≅ ℤ/6ℤ or S₃.
-| #4: order p ≅ ℤ/pℤ.
-| Lagrange: partition + |gH| = |H|.
 
 node disprove "Prove or disprove"
 | Counterexamples: (ℤ/8ℤ)ˣ,
 | ℤ/2ℤ × ℤ/2ℤ, S₃, ℚ, A₄.
 | Salvage: add the missing hypothesis.
 
-core -> cyc perm cos iso pset
+core -> cyc perm cos iso proofs
 cyc -> gen polar
 gen -> elord divalg abel
 elord -> gens ftcg
@@ -201,7 +202,7 @@ lagr -> corr euler conv
 iso -> isodef prod
 isodef -> invar classif cayley
 prod -> units
-pset -> p5 p6 p7 disprove
+proofs -> subtest counting structure disprove
 
 divalg ..> ftcg "proof"
 corr ..> classif "|G| = p"

@@ -387,7 +387,7 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
     let n = g.nodes.len();
     let plan = match kind {
         LayoutKind::Radial => radial::plan(g, t, boxes, cfg, b, rot),
-        LayoutKind::Layered(dir) => layered::plan(g, boxes, cfg, b, dir),
+        LayoutKind::Layered(dir) => layered::plan(g, fonts, boxes, cfg, b, dir),
     };
     let mut plan = plan;
     // Starting from a known layout guarantees a first solution; search then improves on it.
