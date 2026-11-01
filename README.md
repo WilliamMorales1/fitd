@@ -35,6 +35,8 @@ cargo build --release
 
 ## For AI agents
 
+`skills/fitd/SKILL.md` is an agent skill with the workflow below, layout choice, and the fix loop; copy the `skills/fitd` folder into an agent's skills directory (for Claude Code, `~/.claude/skills/`).
+
 An agent can draw a described diagram with two commands and a few hundred tokens of context:
 
 1. `fitd guide` prints the whole language on one page, with a concept map and a flowchart example: about 2.2 KB (roughly 600 tokens), against 8 KB for `LANGUAGE.md`. An e2e test builds both examples and caps the size.
@@ -61,6 +63,12 @@ Measured with pi and `gemma4:cloud`, given only a one-sentence request that name
 | Polish  | `quality.rs`, `layout/`   | Simulated annealing moves nodes to improve readability without breaking any constraint: fewer link crossings, related nodes close, branches grouped, edges fanned out, ink spread evenly (straight flow for layered). |
 | Check   | `check.rs`                | Recompute every property from the finished layout. Any error stops output.                                                                                                                                                                                                              |
 | Emit    | `emit.rs`                 | SVG, PNG (via resvg, same font files as measurement), and TikZ with absolute positions; none re-flows text.                                                                                                                                                                             |
+
+References:
+
+- P. Prosser. Hybrid algorithms for the constraint satisfaction problem. *Computational Intelligence* 9(3), 1993. (conflict-directed backjumping)
+- U. Junker. QuickXplain: preferred explanations and relaxations for over-constrained problems. AAAI 2004. (unsat cores)
+- K. Sugiyama, S. Tagawa, M. Toda. Methods for visual understanding of hierarchical system structures. *IEEE SMC* 11(2), 1981. (layered layout)
 
 Errors point into the source, rustc style:
 
@@ -123,11 +131,7 @@ node a "Alpha" .warm
 ## Docs
 
 - `docs/LANGUAGE.md`: grammar, semantics, relations, diagnostics.
-- `docs/SOLVER.md`: the engine, the diagram encoding, unsat cores, and what to do when a build fails.
-- `docs/PLANS.md`: definition of done, and what comes next.
-- `docs/PROBLEMS.md`: known problems; delete entries when fixed, add new criticism after.
-- `docs/PRIOR_ART.md`: related tools.
-- `docs/SESSION_RETRO.md`: the hand-made map that motivated this.
+- `skills/fitd/SKILL.md`: agent skill for drawing diagrams with fitd.
 
 ## Examples
 

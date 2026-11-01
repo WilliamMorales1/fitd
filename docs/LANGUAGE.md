@@ -111,7 +111,7 @@ error[E0008]: contradictory vertical constraints
    | ^^^^^^^^^^^^^^^^^^^^^^^ these constraints cannot all hold
 ```
 
-Contradictions that depend on geometry (sizes, page bounds, the strategy's candidate positions) are found later by search and reported as a minimal core (E0110, see `SOLVER.md`).
+Contradictions that depend on geometry (sizes, page bounds, the strategy's candidate positions) are found later by search and reported as a minimal core (E0110; `fitd explain E0110`).
 
 ## Diagnostics
 
