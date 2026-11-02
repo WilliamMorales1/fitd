@@ -605,8 +605,12 @@ fn includes_splice_files_and_keep_their_names_in_diagnostics() {
 }
 
 #[test]
-fn imported_dot_and_mermaid_build_cleanly() {
-    for (src, dropped) in [("import.dot", "edge attribute `constraint=false`"), ("import.mmd", "`classDef` statements")] {
+fn imported_sources_build_cleanly() {
+    let (ok, log) = fitd(&["import", "tests/fixtures/import_mindmap.mmd", "-o", tmp("mindmap.fitd").to_str().unwrap()]);
+    assert!(ok && log.contains("icons"), "{log}");
+    let (ok, log) = fitd(&[tmp("mindmap.fitd").to_str().unwrap(), "-o", tmp("mindmap.svg").to_str().unwrap()]);
+    assert!(ok && log.contains("13 nodes, 12 edges; 0 errors, 0 warnings"), "{log}");
+    for (src, dropped) in [("import.dot", "edge attribute `constraint=false`"), ("import.mmd", "`classDef` statements"), ("import.d2", "shape `cylinder`")] {
         let out = tmp(&format!("{src}.fitd"));
         let (ok, log) = fitd(&["import", &format!("tests/fixtures/{src}"), "-o", out.to_str().unwrap()]);
         assert!(ok && log.contains(dropped), "{log}");

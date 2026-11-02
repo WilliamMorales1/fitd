@@ -29,14 +29,14 @@ Work:
 
 - Install Helix, follow the README, and fix what breaks.
 
-## 4. Import covers flowcharts only
+## 4. Import flattens nesting and covers a D2 subset
 
-`fitd import` (`src/import.rs`) reads DOT and Mermaid flowcharts. D2, Mermaid mind maps, and DOT HTML-like labels beyond `<br>` are not handled; nested clusters are flattened with a warning, since groups cannot nest.
+`fitd import` (`src/import.rs`) reads DOT, Mermaid flowcharts and mind maps, and D2. Groups cannot nest, so nested clusters and containers are flattened with a warning, and a D2 connection to a container is dropped. D2 `vars`, `classes`, globs, layers, and edge references (`(a -> b)[0]`) are dropped; DOT HTML-like labels keep only `<br>`.
 
 Work:
 
-- Mermaid `mindmap` to `layout radial`.
-- D2 import.
+- Nested groups in the language, then carry nesting over on import.
+- D2 `classes`: apply their `style.fill` and `style.stroke` to the objects that use them.
 
 ## 5. Name is hard to search for
 

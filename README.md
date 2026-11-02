@@ -42,7 +42,7 @@ Tests: `cargo test --release`.
 
 ## Compared with DOT, Mermaid, and D2
 
-Those languages have far wider adoption and tooling; `fitd import file.dot` or `file.mmd` translates nodes, labels, edges, and clusters or subgraphs (as `group`), and lists whatever has no equivalent. What fitd adds:
+Those languages have far wider adoption and tooling; `fitd import` translates Graphviz (`.dot`), Mermaid flowcharts and mind maps (`.mmd`), and D2 (`.d2`): nodes, labels, edges, and clusters, subgraphs, or containers (as `group`), with a mind map's indentation becoming a radial tree; it lists whatever has no equivalent. What fitd adds:
 
 - Hard constraints: `require a left-of b`, `align row(...)`, `a at top-left` hold in the output or the build fails.
 - Weighted preferences: `prefer ... weight=N` trades soft wishes against each other explicitly.

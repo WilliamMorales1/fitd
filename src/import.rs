@@ -1,6 +1,6 @@
-//! `fitd import`: translates Graphviz DOT and Mermaid flowcharts to fitd. Nodes, labels,
-//! edges, and clusters or subgraphs (as `group`) carry over; everything else is dropped and
-//! listed, since fitd places nodes itself.
+//! `fitd import`: translates Graphviz DOT, Mermaid flowcharts and mind maps, and D2 to fitd.
+//! Nodes, labels, edges, and clusters, subgraphs, or containers (as `group`) carry over;
+//! everything else is dropped and listed, since fitd places nodes itself.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -34,6 +34,8 @@ struct IGroup {
 struct Doc {
     /// None for radial; Some(true) for a layered flow down, Some(false) for right.
     down: Option<bool>,
+    /// The root of a radial map, when the source names one.
+    root: Option<usize>,
     nodes: Vec<INode>,
     index: HashMap<String, usize>,
     edges: Vec<IEdge>,
@@ -125,7 +127,10 @@ impl Doc {
         match self.down {
             Some(true) => o += "layout layered\n",
             Some(false) => o += "layout layered dir=right\n",
-            None => o += "layout radial\n",
+            None => match self.root {
+                Some(r) => o += &format!("layout radial root={}\n", ids[r]),
+                None => o += "layout radial\n",
+            },
         }
         o.push('\n');
         for (v, n) in self.nodes.iter().enumerate() {
@@ -751,6 +756,462 @@ fn from_mermaid(text: &str) -> Result<Doc, String> {
     Ok(doc)
 }
 
+// ---- D2 ----
+
+/// D2Seg is one D2 statement, with its line and whether a `{` block follows it, or a `}`.
+enum D2Seg {
+    Stmt(String, usize, bool),
+    Close,
+}
+
+/// d2_lex splits D2 source into statements at newlines, `;`, `{`, and `}` outside quotes,
+/// dropping `#` comments. A `|`-delimited block string becomes one quoted value.
+fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
+    let mut out = Vec::new();
+    let (mut buf, mut line, mut quote) = (String::new(), 1, None);
+    let mut it = text.chars().peekable();
+    let flush = |buf: &mut String, out: &mut Vec<D2Seg>, line: usize, opens: bool| {
+        if !buf.trim().is_empty() || opens {
+            out.push(D2Seg::Stmt(buf.trim().to_string(), line, opens));
+        }
+        buf.clear();
+    };
+    while let Some(c) = it.next() {
+        if let Some(q) = quote {
+            buf.push(c);
+            if c == '\\' {
+                buf.extend(it.next());
+            } else if c == q {
+                quote = None;
+            } else if c == '\n' {
+                return Err(format!("line {line}: unterminated string"));
+            }
+            continue;
+        }
+        match c {
+            '"' | '\'' => {
+                quote = Some(c);
+                buf.push(c);
+            }
+            '#' => {
+                while it.peek().is_some_and(|&c| c != '\n') {
+                    it.next();
+                }
+            }
+            '|' if buf.trim_end().ends_with(':') => {
+                // `|md ... |`: as many pipes close it as opened it.
+                let mut n = 1;
+                while it.next_if_eq(&'|').is_some() {
+                    n += 1;
+                }
+                let close = "|".repeat(n);
+                let mut body = String::new();
+                while !body.ends_with(&close) {
+                    let Some(c) = it.next() else { return Err(format!("line {line}: unterminated block string")) };
+                    line += usize::from(c == '\n');
+                    body.push(c);
+                }
+                body.truncate(body.len() - n);
+                // A language tag (`md`, `latex`) runs to the first space or newline; a
+                // Markdown heading keeps its text.
+                let (lang, body) = body.split_once(char::is_whitespace).unwrap_or(("", ""));
+                let lines: Vec<&str> = body.trim().lines().map(|l| if lang == "md" { l.trim().trim_start_matches('#').trim() } else { l.trim() }).collect();
+                buf += &format!(" \"{}\"", lines.join("\n").replace('\\', "\\\\").replace('"', "\\\""));
+            }
+            '\n' | ';' => {
+                flush(&mut buf, &mut out, line, false);
+                line += usize::from(c == '\n');
+            }
+            '{' => flush(&mut buf, &mut out, line, true),
+            '}' => {
+                flush(&mut buf, &mut out, line, false);
+                out.push(D2Seg::Close);
+            }
+            _ => buf.push(c),
+        }
+    }
+    flush(&mut buf, &mut out, line, false);
+    Ok(out)
+}
+
+/// d2_split cuts `s` at each occurrence of a separator outside quotes, returning the pieces
+/// and the separators between them. Earlier separators in `seps` win at the same spot.
+fn d2_split<'a>(s: &'a str, seps: &[&'a str]) -> (Vec<&'a str>, Vec<&'a str>) {
+    let (mut parts, mut found) = (Vec::new(), Vec::new());
+    let (mut start, mut quote, mut i) = (0, None, 0);
+    let b = s.as_bytes();
+    while i < s.len() {
+        let c = b[i];
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) if c == b'\\' => i += 1,
+            Some(_) => {}
+            None if c == b'"' || c == b'\'' => quote = Some(c),
+            None => {
+                if let Some(sep) = seps.iter().find(|sep| s[i..].starts_with(**sep)) {
+                    parts.push(&s[start..i]);
+                    found.push(*sep);
+                    i += sep.len();
+                    start = i;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+    parts.push(&s[start..]);
+    (parts, found)
+}
+
+/// d2_unquote reads a key or value: a quoted string loses its quotes and escapes, a bare one
+/// its surrounding space.
+fn d2_unquote(s: &str) -> String {
+    let s = s.trim();
+    match s.chars().next() {
+        Some(q @ ('"' | '\'')) if s.len() >= 2 && s.ends_with(q) => {
+            let mut out = String::new();
+            let mut it = s[1..s.len() - 1].chars();
+            while let Some(c) = it.next() {
+                match (c, c == '\\') {
+                    (_, true) => match it.next() {
+                        Some('n') => out.push('\n'),
+                        Some(o) => out.push(o),
+                        None => {}
+                    },
+                    _ => out.push(c),
+                }
+            }
+            out
+        }
+        _ => s.to_string(),
+    }
+}
+
+/// Keys that set a property of the object they follow rather than name a child.
+const D2_PROPS: &[&str] = &[
+    "shape", "label", "style", "icon", "near", "tooltip", "link", "width", "height", "class", "constraint", "direction", "grid-rows", "grid-columns",
+    "grid-gap", "source-arrowhead", "target-arrowhead", "top", "left", "vertical-gap", "horizontal-gap",
+];
+
+#[derive(Default)]
+struct D2Node {
+    label: Option<String>,
+    circle: bool,
+    color: Option<String>,
+    fill: Option<String>,
+    parent: Option<usize>,
+    container: bool,
+}
+
+/// D2Scope is what the statements inside a `{` block apply to.
+enum D2Scope {
+    /// Children and properties of a container, by its path ("" for the top level).
+    Container(String),
+    /// Properties of the edges a statement drew.
+    Edges(Vec<usize>),
+    /// Properties under a prefix (`style: {`) of an object, or of edges when it is None.
+    Props(Option<String>, Vec<usize>, String),
+    Skip,
+}
+
+struct D2Doc {
+    paths: Vec<String>,
+    index: HashMap<String, usize>,
+    nodes: Vec<D2Node>,
+    edges: Vec<IEdge>,
+    direction: Option<String>,
+    dropped: BTreeSet<String>,
+}
+
+impl D2Doc {
+    /// object finds or makes the object at `path`, and its ancestors.
+    fn object(&mut self, path: &str) -> usize {
+        if let Some(&v) = self.index.get(path) {
+            return v;
+        }
+        let parent = path.rsplit_once('.').map(|(p, _)| self.object(p));
+        if let Some(p) = parent {
+            self.nodes[p].container = true;
+        }
+        self.index.insert(path.to_string(), self.nodes.len());
+        self.paths.push(path.to_string());
+        self.nodes.push(D2Node { parent, ..D2Node::default() });
+        self.nodes.len() - 1
+    }
+
+    /// resolve joins a key to the container it is written in; `_` steps out one level.
+    fn resolve(prefix: &str, key: &[String]) -> String {
+        let mut segs: Vec<String> = prefix.split('.').filter(|s| !s.is_empty()).map(String::from).collect();
+        for k in key {
+            if k == "_" {
+                segs.pop();
+            } else {
+                segs.push(k.replace('.', "_"));
+            }
+        }
+        segs.join(".")
+    }
+
+    /// prop applies a property path (`style.fill`) to an object, or to edges when `obj` is None.
+    fn prop(&mut self, obj: Option<usize>, edges: &[usize], prop: &str, value: &str) {
+        let hex_or_drop = |d: &mut BTreeSet<String>, v: &str| {
+            let h = hex(v);
+            if h.is_none() {
+                d.insert(format!("color `{v}` (only #hex carries over)"));
+            }
+            h
+        };
+        match (obj, prop) {
+            (None, "label") => edges.iter().for_each(|&e| self.edges[e].label = Some(value.to_string())),
+            (None, "style.stroke-dash") => edges.iter().for_each(|&e| self.edges[e].dashed = value.trim() != "0"),
+            (None, "style.stroke") => {
+                let c = hex_or_drop(&mut self.dropped, value);
+                edges.iter().for_each(|&e| self.edges[e].color = c.clone());
+            }
+            (Some(v), "label") => self.nodes[v].label = Some(value.to_string()),
+            (Some(v), "shape") => match value {
+                "circle" | "oval" => self.nodes[v].circle = true,
+                "rectangle" | "square" => {}
+                s => {
+                    self.dropped.insert(format!("shape `{s}` (drawn as a box)"));
+                }
+            },
+            (Some(v), "style.fill") => self.nodes[v].fill = hex_or_drop(&mut self.dropped, value),
+            (Some(v), "style.stroke") => self.nodes[v].color = hex_or_drop(&mut self.dropped, value),
+            (_, p) => {
+                self.dropped.insert(format!("`{p}`"));
+            }
+        }
+    }
+}
+
+/// from_d2 reads D2: objects, labels, connections, containers (as groups), and the shape,
+/// label, fill, and stroke of objects and connections. D2 lays out top to bottom by default.
+fn from_d2(text: &str) -> Result<Doc, String> {
+    let mut d = D2Doc { paths: Vec::new(), index: HashMap::new(), nodes: Vec::new(), edges: Vec::new(), direction: None, dropped: BTreeSet::new() };
+    let mut stack = vec![D2Scope::Container(String::new())];
+    for seg in d2_lex(text)? {
+        let (text, line, opens) = match seg {
+            D2Seg::Close => {
+                if stack.len() > 1 {
+                    stack.pop();
+                }
+                continue;
+            }
+            D2Seg::Stmt(t, l, o) => (t, l, o),
+        };
+        let (kv, _) = d2_split(&text, &[":"]);
+        let (left, value) = match kv.split_first() {
+            Some((l, rest)) if !rest.is_empty() => (l.trim(), Some(d2_unquote(&text[l.len() + 1..]))),
+            _ => (text.trim(), None),
+        };
+        let value = value.filter(|v| !v.is_empty());
+        let keys = |s: &str| d2_split(s, &["."]).0.into_iter().map(d2_unquote).collect::<Vec<_>>();
+        let scope = match stack.last().unwrap() {
+            D2Scope::Skip => {
+                if opens {
+                    stack.push(D2Scope::Skip);
+                }
+                continue;
+            }
+            D2Scope::Edges(es) => D2Scope::Props(None, es.clone(), String::new()),
+            D2Scope::Props(o, es, pre) => D2Scope::Props(o.clone(), es.clone(), pre.clone()),
+            D2Scope::Container(p) => D2Scope::Container(p.clone()),
+        };
+        match scope {
+            D2Scope::Props(obj, edges, pre) => {
+                let prop = if pre.is_empty() { keys(left).join(".") } else { format!("{pre}.{}", keys(left).join(".")) };
+                let v = obj.as_ref().map(|p| d.object(p));
+                match (&value, opens) {
+                    (_, true) => stack.push(D2Scope::Props(obj, edges, prop)),
+                    (Some(val), false) => d.prop(v, &edges, &prop, val),
+                    (None, false) => {
+                        d.dropped.insert(format!("`{prop}`"));
+                    }
+                }
+            }
+            D2Scope::Container(prefix) => {
+                let (ends, ops) = d2_split(left, &["<->", "->", "<-", "--"]);
+                if left.starts_with('(') || ["vars", "classes", "layers", "scenarios", "steps", "imports", "...@"].iter().any(|k| left.starts_with(k)) {
+                    d.dropped.insert(format!("`{}`", left.split(['.', ' ', '[']).next().unwrap_or(left)));
+                    if opens {
+                        stack.push(D2Scope::Skip);
+                    }
+                    continue;
+                }
+                if !ops.is_empty() {
+                    let objs: Vec<usize> = ends.iter().map(|e| d.object(&D2Doc::resolve(&prefix, &keys(e)))).collect();
+                    let mut drawn = Vec::new();
+                    for (k, op) in ops.iter().enumerate() {
+                        let (a, b) = if *op == "<-" { (objs[k + 1], objs[k]) } else { (objs[k], objs[k + 1]) };
+                        if *op == "<->" {
+                            d.dropped.insert("two-headed arrows (drawn undirected)".into());
+                        }
+                        drawn.push(d.edges.len());
+                        d.edges.push(IEdge { a, b, label: value.clone(), directed: matches!(*op, "->" | "<-"), dashed: false, color: None });
+                    }
+                    if opens {
+                        stack.push(D2Scope::Edges(drawn));
+                    }
+                    continue;
+                }
+                let segs = keys(left);
+                if segs.iter().any(|s| s.is_empty()) {
+                    return Err(format!("line {line}: cannot read `{text}`"));
+                }
+                let k = segs.iter().position(|s| D2_PROPS.contains(&s.as_str())).unwrap_or(segs.len());
+                let path = D2Doc::resolve(&prefix, &segs[..k]);
+                if k == segs.len() {
+                    let v = d.object(&path);
+                    match value.as_deref() {
+                        Some("null") => {
+                            d.dropped.insert("`null` deletions".into());
+                        }
+                        Some(l) => d.nodes[v].label = Some(l.to_string()),
+                        None => {}
+                    }
+                    if opens {
+                        stack.push(D2Scope::Container(path));
+                    }
+                    continue;
+                }
+                let prop = segs[k..].join(".");
+                if path.is_empty() {
+                    match (prop.as_str(), value.as_deref()) {
+                        ("direction", Some(dir)) => d.direction = Some(dir.to_string()),
+                        _ => {
+                            d.dropped.insert(format!("`{prop}`"));
+                        }
+                    }
+                    if opens {
+                        stack.push(D2Scope::Skip);
+                    }
+                    continue;
+                }
+                if opens {
+                    stack.push(D2Scope::Props(Some(path), Vec::new(), prop));
+                    continue;
+                }
+                let v = d.object(&path);
+                match value {
+                    Some(_) if prop == "direction" => {
+                        d.dropped.insert("container direction".into());
+                    }
+                    Some(val) => d.prop(Some(v), &[], &prop, &val),
+                    None => {
+                        d.dropped.insert(format!("`{prop}`"));
+                    }
+                }
+            }
+            D2Scope::Edges(_) | D2Scope::Skip => unreachable!("mapped to Props or skipped above"),
+        }
+    }
+
+    let mut doc = Doc { dropped: d.dropped, ..Doc::default() };
+    doc.down = Some(match d.direction.as_deref() {
+        Some("right") => false,
+        Some("left") => {
+            doc.drop("direction left (drawn left to right)");
+            false
+        }
+        Some("up") => {
+            doc.drop("direction up (drawn top to bottom)");
+            true
+        }
+        _ => true,
+    });
+    let mut group_of = vec![None; d.nodes.len()];
+    for (v, n) in d.nodes.iter().enumerate() {
+        if n.container {
+            let last = d.paths[v].rsplit('.').next().unwrap_or("").to_string();
+            group_of[v] = Some(doc.groups.len());
+            doc.groups.push(IGroup { title: Some(n.label.clone().unwrap_or(last)), name: d.paths[v].clone() });
+            if let Some(p) = n.parent {
+                doc.nested.insert(group_of[p].expect("parents come first"));
+            }
+        }
+    }
+    let mut at = vec![None; d.nodes.len()];
+    for (v, n) in d.nodes.iter().enumerate().filter(|(_, n)| !n.container) {
+        let path = &d.paths[v];
+        let w = doc.node(path, n.parent.and_then(|p| group_of[p]));
+        let last = path.rsplit('.').next().unwrap_or(path);
+        doc.nodes[w].label = n.label.clone().or_else(|| (last != path).then(|| last.to_string()));
+        (doc.nodes[w].circle, doc.nodes[w].color, doc.nodes[w].fill) = (n.circle, n.color.clone(), n.fill.clone());
+        at[v] = Some(w);
+    }
+    for e in d.edges {
+        match (at[e.a], at[e.b]) {
+            (Some(a), Some(b)) => doc.edges.push(IEdge { a, b, ..e }),
+            _ => doc.drop("connections to containers"),
+        }
+    }
+    Ok(doc)
+}
+
+/// Mind map node shapes as (open, close, circle); a bare line is a plain node.
+const MINDMAP_SHAPES: [(&str, &str, bool); 6] = [("((", "))", true), ("))", "((", false), (")", "(", false), ("{{", "}}", false), ("[", "]", false), ("(", ")", false)];
+
+/// from_mindmap reads a Mermaid `mindmap`, whose hierarchy is its indentation, as a radial map
+/// rooted at its first node. Every line is its own node, even when two share a text.
+fn from_mindmap(text: &str) -> Result<Doc, String> {
+    let mut doc = Doc::default();
+    let mut header = false;
+    // Indent and node of each open ancestor.
+    let mut stack: Vec<(usize, usize)> = Vec::new();
+    for (i, raw) in text.lines().enumerate() {
+        let line = raw.split("%%").next().unwrap_or("").trim_end();
+        let body = line.trim_start();
+        if body.is_empty() {
+            continue;
+        }
+        if !header {
+            if body != "mindmap" {
+                return Err(format!("line {}: a mind map starts with `mindmap`", i + 1));
+            }
+            header = true;
+            continue;
+        }
+        if body.starts_with("::icon(") {
+            doc.drop("icons");
+            continue;
+        }
+        let mut body = body;
+        if let Some(j) = body.find(":::") {
+            doc.drop("`:::` classes");
+            body = body[..j].trim_end();
+        }
+        // `id[text]` and the other shapes; otherwise the whole line is the text.
+        let shaped = MINDMAP_SHAPES.iter().find_map(|&(open, close, circle)| {
+            let j = body.find(open)?;
+            let id = &body[..j];
+            let inner = body[j + open.len()..].strip_suffix(close)?;
+            (!id.contains(char::is_whitespace)).then(|| (id.to_string(), inner.trim(), circle))
+        });
+        let (id, label, circle) = shaped.unwrap_or((String::new(), body, false));
+        let label = strip_html(label.trim_matches('"').trim_matches('`'), &mut doc.dropped);
+        let key = if id.is_empty() { label.clone() } else { id };
+        let key = if doc.index.contains_key(&key) { format!("{key}_{}", i + 1) } else { key };
+        let v = doc.node(&key, None);
+        doc.nodes[v].label = Some(label).filter(|l| *l != key);
+        doc.nodes[v].circle = circle;
+        let indent = line.len() - line.trim_start().len();
+        while stack.last().is_some_and(|&(d, _)| d >= indent) {
+            stack.pop();
+        }
+        match stack.last() {
+            Some(&(_, p)) => doc.edges.push(IEdge { a: p, b: v, label: None, directed: true, dashed: false, color: None }),
+            None if doc.root.is_some() => return Err(format!("line {}: a mind map has one root, and `{}` is a second", i + 1, raw.trim())),
+            None => doc.root = Some(v),
+        }
+        stack.push((indent, v));
+    }
+    if doc.root.is_none() {
+        return Err("empty mind map".into());
+    }
+    Ok(doc)
+}
+
 /// import translates DOT or Mermaid source to fitd, chosen by the file extension or, failing
 /// that, by the first word. Returns the fitd text and what was dropped.
 pub fn import(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
@@ -759,9 +1220,19 @@ pub fn import(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
     let mermaid = match ext.as_str() {
         "mmd" | "mermaid" => true,
         "dot" | "gv" => false,
-        _ => first.starts_with("flowchart") || (first.starts_with("graph") && !first.contains('{')),
+        _ => first.starts_with("flowchart") || first == "mindmap" || (first.starts_with("graph") && !first.contains('{')),
     };
-    let doc = if mermaid { from_mermaid(text) } else { from_dot(text) }.map_err(|e| format!("{path}: {e}"))?;
+    let mindmap = mermaid && first == "mindmap";
+    let doc = if ext == "d2" {
+        from_d2(text)
+    } else if mindmap {
+        from_mindmap(text)
+    } else if mermaid {
+        from_mermaid(text)
+    } else {
+        from_dot(text)
+    }
+    .map_err(|e| format!("{path}: {e}"))?;
     Ok(doc.write())
 }
 
@@ -787,6 +1258,31 @@ mod tests {
         assert!(out.contains("node n_2nd \"2nd\"\n") && out.contains("node n_node \"node\"\n"), "{out}");
         assert!(out.contains("group \"Front end\" lex, parse\n"), "{out}");
         assert_eq!(dropped, ["edge attribute `penwidth=2`"]);
+    }
+
+    #[test]
+    fn d2_carries_objects_connections_and_containers() {
+        let d2 = "direction: right\nx: Start {shape: circle}\n'q a'.b -> c: go {style.stroke-dash: 3}\nc <- d\nk: {\n  m -> _.c\n  m.style.stroke: \"#c62828\"\n  m.label: |md\n    ## Main\n  |\n}\nk -> x\nclasses: { hot: { style.fill: red } }\n";
+        let (out, dropped) = import("x.d2", d2).unwrap();
+        assert!(out.contains("layout layered dir=right\n"), "{out}");
+        assert!(out.contains("node x \"Start\" shape=circle\n") && out.contains("node q_a_b \"b\"\n") && out.contains("node k_m \"Main\" color=#C62828\n"), "{out}");
+        assert!(out.contains("q_a_b ..> c \"go\"\nd -> c\nk_m -> c\n"), "{out}");
+        assert!(out.contains("group \"q a\" q_a_b\ngroup \"k\" k_m\n"), "{out}");
+        assert_eq!(dropped, ["`classes`", "connections to containers"]);
+    }
+
+    #[test]
+    fn mindmap_indentation_becomes_a_radial_tree() {
+        let mmd = "mindmap\n  root((Mind maps))\n    Origins\n      Long history\n      ::icon(fa fa-book)\n      Popular\n    Research\n      On effectiveness<br/>and features\n      History\n    Tools\n      History\n      a[History]\n";
+        let (out, dropped) = import("m.mmd", mmd).unwrap();
+        assert!(out.contains("layout radial root=n_root\n"), "{out}");
+        assert!(out.contains("node n_root \"Mind maps\" shape=circle\n"), "{out}");
+        assert!(out.contains("node Long_history \"Long history\"\n") && out.contains("node History\n") && out.contains("node History_11 \"History\"\n"), "{out}");
+        assert!(out.contains("node On_effectiveness_and_features \"On effectiveness\\nand features\"\n"), "{out}");
+        assert!(out.contains("n_root -> Origins\nOrigins -> Long_history\nOrigins -> Popular\nn_root -> Research\n"), "{out}");
+        assert!(out.contains("Tools -> a\n") && out.contains("node a \"History\"\n"), "{out}");
+        assert_eq!(dropped, ["icons"]);
+        assert!(import("m.mmd", "mindmap\n  a\n  b\n").unwrap_err().contains("second"));
     }
 
     #[test]

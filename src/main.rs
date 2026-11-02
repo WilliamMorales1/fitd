@@ -35,7 +35,7 @@ const USAGE: &str = "usage:
               [--stable LOCK] [--watch]
   fitd explain <CODE>
   fitd lsp              language server on stdin/stdout
-  fitd import <file.dot|file.mmd> [-o out.fitd]   translate Graphviz or Mermaid
+  fitd import <file.dot|file.mmd|file.d2> [-o out.fitd]   translate Graphviz, Mermaid, or D2
   fitd split <input.fitd> [-o DIR]   an overview page plus one page per top-level branch
   fitd guide            the whole language on one page, with examples";
 

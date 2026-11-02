@@ -1,0 +1,26 @@
+# A typical D2 diagram: a request path through a small web service.
+direction: right
+
+user: User {shape: person}
+cdn: "CDN edge"
+backend: Backend {
+  api: API server
+  worker: Job worker {
+    shape: circle
+  }
+  api -> worker: enqueue {style.stroke-dash: 3}
+}
+db: Database {shape: cylinder; style.fill: "#E3F2FD"}
+cache: |md
+  # Cache
+|
+
+user -> cdn: HTTPS
+cdn -> backend.api: "cache miss"
+backend.api -> db: SQL
+backend.api <-> cache
+backend.worker -> db {style.stroke: "#C62828"}
+backend.worker.style.fill: "#FFF3E0"
+vars: {
+  d2-config: {layout-engine: elk}
+}
