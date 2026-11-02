@@ -6,9 +6,6 @@ Ground rules for any fix: `cargo test --release` passes, every example still bui
 
 ## 1. Import covers a D2 subset
 
-`fitd import` (`src/import.rs`) reads DOT, Mermaid flowcharts and mind maps, and D2. Clusters, subgraphs, and containers carry over as nested groups, and D2 `classes` carry their label, shape, fill, and stroke to objects. A D2 connection to a container is dropped, as are D2 `vars`, globs, layers, classes on connections, and edge references (`(a -> b)[0]`); DOT HTML-like labels keep only `<br>`.
+`fitd import` (`src/import.rs`) reads DOT, Mermaid flowcharts and mind maps, and D2. Clusters, subgraphs, and containers carry over as nested groups, and D2 `classes` carry their label, shape, fill, and stroke to objects. A D2 connection to a container is drawn to the container's first member, and top-level D2 `vars` substitute `${name}` in labels. Dropped: D2 globs, layers, classes on connections, edge references (`(a -> b)[0]`), and `vars` inside containers; DOT HTML-like labels keep only `<br>`.
 
-Work:
-
-- D2 connections to containers: draw them to the container's first member, or drop with a clearer note.
-- D2 `vars`: substitute `${name}` in labels.
+No work planned; extend only when a real import needs it.

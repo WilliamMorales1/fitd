@@ -807,6 +807,16 @@ fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
                 quote = Some(c);
                 buf.push(c);
             }
+            // `${name}` substitutes a variable rather than opening a block.
+            '$' if it.peek() == Some(&'{') => {
+                buf.push(c);
+                for c in it.by_ref() {
+                    buf.push(c);
+                    if c == '}' {
+                        break;
+                    }
+                }
+            }
             '#' => {
                 while it.peek().is_some_and(|&c| c != '\n') {
                     it.next();
@@ -908,6 +918,26 @@ fn d2_unquote(s: &str) -> String {
     }
 }
 
+/// d2_subst replaces each `${name}` in `s` with its variable from `vars`.
+fn d2_subst(s: &str, vars: &HashMap<String, String>, dropped: &mut BTreeSet<String>) -> String {
+    let mut out = String::new();
+    let mut rest = s;
+    while let Some(i) = rest.find("${") {
+        let Some(j) = rest[i..].find('}') else { break };
+        out += &rest[..i];
+        let name = rest[i + 2..i + j].trim();
+        match vars.get(name) {
+            Some(v) => out += v,
+            None => {
+                dropped.insert(format!("undefined variable `{name}`"));
+                out += &rest[i..i + j + 1];
+            }
+        }
+        rest = &rest[i + j + 1..];
+    }
+    out + rest
+}
+
 /// Keys that set a property of the object they follow rather than name a child.
 const D2_PROPS: &[&str] = &[
     "shape", "label", "style", "icon", "near", "tooltip", "link", "width", "height", "class", "constraint", "direction", "grid-rows", "grid-columns",
@@ -937,6 +967,8 @@ enum D2Scope {
     /// The `classes` block, and inside it one class's properties under a prefix.
     Classes,
     Class(String, String),
+    /// The `vars` block, under the path of the variable being defined.
+    Vars(String),
     Skip,
 }
 
@@ -948,6 +980,7 @@ struct D2Doc {
     direction: Option<String>,
     /// Each class's properties, as (path, value), in source order.
     classes: HashMap<String, Vec<(String, String)>>,
+    vars: HashMap<String, String>,
     dropped: BTreeSet<String>,
 }
 
@@ -1020,10 +1053,19 @@ impl D2Doc {
     }
 }
 
-/// from_d2 reads D2: objects, labels, connections, containers (as groups), classes, and the shape,
+/// from_d2 reads D2: objects, labels, connections, containers (as groups), classes, vars, and the shape,
 /// label, fill, and stroke of objects and connections. D2 lays out top to bottom by default.
 fn from_d2(text: &str) -> Result<Doc, String> {
-    let mut d = D2Doc { paths: Vec::new(), index: HashMap::new(), nodes: Vec::new(), edges: Vec::new(), direction: None, classes: HashMap::new(), dropped: BTreeSet::new() };
+    let mut d = D2Doc {
+        paths: Vec::new(),
+        index: HashMap::new(),
+        nodes: Vec::new(),
+        edges: Vec::new(),
+        direction: None,
+        classes: HashMap::new(),
+        vars: HashMap::new(),
+        dropped: BTreeSet::new(),
+    };
     let mut stack = vec![D2Scope::Container(String::new())];
     for seg in d2_lex(text)? {
         let (text, line, opens) = match seg {
@@ -1056,9 +1098,23 @@ fn from_d2(text: &str) -> Result<Doc, String> {
             }
             D2Scope::Class(name, pre) => D2Scope::Class(name.clone(), if pre.is_empty() { keys(left).join(".") } else { format!("{pre}.{}", keys(left).join(".")) }),
             D2Scope::Props(o, es, pre) => D2Scope::Props(o.clone(), es.clone(), pre.clone()),
+            D2Scope::Vars(pre) => D2Scope::Vars(if pre.is_empty() { keys(left).join(".") } else { format!("{pre}.{}", keys(left).join(".")) }),
             D2Scope::Container(p) => D2Scope::Container(p.clone()),
         };
         match scope {
+            D2Scope::Vars(name) if name == "d2-config" => {
+                d.dropped.insert("`d2-config`".into());
+                if opens {
+                    stack.push(D2Scope::Skip);
+                }
+            }
+            D2Scope::Vars(name) => match (value, opens) {
+                (_, true) => stack.push(D2Scope::Vars(name)),
+                (Some(val), false) => {
+                    d.vars.insert(name, val);
+                }
+                (None, false) => {}
+            },
             // `name: {` or `name.style: {` opens a class; inside, a property opens a prefix or is set.
             D2Scope::Class(name, prop) => match (value, opens) {
                 (_, true) => stack.push(D2Scope::Class(name, prop)),
@@ -1082,6 +1138,10 @@ fn from_d2(text: &str) -> Result<Doc, String> {
                 let (ends, ops) = d2_split(left, &["<->", "->", "<-", "--"]);
                 if prefix.is_empty() && left == "classes" && opens {
                     stack.push(D2Scope::Classes);
+                    continue;
+                }
+                if prefix.is_empty() && left == "vars" && opens {
+                    stack.push(D2Scope::Vars(String::new()));
                     continue;
                 }
                 if left.starts_with('(') || ["vars", "classes", "layers", "scenarios", "steps", "imports", "...@"].iter().any(|k| left.starts_with(k)) {
@@ -1180,6 +1240,11 @@ fn from_d2(text: &str) -> Result<Doc, String> {
         }
     }
 
+    let labels = d.nodes.iter_mut().map(|n| &mut n.label).chain(d.edges.iter_mut().map(|e| &mut e.label));
+    for l in labels.flatten() {
+        *l = d2_subst(l, &d.vars, &mut d.dropped);
+    }
+
     let mut doc = Doc { dropped: d.dropped, ..Doc::default() };
     doc.down = Some(match d.direction.as_deref() {
         Some("right") => false,
@@ -1211,10 +1276,20 @@ fn from_d2(text: &str) -> Result<Doc, String> {
         (doc.nodes[w].circle, doc.nodes[w].color, doc.nodes[w].fill) = (n.circle, n.color.clone(), n.fill.clone());
         at[v] = Some(w);
     }
+    // A container stands for its first member, the first object written inside it.
+    let mut first = at.clone();
+    for v in (0..d.nodes.len()).rev() {
+        if let (Some(p), Some(_)) = (d.nodes[v].parent, first[v]) {
+            first[p] = first[v];
+        }
+    }
     for e in d.edges {
-        match (at[e.a], at[e.b]) {
-            (Some(a), Some(b)) => doc.edges.push(IEdge { a, b, ..e }),
-            _ => doc.drop("connections to containers"),
+        if d.nodes[e.a].container || d.nodes[e.b].container {
+            doc.drop("connections to containers (drawn to their first member)");
+        }
+        match (first[e.a], first[e.b]) {
+            (Some(a), Some(b)) if a != b => doc.edges.push(IEdge { a, b, ..e }),
+            _ => doc.drop("connections between a container and its first member"),
         }
     }
     Ok(doc)
@@ -1340,7 +1415,17 @@ mod tests {
         assert!(out.contains("q_a_b ..> c \"go\"\nd -> c\nk_m -> c\n"), "{out}");
         assert!(out.contains("group \"q a\" q_a_b\ngroup \"k\" k_m\n"), "{out}");
         assert!(out.contains("node d color=#1565C0 fill=#FFCDD2 shape=circle\n"), "{out}");
-        assert_eq!(dropped, ["`(d`", "class property `icon`", "connections to containers", "undefined class `ghost`"]);
+        assert!(out.contains("k_m -> x\n"), "{out}");
+        assert_eq!(dropped, ["`(d`", "class property `icon`", "connections to containers (drawn to their first member)", "undefined class `ghost`"]);
+    }
+
+    #[test]
+    fn d2_substitutes_vars() {
+        let d2 = "vars: {\n  svc: API\n  team: { lead: Ana }\n  d2-config: { theme-id: 4 }\n}\na: ${svc} gateway\nb: \"Owner: ${team.lead}\"\na -> b: ${svc} call ${nope}\nk: { m; n }\nk -> k.m\n";
+        let (out, dropped) = import("x.d2", d2).unwrap();
+        assert!(out.contains("node a \"API gateway\"\n") && out.contains("node b \"Owner: Ana\"\n"), "{out}");
+        assert!(out.contains("a -> b \"API call ${nope}\"\n"), "{out}");
+        assert_eq!(dropped, ["`d2-config`", "connections between a container and its first member", "connections to containers (drawn to their first member)", "undefined variable `nope`"]);
     }
 
     #[test]
