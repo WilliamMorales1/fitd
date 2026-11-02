@@ -632,9 +632,11 @@ fn split_pages_each_build_alone() {
     let dir = tmp("split");
     let _ = std::fs::remove_dir_all(&dir);
     let (ok, log) = fitd(&["split", "examples/group_theory.fitd", "-o", dir.to_str().unwrap()]);
-    assert!(ok && log.contains("left out: corr ..> classif"), "{log}");
+    assert!(ok && !log.contains("left out"), "{log}");
     let overview = std::fs::read_to_string(dir.join("group_theory.fitd")).unwrap();
     assert!(overview.contains("| see page group_theory-cyc"), "{overview}");
+    let cos = std::fs::read_to_string(dir.join("group_theory-cos.fitd")).unwrap();
+    assert!(cos.contains("corr ..> classif") && cos.contains("node classif \"Classification\"\n| see page group_theory-iso"), "{cos}");
     let mut pages = 0;
     for e in std::fs::read_dir(&dir).unwrap() {
         let p = e.unwrap().path();

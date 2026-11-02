@@ -213,8 +213,11 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     let bands = bands(k);
     let feasible = fits(k, 1.0);
     let band: Vec<usize> = (0..rows.len()).map(|l| bands.iter().position(|r| r.contains(&l)).unwrap()).collect();
-    // Each gap grows by one shared amount above its room, so the bands' layers line up.
-    let extra = bands.iter().filter(|r| r.len() > 1).map(|r| (main_len - thick[r.clone()].iter().sum::<f64>() - gaps(r)) / (r.len() - 1) as f64 - 1e-6).fold(4.0 * b, f64::min).max(0.0);
+    // Each gap grows by one shared amount above its room, so the bands' layers line up. Past
+    // four ems the flow sits centered, unless an `at` needs its ends to reach the page's edges.
+    let pinned = g.constraints.iter().any(|c| matches!(c.rel, Relation::At { .. }));
+    let cap = if pinned { f64::INFINITY } else { 4.0 * b };
+    let extra = bands.iter().filter(|r| r.len() > 1).map(|r| (main_len - thick[r.clone()].iter().sum::<f64>() - gaps(r)) / (r.len() - 1) as f64 - 1e-6).fold(cap, f64::min).max(0.0);
     let mut center = vec![0.0; rows.len()];
     for (i, r) in bands.iter().enumerate() {
         let used = thick[r.clone()].iter().sum::<f64>() + gaps(r) + extra * (r.len() - 1) as f64;
