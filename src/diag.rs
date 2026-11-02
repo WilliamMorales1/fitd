@@ -85,16 +85,13 @@ pub struct Source {
 #[derive(Clone, Debug)]
 pub struct Seg {
     pub line: usize,
-    /// Byte offset of `line` in the spliced text and in the file.
-    pub at: usize,
-    pub file_at: usize,
     pub path: String,
     pub file_line: usize,
 }
 
 impl Source {
     pub fn new(path: &str, text: &str) -> Source {
-        Source::spliced(path, text, vec![Seg { line: 1, at: 0, file_at: 0, path: path.to_string(), file_line: 1 }])
+        Source::spliced(path, text, vec![Seg { line: 1, path: path.to_string(), file_line: 1 }])
     }
 
     pub fn spliced(path: &str, text: &str, segs: Vec<Seg>) -> Source {
@@ -111,12 +108,6 @@ impl Source {
     pub fn file_line(&self, line: usize) -> (&str, usize) {
         let s = self.seg(line);
         (&s.path, s.file_line + line - s.line)
-    }
-
-    /// file_offset maps a byte offset of the spliced text to its file and its offset there.
-    pub fn file_offset(&self, off: usize) -> (&str, usize) {
-        let s = self.seg(self.line_col(off).0);
-        (&s.path, s.file_at + off - s.at)
     }
 
     /// line_col is 1-based; the column counts characters, not bytes.

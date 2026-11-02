@@ -467,52 +467,123 @@ fn watch_cancels_a_slow_build_on_change() {
     assert!(std::fs::read_to_string(&svg).unwrap().contains(">Swapped<"), "the cancelled build overwrote the new one\n{log}");
 }
 
-#[test]
-fn language_server_reports_and_navigates() {
-    use std::io::{BufRead, BufReader, Read, Write};
-    let src = tmp("lsp.fitd");
-    let text = "node a \"Alpha\"\nnode b \"Beta\"\na -> b\na -> ghost\n";
-    std::fs::write(&src, text).unwrap();
-    let uri = format!("file://{}", src.display());
-    let mut child = Command::new(env!("CARGO_BIN_EXE_fitd")).arg("lsp").stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).spawn().unwrap();
-    let mut stdin = child.stdin.take().unwrap();
-    let mut stdout = BufReader::new(child.stdout.take().unwrap());
-    let mut send = |body: String| write!(stdin, "Content-Length: {}\r\n\r\n{body}", body.len()).unwrap();
-    let mut recv = || {
+/// Lsp drives `fitd lsp` over its stdin and stdout.
+struct Lsp {
+    child: std::process::Child,
+    stdin: std::process::ChildStdin,
+    stdout: std::io::BufReader<std::process::ChildStdout>,
+}
+
+impl Lsp {
+    fn start() -> Lsp {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_fitd")).arg("lsp").stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).spawn().unwrap();
+        let (stdin, stdout) = (child.stdin.take().unwrap(), std::io::BufReader::new(child.stdout.take().unwrap()));
+        let mut l = Lsp { child, stdin, stdout };
+        l.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#.into());
+        assert!(l.recv().contains("definitionProvider"));
+        l
+    }
+
+    fn send(&mut self, body: String) {
+        use std::io::Write;
+        write!(self.stdin, "Content-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+    }
+
+    fn recv(&mut self) -> String {
+        use std::io::{BufRead, Read};
         let mut len = 0;
         loop {
             let mut line = String::new();
-            stdout.read_line(&mut line).unwrap();
+            self.stdout.read_line(&mut line).unwrap();
             if line.trim().is_empty() {
                 break;
             }
             len = line.trim().strip_prefix("Content-Length: ").map_or(len, |n| n.parse().unwrap());
         }
         let mut body = vec![0; len];
-        stdout.read_exact(&mut body).unwrap();
+        self.stdout.read_exact(&mut body).unwrap();
         String::from_utf8(body).unwrap()
-    };
-    let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
-    send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#.into());
-    assert!(recv().contains("definitionProvider"));
-    send(format!(r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"fitd","version":1,"text":"{}"}}}}}}"#, esc(text)));
-    let diags = recv();
+    }
+
+    fn open(&mut self, uri: &str, text: &str) {
+        self.send(format!(r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"fitd","version":1,"text":"{}"}}}}}}"#, esc(text)));
+    }
+
+    fn change(&mut self, uri: &str, text: &str) {
+        self.send(format!(r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"{}"}}]}}}}"#, esc(text)));
+    }
+
+    fn save(&mut self, uri: &str) {
+        self.send(format!(r#"{{"jsonrpc":"2.0","method":"textDocument/didSave","params":{{"textDocument":{{"uri":"{uri}"}}}}}}"#));
+    }
+
+    fn stop(mut self) {
+        self.send(r#"{"jsonrpc":"2.0","id":99,"method":"shutdown"}"#.into());
+        self.recv();
+        self.send(r#"{"jsonrpc":"2.0","method":"exit"}"#.into());
+        assert!(self.child.wait().unwrap().success());
+    }
+}
+
+fn esc(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")
+}
+
+#[test]
+fn language_server_reports_and_navigates() {
+    let src = tmp("lsp.fitd");
+    let text = "node a \"Alpha\"\nnode b \"Beta\"\na -> b\na -> ghost\n";
+    std::fs::write(&src, text).unwrap();
+    let uri = format!("file://{}", src.display());
+    let mut l = Lsp::start();
+    l.open(&uri, text);
+    let diags = l.recv();
     assert!(diags.contains("E0001") && diags.contains(r#""line":3"#), "{diags}");
-    send(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":2,"character":5}}}}}}"#));
-    let def = recv();
+    l.send(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":2,"character":5}}}}}}"#));
+    let def = l.recv();
     assert!(def.contains(r#""start":{"character":5,"line":1}"#), "{def}");
     // Fixed on disk and saved: the full layout finds only the uncovered glyph.
     let fixed = "node a \"Alpha\"\nnode b \"Beta 𐀀\"\na -> b\n";
     std::fs::write(&src, fixed).unwrap();
-    send(format!(r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"{}"}}]}}}}"#, esc(fixed)));
-    assert!(recv().contains(r#""diagnostics":[]"#));
-    send(format!(r#"{{"jsonrpc":"2.0","method":"textDocument/didSave","params":{{"textDocument":{{"uri":"{uri}"}}}}}}"#));
-    let saved = recv();
+    l.change(&uri, fixed);
+    assert!(l.recv().contains(r#""diagnostics":[]"#));
+    l.save(&uri);
+    let saved = l.recv();
     assert!(saved.contains("W0202") && saved.contains(r#""line":1"#), "{saved}");
-    send(r#"{"jsonrpc":"2.0","id":3,"method":"shutdown"}"#.into());
-    recv();
-    send(r#"{"jsonrpc":"2.0","method":"exit"}"#.into());
-    assert!(child.wait().unwrap().success());
+    l.stop();
+}
+
+#[test]
+fn language_server_follows_includes() {
+    let dir = tmp("lsp-inc");
+    std::fs::create_dir_all(&dir).unwrap();
+    let (main, part) = (dir.join("main.fitd"), dir.join("part.fitd"));
+    std::fs::write(&part, "node far \"Far 𐀀\"\nfar -> ghost\n").unwrap();
+    let text = "node a \"A\"\ninclude \"part.fitd\"\na -> far\n";
+    std::fs::write(&main, text).unwrap();
+    let (uri, part_uri) = (format!("file://{}", main.display()), format!("file://{}", part.display()));
+    let mut l = Lsp::start();
+    l.open(&uri, text);
+    let own = l.recv();
+    assert!(own.contains(&uri) && own.contains(r#""diagnostics":[]"#), "{own}");
+    let inc = l.recv();
+    assert!(inc.contains(&part_uri) && inc.contains("E0001") && inc.contains(r#""line":1"#), "{inc}");
+    l.send(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":2,"character":6}}}}}}"#));
+    let def = l.recv();
+    assert!(def.contains(&part_uri) && def.contains(r#""start":{"character":5,"line":0}"#), "{def}");
+    // Fixed: the include's old diagnostics are cleared.
+    std::fs::write(&part, "node far \"Far 𐀀\"\n").unwrap();
+    l.change(&uri, text);
+    assert!(l.recv().contains(&uri));
+    let cleared = l.recv();
+    assert!(cleared.contains(&part_uri) && cleared.contains(r#""diagnostics":[]"#), "{cleared}");
+    // The full layout's warning about the include's glyph lands on the include.
+    l.save(&uri);
+    let own = l.recv();
+    assert!(own.contains(&uri) && own.contains(r#""diagnostics":[]"#), "{own}");
+    let inc = l.recv();
+    assert!(inc.contains(&part_uri) && inc.contains("W0202") && inc.contains(r#""line":0"#), "{inc}");
+    l.stop();
 }
 
 #[test]

@@ -12,16 +12,7 @@ Work:
 
 - Push and fix whatever fails.
 
-## 2. LSP ignores names declared in included files
-
-`src/lsp.rs` reports front-end diagnostics only for the open file and resolves definitions and completions from its own text. A node declared in an `include`d file has no go-to-definition and is not offered for completion; layout diagnostics that point into an included file are dropped.
-
-Work:
-
-- Build `declared` from the spliced `Source` and return locations in the included file's URI.
-- Publish diagnostics for included files under their own URIs.
-
-## 3. No multi-page output
+## 2. No multi-page output
 
 A map too big for one page fails with E0110 or NoRoom; fitd now names the largest branch to split out (`layout::largest_branch`), but the user does the split by hand.
 
@@ -30,7 +21,7 @@ Work:
 - One page per top-level branch, with a stub node on the overview that names its page.
 - Reuse `include` so each page can also be built alone.
 
-## 4. Editor support beyond VS Code
+## 3. Editor support beyond VS Code
 
 `editors/vscode/` has a TextMate grammar only.
 
@@ -38,7 +29,7 @@ Work:
 
 - tree-sitter grammar for Helix and Neovim.
 
-## 5. Import covers flowcharts only
+## 4. Import covers flowcharts only
 
 `fitd import` (`src/import.rs`) reads DOT and Mermaid flowcharts. D2, Mermaid mind maps, and DOT HTML-like labels beyond `<br>` are not handled; nested clusters are flattened with a warning, since groups cannot nest.
 
@@ -47,7 +38,7 @@ Work:
 - Mermaid `mindmap` to `layout radial`.
 - D2 import.
 
-## 6. Name is hard to search for
+## 5. Name is hard to search for
 
 "fitd" reads as a typo for "fitted". Low priority; only matters if the project is published.
 

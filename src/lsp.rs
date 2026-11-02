@@ -4,7 +4,7 @@
 use crate::ast::{Name, StmtKind};
 use crate::diag::{Diag, Level, Source, Span};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
 
@@ -66,8 +66,24 @@ fn range(text: &str, span: Span) -> Value {
     json!({ "start": position(text, span.lo), "end": position(text, span.hi.max(span.lo)) })
 }
 
-fn lsp_diag(text: &str, d: &Diag) -> Value {
-    let span = d.labels.iter().find(|l| l.primary).or(d.labels.first()).map_or(Span::new(0, 0), |l| l.span);
+const NOWHERE: Span = Span { lo: 0, hi: 0 };
+
+/// spliced_range maps a span of the spliced text to its file and a range there. Spliced lines
+/// are verbatim copies, so only line numbers change; a span that crosses files is cut to a point.
+fn spliced_range(src: &Source, span: Span) -> (String, Value) {
+    let at = |off: usize| {
+        let (line, col) = src.line_col(off);
+        let units: usize = src.line_text(line).chars().take(col - 1).map(char::len_utf16).sum();
+        let (path, n) = src.file_line(line);
+        (path, json!({ "line": n - 1, "character": units }))
+    };
+    let (path, start) = at(span.lo);
+    let (end_path, end) = at(span.hi.max(span.lo));
+    let end = if end_path == path { end } else { start.clone() };
+    (path.to_string(), json!({ "start": start, "end": end }))
+}
+
+fn lsp_diag(range: Value, d: &Diag) -> Value {
     let mut msg = d.msg.clone();
     for n in &d.notes {
         msg += &format!("\nnote: {n}");
@@ -75,36 +91,45 @@ fn lsp_diag(text: &str, d: &Diag) -> Value {
     if let Some(h) = &d.help {
         msg += &format!("\nhelp: {h}");
     }
-    json!({ "range": range(text, span), "severity": if d.level == Level::Error { 1 } else { 2 }, "code": d.code, "source": "fitd", "message": msg })
+    json!({ "range": range, "severity": if d.level == Level::Error { 1 } else { 2 }, "code": d.code, "source": "fitd", "message": msg })
 }
 
+/// Diagnostics by file path, so those in included files go to their own documents. The
+/// document's own path is always present, possibly empty.
+type Diags = HashMap<String, Vec<Value>>;
+
 /// front_end runs include, lex, parse, and sema, which include the static contradiction
-/// check (E0008). Diagnostics that point into included files are left to those files.
-fn front_end(path: &str, text: &str) -> Vec<Value> {
+/// check (E0008).
+fn front_end(path: &str, text: &str) -> Diags {
     let (src, mut diags) = crate::include::expand(path, text);
     let (stmts, parse_diags) = crate::parse::parse(&src.text);
     diags.extend(parse_diags);
     diags.extend(crate::sema::analyze(&stmts).1);
-    let here = |off: usize| Some(src.file_offset(off)).filter(|(p, _)| *p == path).map(|(_, o)| o);
-    let mut out = Vec::new();
-    for mut d in diags.into_iter().filter(|d| d.level != Level::Note) {
-        let had = !d.labels.is_empty();
-        d.labels.retain_mut(|l| match (here(l.span.lo), here(l.span.hi.max(l.span.lo))) {
-            (Some(lo), Some(hi)) => {
-                l.span = Span::new(lo, hi);
-                true
-            }
-            _ => false,
-        });
-        if !had || !d.labels.is_empty() {
-            out.push(lsp_diag(text, &d));
-        }
+    let mut out = Diags::from([(path.to_string(), Vec::new())]);
+    for d in diags.iter().filter(|d| d.level != Level::Note) {
+        let span = d.labels.iter().find(|l| l.primary).or(d.labels.first()).map_or(NOWHERE, |l| l.span);
+        let (file, r) = spliced_range(&src, span);
+        out.entry(file).or_default().push(lsp_diag(r, d));
     }
     out
 }
 
-/// layout builds the saved file in a child process and reads back its `--short` diagnostics,
-/// so the server shares every check with the command line.
+/// short_line splits a `--short` line `file:line:col: message`; the file may hold colons.
+fn short_line(line: &str) -> Option<(&str, usize, usize, &str)> {
+    let mut from = 0;
+    while let Some(i) = line[from..].find(": ").map(|i| from + i) {
+        let mut it = line[..i].rsplitn(3, ':');
+        if let (Some(c), Some(l), Some(f)) = (it.next(), it.next(), it.next())
+            && let (Ok(l), Ok(c)) = (l.parse(), c.parse())
+            && !f.is_empty()
+        {
+            return Some((f, l, c, &line[i + 2..]));
+        }
+        from = i + 2;
+    }
+    None
+}
+
 /// Layout children by document uri, so a newer save can kill the build it replaces.
 type Running = Arc<Mutex<HashMap<String, std::process::Child>>>;
 
@@ -116,9 +141,10 @@ fn cancel(running: &Running, uri: &str) {
     }
 }
 
-/// layout runs a full build of `path` as a child registered under `uri`; None when it was
-/// cancelled or could not start.
-fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Vec<Value>> {
+/// layout builds the saved file in a child process registered under `uri` and reads back its
+/// `--short` diagnostics, so the server shares every check with the command line. None when
+/// the build was cancelled or could not start.
+fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Diags> {
     use std::io::Read;
     static RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = RUN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -145,46 +171,53 @@ fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Vec<Va
     let status = mine?.wait().ok()?;
     // Killed by a signal: no exit code, and the log is cut short.
     status.code()?;
-    let src = Source::new(path, text);
-    let mut diags = Vec::new();
+    let mut texts = HashMap::from([(path.to_string(), Source::new(path, text))]);
+    let mut diags = Diags::from([(path.to_string(), Vec::new())]);
     for line in String::from_utf8_lossy(&log).lines() {
-        let (at, rest) = match line.strip_prefix(path).and_then(|l| l.strip_prefix(':')) {
-            Some(l) => {
-                let mut it = l.splitn(3, ':');
-                let (ln, col) = (it.next().and_then(|x| x.parse::<usize>().ok()), it.next().and_then(|x| x.parse::<usize>().ok()));
-                match (ln, col, it.next()) {
-                    (Some(ln), Some(col), Some(rest)) => (Some((ln, col)), rest.trim_start()),
-                    _ => continue,
-                }
-            }
-            None if line.starts_with("error: ") && !line.contains("aborting due to") => (None, line),
+        let (file, at, rest) = match short_line(line) {
+            Some((f, ln, col, rest)) => (f.to_string(), Some((ln, col)), rest),
+            None if line.starts_with("error: ") && !line.contains("aborting due to") => (path.to_string(), None, line),
             None => continue,
         };
         let severity = if rest.starts_with("error") { 1 } else { 2 };
         let code = rest.split_once('[').and_then(|(_, r)| r.split_once(']')).map_or("", |(c, _)| c);
         let msg = rest.split_once("]: ").map_or(rest, |(_, m)| m);
+        let src = texts.entry(file.clone()).or_insert_with(|| Source::new(&file, &std::fs::read_to_string(&file).unwrap_or_default()));
         // `--short` gives a line and column, so the mark runs from there to the end of the line.
         let r = match at {
-            Some((ln, col)) if ln >= 1 && ln <= text.lines().count().max(1) => {
+            Some((ln, col)) if ln >= 1 && ln <= src.text.lines().count().max(1) => {
                 let line_text = src.line_text(ln);
                 let start_units: usize = line_text.chars().take(col.saturating_sub(1)).map(char::len_utf16).sum();
                 json!({ "start": { "line": ln - 1, "character": start_units }, "end": { "line": ln - 1, "character": line_text.encode_utf16().count() } })
             }
-            _ => json!({ "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 0 } }),
+            _ => range("", NOWHERE),
         };
-        diags.push(json!({ "range": r, "severity": severity, "code": code, "source": "fitd", "message": msg }));
+        diags.entry(file).or_default().push(json!({ "range": r, "severity": severity, "code": code, "source": "fitd", "message": msg }));
     }
     Some(diags)
 }
 
-/// Declarations of node ids and style names, for definitions and completion.
-fn declared(text: &str) -> (Vec<Name>, Vec<Name>) {
-    let (stmts, _) = crate::parse::parse(text);
+/// Decl is a declared name with its file and its range there.
+struct Decl {
+    name: String,
+    path: String,
+    range: Value,
+}
+
+/// declared lists node ids and style names, for definitions and completion, including those
+/// declared in included files.
+fn declared(path: &str, text: &str) -> (Vec<Decl>, Vec<Decl>) {
+    let (src, _) = crate::include::expand(path, text);
+    let (stmts, _) = crate::parse::parse(&src.text);
+    let decl = |n: Name| {
+        let (path, range) = spliced_range(&src, n.span);
+        Decl { name: n.text, path, range }
+    };
     let (mut nodes, mut styles) = (Vec::new(), Vec::new());
     for st in stmts {
         match st.kind {
-            StmtKind::Node { id, .. } => nodes.push(id),
-            StmtKind::Style { name, .. } => styles.push(name),
+            StmtKind::Node { id, .. } => nodes.push(decl(id)),
+            StmtKind::Style { name, .. } => styles.push(decl(name)),
             _ => {}
         }
     }
@@ -199,29 +232,80 @@ fn word_at(text: &str, off: usize) -> Option<(String, bool)> {
     (lo < hi).then(|| (text[lo..hi].to_string(), text[..lo].ends_with('.')))
 }
 
-fn definition(text: &str, uri: &Value, pos: &Value) -> Value {
+fn definition(path: &str, text: &str, uri: &Value, pos: &Value) -> Value {
     let Some((word, style)) = word_at(text, offset(text, pos)) else { return Value::Null };
-    let (nodes, styles) = declared(text);
+    let (nodes, styles) = declared(path, text);
     let pool = if style { styles } else { nodes };
-    pool.iter().find(|n| n.text == word).map_or(Value::Null, |n| json!({ "uri": uri, "range": range(text, n.span) }))
+    // The open file's own declaration wins over one in an include.
+    let found = pool.iter().find(|d| d.name == word && d.path == path).or_else(|| pool.iter().find(|d| d.name == word));
+    found.map_or(Value::Null, |d| json!({ "uri": if d.path == path { uri.clone() } else { json!(uri_of(&d.path)) }, "range": d.range }))
 }
 
-fn completion(text: &str, pos: &Value) -> Value {
+fn completion(path: &str, text: &str, pos: &Value) -> Value {
     let off = offset(text, pos);
     let line_start = text[..off].rfind('\n').map_or(0, |i| i + 1);
     let before = &text[line_start..off];
     let typed = before.rsplit(|c: char| !(c.is_alphanumeric() || c == '_' || c == '-')).next().unwrap_or("");
-    let (nodes, styles) = declared(text);
+    let (nodes, styles) = declared(path, text);
+    let mut seen = HashSet::new();
     let items: Vec<Value> = if before[..before.len() - typed.len()].ends_with('.') {
-        styles.iter().map(|s| json!({ "label": s.text, "kind": 7 })).collect()
+        styles.iter().filter(|s| seen.insert(s.name.clone())).map(|s| json!({ "label": s.name, "kind": 7 })).collect()
     } else if before.trim() == typed {
         KEYWORDS.iter().map(|k| json!({ "label": k, "kind": 14 })).collect()
     } else {
         // A node may be referenced before its `node` line, so every declaration is offered.
-        let mut seen = std::collections::HashSet::new();
-        nodes.iter().filter(|n| seen.insert(n.text.clone())).map(|n| json!({ "label": n.text, "kind": 6 })).collect()
+        nodes.iter().filter(|n| seen.insert(n.name.clone())).map(|n| json!({ "label": n.name, "kind": 6 })).collect()
     };
     Value::Array(items)
+}
+
+/// uri_of is the `file://` uri of a path, with `.` and `..` resolved and unsafe bytes escaped.
+fn uri_of(path: &str) -> String {
+    let mut parts: Vec<&str> = Vec::new();
+    for c in path.split(['/', '\\']) {
+        match c {
+            "." => {}
+            ".." if parts.last().is_some_and(|p| !p.is_empty() && *p != "..") => {
+                parts.pop();
+            }
+            _ => parts.push(c),
+        }
+    }
+    let p = parts.join("/");
+    let mut s = String::from(if p.starts_with('/') { "file://" } else { "file:///" });
+    for b in p.bytes() {
+        if b.is_ascii_alphanumeric() || b"-._~/:".contains(&b) {
+            s.push(b as char);
+        } else {
+            s += &format!("%{b:02X}");
+        }
+    }
+    s
+}
+
+/// Other documents each open document last published diagnostics to, so an include whose
+/// problems are fixed gets them cleared.
+type Published = Arc<Mutex<HashMap<String, HashSet<String>>>>;
+
+fn publish(out: &Out, uri: &str, diags: Vec<Value>) {
+    send(out, json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": diags } }));
+}
+
+/// publish_all sends the diagnostics of the document at `uri` and of the files it includes,
+/// and clears files it published to before that now have none.
+fn publish_all(out: &Out, published: &Published, uri: &str, path: &str, mut diags: Diags) {
+    publish(out, uri, diags.remove(path).unwrap_or_default());
+    let mut others = HashSet::new();
+    for (p, v) in diags {
+        let u = uri_of(&p);
+        publish(out, &u, v);
+        others.insert(u);
+    }
+    let mut published = published.lock().unwrap();
+    for stale in published.get(uri).into_iter().flatten().filter(|u| !others.contains(*u)) {
+        publish(out, stale, Vec::new());
+    }
+    published.insert(uri.to_string(), others);
 }
 
 fn path_of(uri: &str) -> Option<String> {
@@ -252,7 +336,7 @@ pub fn serve() -> std::process::ExitCode {
     let out: Out = Arc::new(Mutex::new(std::io::stdout()));
     let mut input = std::io::BufReader::new(std::io::stdin());
     let mut docs: HashMap<String, String> = HashMap::new();
-    let publish = |out: &Out, uri: &str, diags: Vec<Value>| send(out, json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": diags } }));
+    let published: Published = Arc::default();
     // Uri to the change count when its last full layout started, so a stale result is dropped.
     let versions: Arc<Mutex<HashMap<String, u64>>> = Arc::default();
     let running: Running = Arc::default();
@@ -281,29 +365,30 @@ pub fn serve() -> std::process::ExitCode {
                 let text = if method == "textDocument/didOpen" { &params["textDocument"]["text"] } else { &params["contentChanges"][0]["text"] };
                 let text = text.as_str().unwrap_or("").to_string();
                 bump(&uri);
-                publish(&out, &uri, front_end(&path_of(&uri).unwrap_or_default(), &text));
+                let path = path_of(&uri).unwrap_or_default();
+                publish_all(&out, &published, &uri, &path, front_end(&path, &text));
                 docs.insert(uri, text);
             }
             "textDocument/didClose" => {
                 docs.remove(&uri);
                 bump(&uri);
                 cancel(&running, &uri);
-                publish(&out, &uri, Vec::new());
+                publish_all(&out, &published, &uri, "", Diags::new());
             }
             "textDocument/didSave" => {
                 let (Some(path), Some(text)) = (path_of(&uri), docs.get(&uri).cloned()) else { continue };
                 bump(&uri);
                 let at = versions.lock().unwrap()[&uri];
-                let (out, versions, running) = (out.clone(), versions.clone(), running.clone());
+                let (out, versions, running, published) = (out.clone(), versions.clone(), running.clone(), published.clone());
                 std::thread::spawn(move || {
                     let Some(diags) = layout(&path, &text, &uri, &running) else { return };
                     if versions.lock().unwrap().get(&uri) == Some(&at) {
-                        publish(&out, &uri, diags);
+                        publish_all(&out, &published, &uri, &path, diags);
                     }
                 });
             }
-            "textDocument/definition" => reply(docs.get(&uri).map_or(Value::Null, |t| definition(t, &params["textDocument"]["uri"], &params["position"]))),
-            "textDocument/completion" => reply(docs.get(&uri).map_or(Value::Array(Vec::new()), |t| completion(t, &params["position"]))),
+            "textDocument/definition" => reply(docs.get(&uri).map_or(Value::Null, |t| definition(&path_of(&uri).unwrap_or_default(), t, &params["textDocument"]["uri"], &params["position"]))),
+            "textDocument/completion" => reply(docs.get(&uri).map_or(Value::Array(Vec::new()), |t| completion(&path_of(&uri).unwrap_or_default(), t, &params["position"]))),
             _ if msg.get("id").is_some() => send(&out, json!({ "jsonrpc": "2.0", "id": msg["id"], "error": { "code": -32601, "message": format!("unsupported method {method}") } })),
             _ => {}
         }
@@ -334,12 +419,40 @@ mod tests {
         let text = "style hot color=#C62828\nnode a .hot\nnode b\na -> b\nrequire a left-of \n";
         let uri = json!("file:///x.fitd");
         let at = |s: &str, k: usize| position(text, text.match_indices(s).nth(k).unwrap().0);
-        assert_eq!(definition(text, &uri, &at("b", 1))["range"]["start"], json!({ "line": 2, "character": 5 }));
-        assert_eq!(definition(text, &uri, &at("hot", 1))["range"]["start"], json!({ "line": 0, "character": 6 }));
+        assert_eq!(definition("/x.fitd", text, &uri, &at("b", 1))["range"]["start"], json!({ "line": 2, "character": 5 }));
+        assert_eq!(definition("/x.fitd", text, &uri, &at("hot", 1))["range"]["start"], json!({ "line": 0, "character": 6 }));
         let labels = |v: Value| v.as_array().unwrap().iter().map(|i| i["label"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        assert_eq!(labels(completion(text, &position(text, text.find("hot\nnode b").unwrap()))), ["hot"]);
-        assert_eq!(labels(completion(text, &position(text, text.rfind('\n').unwrap()))), ["a", "b"]);
-        assert!(labels(completion(text, &json!({ "line": 5, "character": 0 }))).contains(&"require".to_string()));
+        assert_eq!(labels(completion("/x.fitd", text, &position(text, text.find("hot\nnode b").unwrap()))), ["hot"]);
+        assert_eq!(labels(completion("/x.fitd", text, &position(text, text.rfind('\n').unwrap()))), ["a", "b"]);
+        assert!(labels(completion("/x.fitd", text, &json!({ "line": 5, "character": 0 }))).contains(&"require".to_string()));
+    }
+
+    #[test]
+    fn includes_lend_their_names_and_diagnostics() {
+        let dir = std::env::temp_dir().join(format!("fitd-lsp-inc-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("parts")).unwrap();
+        std::fs::write(dir.join("parts/more.fitd"), "style hot color=#EF5350\nnode far \"Far\" .hot\nfar -> ghost\n").unwrap();
+        let main = dir.join("main.fitd");
+        let path = main.to_str().unwrap();
+        let text = "node a \"A\"\ninclude \"parts/more.fitd\"\na -> far\n";
+        let uri = json!("file:///main");
+        let def = definition(path, text, &uri, &position(text, text.rfind("far").unwrap()));
+        assert_eq!(def["uri"], json!(uri_of(dir.join("parts/more.fitd").to_str().unwrap())));
+        assert_eq!(def["range"]["start"], json!({ "line": 1, "character": 5 }));
+        let labels = |v: Value| v.as_array().unwrap().iter().map(|i| i["label"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        assert_eq!(labels(completion(path, text, &position(text, text.len() - 1))), ["a", "far"]);
+        let diags = front_end(path, text);
+        assert!(diags[path].is_empty(), "{diags:?}");
+        let inc = &diags[dir.join("parts/more.fitd").to_str().unwrap()];
+        assert!(inc.len() == 1 && inc[0]["code"] == "E0001" && inc[0]["range"]["start"] == json!({ "line": 2, "character": 7 }), "{inc:?}");
+    }
+
+    #[test]
+    fn short_lines_split_and_uris_encode() {
+        assert_eq!(short_line("C:/m/a.fitd:3:7: error[E0001]: x"), Some(("C:/m/a.fitd", 3, 7, "error[E0001]: x")));
+        assert_eq!(short_line("error: no room"), None);
+        assert_eq!(uri_of("/home/a b/./parts/../m.fitd"), "file:///home/a%20b/m.fitd");
+        assert_eq!(uri_of("c:\\Users\\m.fitd"), "file:///c:/Users/m.fitd");
     }
 
     #[test]

@@ -13,13 +13,13 @@ struct Splice {
 }
 
 impl Splice {
-    fn seg(&mut self, path: &str, file_at: usize, file_line: usize) {
-        let (at, line) = (self.text.len(), self.text.matches('\n').count() + 1);
+    fn seg(&mut self, path: &str, file_line: usize) {
+        let line = self.text.matches('\n').count() + 1;
         // A file that adds no lines leaves a segment that the next one replaces.
         if self.segs.last().is_some_and(|s| s.line == line) {
             self.segs.pop();
         }
-        self.segs.push(Seg { line, at, file_at, path: path.to_string(), file_line });
+        self.segs.push(Seg { line, path: path.to_string(), file_line });
     }
 }
 
@@ -39,7 +39,7 @@ fn canonical(p: &Path) -> PathBuf {
 
 fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
     let (stmts, _) = crate::parse::parse(text);
-    out.seg(path, 0, 1);
+    out.seg(path, 1);
     let mut cursor = 0;
     for st in stmts {
         let StmtKind::Include(target) = &st.kind else { continue };
@@ -72,7 +72,7 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
             }
         }
         cursor = end;
-        out.seg(path, end, text[..end].matches('\n').count() + 1);
+        out.seg(path, text[..end].matches('\n').count() + 1);
     }
     out.text += &text[cursor..];
 }
@@ -101,8 +101,6 @@ mod tests {
         for (i, (f, n)) in want.iter().enumerate() {
             assert_eq!(at(i + 1), (f.to_string(), *n), "line {}", i + 1);
         }
-        let off = src.text.find("node a2").unwrap();
-        assert_eq!(src.file_offset(off).1, "node a\ninclude \"b.fitd\"\n".len());
         assert_eq!(diags.len(), 1);
         assert!(diags[0].code == "E0011" && diags[0].msg.contains("includes itself"), "{}", diags[0].msg);
         assert_eq!(at(src.line_col(diags[0].labels[0].span.lo).0), ("loop.fitd".to_string(), 1));
