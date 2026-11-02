@@ -14,7 +14,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --release
 
@@ -24,7 +24,7 @@ jobs:
       run:
         working-directory: editors/tree-sitter-fitd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: npx --yes tree-sitter-cli@0.26.9 generate && git diff --exit-code src
       - run: npx --yes tree-sitter-cli@0.26.9 test -p .
       # Every example and fixture parses without an error node.
@@ -33,7 +33,7 @@ jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
       # Solver checks are deterministic, so they gate on any machine; time is only reported.
