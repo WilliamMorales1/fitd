@@ -390,7 +390,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 }
                 set.theme_over = theme_overrides(attrs, &mut s.diags);
             }
-            StmtKind::Edge { from, link, to, label, classes, attrs } => {
+            StmtKind::Edge { from, link, directed, to, label, classes, attrs } => {
                 let kind = if *link { EdgeKind::Link } else { EdgeKind::Tree };
                 // An edge has a stroke only, so it takes just the color of its styles.
                 let mut l = Look::default();
@@ -404,7 +404,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 let a = s.node(from);
                 for t in to {
                     if let (Some(a), Some(b)) = (a, s.node(t)) {
-                        edges.push(Edge { a, b, kind, label: label.clone(), color: l.color.clone(), span: from.span.to(t.span) });
+                        edges.push(Edge { a, b, kind, directed: *directed, label: label.clone(), color: l.color.clone(), span: from.span.to(t.span) });
                     }
                 }
             }

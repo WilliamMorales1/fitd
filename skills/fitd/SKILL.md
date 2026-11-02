@@ -32,7 +32,7 @@ If the user wants the source kept, write it to `NAME.fitd` and build with `fitd 
 
 - Concept map or mind map (one topic branching out): the default, `layout radial`. Pick the center with `root=ID`; otherwise fitd picks it.
 - Process, pipeline, timeline, decision flow: `layout layered dir=down` or `dir=right`. Long flows wrap into bands; `bands=1` forbids wrapping.
-- `->` edges build the hierarchy or flow. `..>` draws a dashed cross link that does not change the structure. Use cross links for "relates to" connections.
+- `->` edges build the hierarchy or flow. `..>` draws a dashed cross link that does not change the structure. Use cross links for "relates to" connections. `--` and `..` are the same without an arrowhead, for relations with no direction.
 
 ## Start minimal
 
@@ -77,4 +77,4 @@ The chosen font is often not the largest that fits. fitd also lays out at 5% and
 
 ## Examples
 
-`examples/` in the fitd repo holds full diagrams: `compiler.fitd` and `cell_biology.fitd` (layered flowcharts with groups and styles), `group_theory.fitd` and `earth_science.fitd` (radial maps), `french_history.fitd` (a layered timeline with group frames). Read one when the user asks for a feature the guide only names.
+`examples/` in the fitd repo holds full diagrams: `compiler.fitd` and `cell_biology.fitd` (layered flowcharts with groups and styles), `group_theory.fitd` and `earth_science.fitd` (radial maps), `french_history.fitd` (a layered timeline with group frames), `coffee.fitd` (radial with a palette and a group), `release_pipeline.fitd` (banded flow, `include`, theme overrides, chained constraints), `debugging.fitd` (mono decision flow at a fixed font), `deepseek_v4_1_flash.fitd` (model architecture, undirected edges). `docs/EXAMPLES.md` ends with a feature index. Read one when the user asks for a feature the guide only names.

@@ -1,0 +1,6 @@
+# Shared styles for the release pipeline; an included style is never reported unused.
+style step color=#1565C0
+style gate color=#C62828 shape=box
+style store color=#00838F shape=circle
+style manual color=#EF6C00 fill=#FFF3E0 text=#3E2723
+style unused color=#9E9E9E

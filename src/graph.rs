@@ -33,6 +33,8 @@ pub struct Edge {
     pub a: usize,
     pub b: usize,
     pub kind: EdgeKind,
+    /// False for `--` and `..`: drawn without an arrowhead; layers still follow the source order.
+    pub directed: bool,
     pub label: Option<String>,
     /// Stroke color; None draws the layout's default (branch accent, theme edge or link).
     pub color: Option<String>,

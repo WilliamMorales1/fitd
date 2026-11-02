@@ -1,0 +1,68 @@
+# From cherry to cup: a radial map whose center fitd picks, colored by a custom palette.
+title "Coffee"
+page a3 landscape
+font 9pt..32pt wrap=15em
+theme palette="#6D4C41 #2E7D32 #EF6C00 #1565C0 #AD1457"
+
+style method shape=box
+style key color=#3E2723 fill=#3E2723 text=#FFE0B2
+
+node coffee "Coffee" .key
+| seed of the Coffea cherry
+
+node farm "Growing"
+| arabica above 1000 m
+| robusta lower, hardier
+node altitude "Altitude"
+| slower ripening, denser beans
+node cherry "Harvest"
+| hand-picked or stripped
+
+node process "Processing"
+node washed "Washed"
+| fruit removed before drying
+| clean, bright acidity
+node natural "Natural"
+| dried whole in the fruit
+| heavy body, fruity notes
+
+node roast "Roasting"
+| Maillard reactions, then caramelization
+node light "Light roast"
+| origin flavors, more acidity
+node dark "Dark roast"
+| roast flavors, more bitterness
+
+node brew "Brewing"
+| extraction: 18-22% of the dose
+node espresso "Espresso" .method
+| 9 bar, 25-30 s
+node filter "Pour-over" .method
+| paper filter, 3-4 min
+node press "French press" .method
+| full immersion, metal mesh
+
+node taste "Tasting"
+node acidity "Acidity"
+node body "Body"
+node sweet "Sweetness"
+
+coffee -- farm, process, roast, brew, taste
+farm -- altitude, cherry
+process -- washed, natural
+roast -- light, dark
+brew -- espresso, filter, press
+taste -- acidity, body, sweet
+
+altitude .. acidity "denser beans, brighter cup"
+washed .. acidity
+natural .. body
+dark .. body "oils on the surface"
+espresso ..> body color=#AD1457
+
+group "Methods" espresso, filter, press color=#1565C0
+
+# Hard placements in a radial map cost search; preferences keep it fast.
+prefer taste at right weight=3
+prefer light left-of dark
+prefer align row(washed, natural)

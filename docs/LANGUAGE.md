@@ -14,8 +14,8 @@ style stage color=#1565C0 shape=box
 node lex "Lexer" .stage          # id, optional title, styles, attributes
 | tokens with byte spans         # body lines attach to the node above
 
-lex -> parse, sema "label"       # hierarchy / flow edges (also `--`)
-core ..> sema "points back"      # cross links, drawn dashed (also `..`)
+lex -> parse, sema "label"       # hierarchy / flow edges (`--` undirected)
+core ..> sema "points back"      # cross links, drawn dashed (`..` undirected)
 core ..> failure .stage          # an edge takes a style's color, or color=#hex
 
 group "Front end" lex, parse     # framed together; nothing else inside the frame
@@ -71,7 +71,7 @@ Analysis runs in two passes. The first collects `node` and `style` declarations 
 | `font LO..HI` or `font SIZE` | `wrap=EM`, `family="NAME"` | The solver maximizes the body font within the range. `family` must be installed (found with `fc-match`); it is used for measuring and drawing. Default DejaVu Serif, built into fitd, so the default layout is the same on every machine. |
 | `theme [light\|dark\|mono]` | `background`, `text`, `edge`, `link`, `label`, `root` (colors); `palette="#hex ..."` | Preset defaults to `light`; each attribute overrides one preset value. |
 | `node`, `style` | `color=#hex`, `fill=#hex`, `text=#hex`, `shape=circle\|box` | `color` is the accent (border, tint, branch); `fill` replaces the tint; `text` defaults to the theme text, or black/white by contrast on a solid fill. |
-| edge | `color=#hex` | Stroke and arrowhead color. A `.style` on an edge gives only its `color`. Width and arrowheads follow the layout (hierarchy lines, flow arrows, dashed links) and cannot be set. |
+| edge | `color=#hex` | Stroke and arrowhead color. A `.style` on an edge gives only its `color`. Width and arrowheads follow the layout (hierarchy lines, flow arrows, dashed links) and cannot be set, except that `--` and `..` draw no arrowhead. An undirected edge still orders a layered flow, from the node written first. |
 | `group` | `color=#hex` | See Groups below. |
 | `require`, `prefer` | `gap=LEN` (orderings), `within=LEN` (`near`), `weight=N` (`prefer` only) | |
 

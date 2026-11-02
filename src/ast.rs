@@ -58,7 +58,7 @@ pub enum StmtKind {
     Theme { preset: Option<Name>, attrs: Vec<Attr> },
     Node { id: Name, title: Option<(String, Span)>, classes: Vec<Name>, attrs: Vec<Attr> },
     Body(String),
-    Edge { from: Name, link: bool, to: Vec<Name>, label: Option<String>, classes: Vec<Name>, attrs: Vec<Attr> },
+    Edge { from: Name, link: bool, directed: bool, to: Vec<Name>, label: Option<String>, classes: Vec<Name>, attrs: Vec<Attr> },
     /// `group "Front end" lex, parse, sema color=#1565C0`.
     Group { title: Option<String>, items: Vec<Name>, attrs: Vec<Attr> },
     Constraint { hard: bool, rel: Rel, attrs: Vec<Attr> },

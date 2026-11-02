@@ -1,0 +1,43 @@
+# A decision flow for a failing test, in grayscale for print at one fixed font size.
+title "A test fails"
+layout layered dir=down bands=1
+page a4 portrait margin=12mm
+font 11pt wrap=12em
+theme mono
+
+style ask shape=box
+style done shape=circle fill=#222222
+
+node fail "Test fails" .done
+node repro "Reproduces\nlocally?" .ask
+node flaky "Flaky test"
+| timing, order, shared state
+node quarantine "Quarantine"
+| ticket, owner, deadline
+node recent "Started after\na recent change?" .ask
+node bisect "Bisect"
+| git bisect run
+node read "Read the failure"
+| expected vs actual
+node minimal "Shrink the case"
+| smallest input that fails
+node fix "Fix and add\na regression test"
+node green "Green" .done
+
+fail -> repro
+repro -> flaky "no"
+repro -> recent "yes"
+flaky -> quarantine
+recent -> bisect "yes"
+recent -> read "no"
+bisect -> minimal
+read -> minimal
+minimal -> fix
+fix -> green
+quarantine ..> repro "retry with a seed"
+
+require flaky left-of recent
+require bisect right-of read gap=2em
+require align top(bisect, read)
+require green below fix
+prefer quarantine at left

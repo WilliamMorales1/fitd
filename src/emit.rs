@@ -83,6 +83,12 @@ fn stroke<'a>(g: &'a Graph, e: &Drawn) -> Option<&'a str> {
     find(e.a, e.b).or_else(|| find(e.b, e.a)).and_then(|x| x.color.as_deref())
 }
 
+/// headed says whether an edge gets an arrowhead: every one but a `--` or `..` edge.
+fn headed(g: &Graph, e: &Drawn) -> bool {
+    let find = |a: usize, b: usize| g.edges.iter().find(|x| (x.a, x.b) == (a, b));
+    find(e.a, e.b).or_else(|| find(e.b, e.a)).is_none_or(|x| x.directed)
+}
+
 /// Group is a frame to draw: its border, title, and color.
 struct Group<'a> {
     rect: Rect,
@@ -161,7 +167,7 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
     o.push_str("<defs>");
     // Arrowheads take their edge's color, so each edge color gets its own marker.
     let mut markers = vec![("arr".to_string(), th.edge.as_str()), ("lnk".to_string(), th.link.as_str())];
-    for e in lay.edges.iter().filter(|e| e.style != EdgeStyle::Line) {
+    for e in lay.edges.iter().filter(|e| e.style != EdgeStyle::Line && headed(g, e)) {
         if let Some(c) = stroke(g, e).filter(|c| !markers.iter().any(|m| m.1 == *c)) {
             markers.push((format!("m{}", theme::rgb(c)), c));
         }
@@ -184,18 +190,21 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
         let pts = edge_points(lay, e);
         let d: Vec<String> = pts.iter().map(|&p| tx(p)).map(|(x, y)| format!("{x:.1},{y:.1}")).collect();
         let sw = e.width * b;
-        let marker = |c: &str| markers.iter().find(|m| m.1 == c).map_or("arr", |m| m.0.as_str()).to_string();
+        let marker = |c: &str| match headed(g, e) {
+            true => format!(r#" marker-end="url(#{})""#, markers.iter().find(|m| m.1 == c).map_or("arr", |m| m.0.as_str())),
+            false => String::new(),
+        };
         match e.style {
             EdgeStyle::Line => {
                 let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{}" stroke-opacity="0.7" stroke-width="{sw:.2}"/>"#, d.join(" "), stroke(g, e).unwrap_or(&paint[e.b].accent));
             }
             EdgeStyle::Arrow => {
                 let c = stroke(g, e).unwrap_or(&th.edge);
-                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{c}" stroke-width="{sw:.2}" marker-end="url(#{})"/>"#, d.join(" "), marker(c));
+                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{c}" stroke-width="{sw:.2}"{}/>"#, d.join(" "), marker(c));
             }
             EdgeStyle::Link => {
                 let c = stroke(g, e).unwrap_or(&th.link);
-                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{c}" stroke-width="{sw:.2}" stroke-dasharray="{:.1} {:.1}" marker-end="url(#{})"/>"#, d.join(" "), 0.5 * b, 0.3 * b, marker(c));
+                let _ = writeln!(o, r#"<polyline points="{}" fill="none" stroke="{c}" stroke-width="{sw:.2}" stroke-dasharray="{:.1} {:.1}"{}/>"#, d.join(" "), 0.5 * b, 0.3 * b, marker(c));
             }
         }
     }
@@ -339,10 +348,11 @@ pub fn tikz(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, w: f64, h: f64, th
         let pts: Vec<String> = raw.iter().map(|p| format!("({:.1},{:.1})", p.0, p.1)).collect();
         let lw = e.width * b;
         let col = |default: &str| cname(stroke(g, e).unwrap_or(default));
+        let head = if headed(g, e) { ", -{Stealth}" } else { "" };
         let style = match e.style {
             EdgeStyle::Line => format!("{}, opacity=0.7", col(&paint[e.b].accent)),
-            EdgeStyle::Arrow => format!("{}, -{{Stealth}}", col(&th.edge)),
-            EdgeStyle::Link => format!("{}, dashed, -{{Stealth}}", col(&th.link)),
+            EdgeStyle::Arrow => format!("{}{head}", col(&th.edge)),
+            EdgeStyle::Link => format!("{}, dashed{head}", col(&th.link)),
         };
         let _ = writeln!(o, "\\draw[{style}, line width={lw:.2}bp] {};", pts.join(" -- "));
     }

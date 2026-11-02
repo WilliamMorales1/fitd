@@ -1,0 +1,84 @@
+# DeepSeek-V4.1-Flash (September 2026), from its model card and arXiv 2609.19969.
+title "DeepSeek-V4.1-Flash"
+layout layered dir=down
+page a3 portrait
+font 8pt..32pt wrap=15em
+
+style io color=#455A64 shape=circle
+style vision color=#00897B
+style stack color=#1E88E5
+style memory color=#8E24AA
+style serve color=#FB8C00
+style train color=#8D6E63
+
+node prompt "Prompt" .io
+| text and images, up to 1M tokens
+node vit "DeepSeek-ViT" .vision
+| trained from scratch
+| 2D-RoPE, 3×3 pixel-unshuffle
+node proj "Projector" .vision
+| two-layer MLP
+node embed "Token embedding"
+
+node enc_swa "Causal encoder, layers 1-2" .stack
+| sliding window attention
+node enc "Encoder layers 3-20" .stack
+| CSA2 attention
+| MoE: 1 shared + 384 routed experts,
+| 6 routed active per token
+node dec "Decoder, 20 layers" .stack
+| CSA2: each layer Full, Reindex, or Reuse
+| hierarchical sparse indexer
+| same MoE layout
+| 552B backbone over all 40 layers
+node head "Output head"
+node spark "DSpark" .serve
+| speculative decoding
+| semi-autoregressive drafts
+node out "Tokens" .io
+
+node kv "Global KV cache" .memory
+| 890 bytes per token
+| FP4 (E2M1), E4M3 scale per 16 channels
+| cross-layer reuse in CSA2
+node replay "SWA Bounded Replay" .memory
+| rebuilds SWA KV from the last n_win tokens
+| about 1/8 the SSD and host footprint of V4-Flash
+node engram "Engram memory" .memory
+| 196B parameters
+| sparse, token-based lookup
+node mhc "Single-Pass mHC" .memory
+| residual-stream mixing
+
+node pre "Pre-training" .train
+| 45T multimodal tokens
+| sparse attention at 64K, then 1M context
+node post "Post-training" .train
+| SFT, then RL, then on-policy distillation
+| reasoning effort 1-100
+
+prompt -> vit, embed
+vit -> proj
+proj -> enc_swa "visual embeddings"
+embed -> enc_swa
+enc_swa -> enc
+enc -> dec "prefill: 8B active"
+dec -> head "decode: 16B active"
+head -> spark
+spark -> out
+
+# Undirected tree edges hang each memory part beside the layers it serves.
+enc_swa -- replay
+enc -- kv
+dec .. kv
+prompt -- engram "token-based lookup"
+engram .. enc
+engram .. dec
+enc_swa -- mhc
+mhc .. dec
+pre -> post
+
+group enc_swa, enc, dec color=#1E88E5
+
+require prompt at top
+prefer pre right-of prompt

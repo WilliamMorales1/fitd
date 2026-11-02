@@ -32,6 +32,77 @@ Layered flowchart (right) that wraps into two bands: a group frame, circle molec
 
 ![Cellular respiration](examples/cell_biology.png)
 
+## [`coffee.fitd`](../examples/coffee.fitd)
+
+Radial map with no `layout` or `root`: fitd picks the center. A `palette=` colors the branches, undirected `--` edges and `..` links, a `group` frames one branch's leaves, `shape=box` and a dark `fill` with `text=`, and three `prefer`s (`at`, `left-of`, `align row`), which keep a radial search cheap where `require` would not.
+
+![Coffee](examples/coffee.png)
+
+## [`release_pipeline.fitd`](../examples/release_pipeline.fitd)
+
+Layered flow (right) that wraps into `bands=2`, the second band running back to the left. Styles come from [`shared/build_styles.fitd`](../examples/shared/build_styles.fitd) through `include`; a `WxH` page with `margin=`; every theme color overridden (`background`, `text`, `edge`, `link`, `label`); `align column`; a chained `require prod left-of canary left-of stage`; a mixed `prefer` chain (`above ... near ... within=`).
+
+![Shipping a release](examples/release_pipeline.png)
+
+## [`debugging.fitd`](../examples/debugging.fitd)
+
+Decision flow in `theme mono` for print: one fixed `font 11pt`, `bands=1`, `a4 portrait`, `\n` line breaks in titles, labeled branches, and `right-of ... gap=`, `align top`, `below`.
+
+![A test fails](examples/debugging.png)
+
+## [`deepseek_v4_1_flash.fitd`](../examples/deepseek_v4_1_flash.fitd)
+
+Model architecture: DeepSeek-V4.1-Flash (September 2026), drawn only from its [model card](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash) and [paper](https://arxiv.org/abs/2609.19969). Image and text inputs, the causal encoder-decoder in an untitled `group`, and the serving path through DSpark. Memory parts (KV cache, SWA Bounded Replay, Engram, mHC) hang beside the layers they serve through undirected `--` edges, with `..` links to the rest. Training sits apart.
+
+![DeepSeek-V4.1-Flash](examples/deepseek_v4_1_flash.png)
+
+## Feature index
+
+| Feature | Examples |
+| --- | --- |
+| `layout radial`, center chosen by fitd | coffee |
+| `layout radial root=` | earth_science |
+| `root` statement | group_theory |
+| `layout layered dir=down` | compiler, french_history, debugging, deepseek_v4_1_flash |
+| `layout layered dir=right` | cell_biology, release_pipeline |
+| `bands=N` | release_pipeline, debugging |
+| `page` paper name | most |
+| `page ... portrait` / `landscape` | french_history, debugging, deepseek_v4_1_flash / coffee |
+| `page WxH` | release_pipeline |
+| `page ... margin=` | compiler, release_pipeline, debugging |
+| `font LO..HI wrap=` | all but group_theory and debugging |
+| `font SIZE` (fixed) | debugging |
+| `theme dark` | compiler |
+| `theme mono` | debugging |
+| theme color overrides | earth_science, compiler, release_pipeline |
+| `theme palette=` | coffee |
+| `include` | release_pipeline |
+| `style` on nodes | all but group_theory |
+| `fill=` | cell_biology, earth_science, coffee, debugging, release_pipeline |
+| `text=` | coffee, release_pipeline |
+| `shape=circle` | cell_biology, compiler, release_pipeline, debugging, deepseek_v4_1_flash |
+| `shape=box` | coffee, release_pipeline, debugging |
+| `\n` in titles | group_theory, debugging |
+| `->` and `..>` | all |
+| undirected `--` and `..` | coffee, release_pipeline, deepseek_v4_1_flash |
+| edge labels | all |
+| edge `color=` | cell_biology, french_history, coffee, release_pipeline |
+| edge `.style` | compiler, earth_science |
+| `group` in layered layout | cell_biology, compiler, french_history, release_pipeline, deepseek_v4_1_flash |
+| untitled `group` | deepseek_v4_1_flash |
+| `group` in radial layout | coffee |
+| `left-of` / `right-of` | compiler, coffee, release_pipeline / debugging, release_pipeline |
+| `above` / `below` | release_pipeline / cell_biology, debugging |
+| `gap=` | compiler, debugging |
+| chained relation | release_pipeline |
+| mixed chain with `near ... within=` | release_pipeline |
+| `near ... within=` | compiler, cell_biology, earth_science |
+| `align row` | compiler, coffee |
+| `align column` | release_pipeline |
+| `align top` | debugging |
+| `at` places | cell_biology, earth_science, french_history, coffee, release_pipeline |
+| `prefer ... weight=` | compiler, cell_biology, earth_science, coffee, release_pipeline |
+
 ## Rebuilding
 
 After a change to layout or drawing, rebuild every image (fish):

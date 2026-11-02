@@ -1,0 +1,62 @@
+# A software release as a layered flow that wraps into bands, with styles from an include.
+title "Shipping a release"
+include "shared/build_styles.fitd"
+layout layered dir=right bands=2
+page 420x297mm margin=8mm
+font 8pt..30pt wrap=14em
+theme light background=#FAFAF7 text=#212121 edge=#37474F link=#8E24AA label=#4E342E
+
+node repo "Repository" .store
+node commit "Commit" .step
+| signed, linked to an issue
+node lint "Lint and format" .step
+| style is not a review topic
+node unit "Unit tests" .step
+| fast, run on every push
+node build "Build" .step
+| reproducible, pinned toolchain
+node review "Code review" .manual
+| one approval, two for core
+node integ "Integration tests" .step
+| real database and queue
+node gate "Release gate" .gate
+| all checks green
+| changelog entry present
+node artifact "Artifact store" .store
+node stage "Staging deploy" .step
+| production-shaped data
+node canary "Canary" .step
+| 5% of traffic for an hour
+node prod "Production" .gate
+node rollback "Rollback" .manual
+| one command, rehearsed monthly
+node monitor "Monitoring"
+| error rate, latency, saturation
+
+repo -> commit
+commit -> lint, unit
+lint -> build
+unit -> build
+build -> review "pull request"
+review -> integ
+integ -> gate
+gate -> artifact
+artifact -> stage
+stage -> canary
+canary -> prod "promote"
+canary ..> rollback "errors up"
+prod -- monitor
+monitor .. rollback
+review ..> commit "changes requested" color=#C62828
+
+group "Continuous integration" lint, unit, build, integ color=#1565C0
+group "Delivery" stage, canary, prod
+
+require repo at left
+require lint above unit
+require align column(lint, unit)
+# The second band runs back toward the left.
+require prod left-of canary left-of stage
+prefer rollback above monitor near canary within=20em weight=2
+prefer monitor left-of prod
+prefer artifact at bottom-right

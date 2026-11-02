@@ -195,12 +195,16 @@ fn theme_colors_reach_svg_and_tikz() {
 /// busy core run slower per CPU second, so a CPU budget failed under load with identical
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
-const EXAMPLES: [(&str, usize, u64); 5] = [
+const EXAMPLES: [(&str, usize, u64); 9] = [
     ("cell_biology", 0, 2_400_000),
+    ("coffee", 0, 93_000_000),
     ("compiler", 0, 4_600_000),
+    ("debugging", 0, 33_000),
+    ("deepseek_v4_1_flash", 0, 6_300_000),
     ("earth_science", 2, 89_000_000),
     ("french_history", 0, 2_600_000),
     ("group_theory", 0, 50_000_000),
+    ("release_pipeline", 0, 1_500_000),
 ];
 
 const HANG_SECS: f64 = 60.0;
@@ -342,6 +346,22 @@ fn output_directories_are_created() {
     let (ok, log) = fitd(&["examples/compiler.fitd", "-o", dir.join("c.svg").to_str().unwrap(), "--tikz", tex.to_str().unwrap()]);
     assert!(ok, "{log}");
     assert!(tex.exists());
+}
+
+#[test]
+fn undirected_edges_have_no_arrowheads() {
+    let src = tmp("undirected.fitd");
+    let (svg, tex) = (tmp("undirected.svg"), tmp("undirected.tex"));
+    std::fs::write(&src, "layout layered dir=down\nnode a \"A\"\nnode b \"B\"\nnode c \"C\"\nnode d \"D\"\na -> b\na -- c\nb ..> d\nc .. d\n").unwrap();
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--tikz", tex.to_str().unwrap()]);
+    assert!(ok && log.contains(" 0 errors"), "{log}");
+    let s = std::fs::read_to_string(&svg).unwrap();
+    let edges: Vec<&str> = s.lines().filter(|l| l.starts_with("<polyline")).collect();
+    assert_eq!(edges.len(), 4, "{s}");
+    assert_eq!(edges.iter().filter(|l| l.contains("marker-end")).count(), 2, "{s}");
+    assert_eq!(edges.iter().filter(|l| l.contains("dasharray") && !l.contains("marker-end")).count(), 1, "{s}");
+    let t = std::fs::read_to_string(&tex).unwrap();
+    assert_eq!(t.lines().filter(|l| l.starts_with("\\draw[") && l.contains("Stealth")).count(), 2, "{t}");
 }
 
 #[test]

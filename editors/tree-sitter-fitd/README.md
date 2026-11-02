@@ -14,8 +14,8 @@ tree-sitter parse -p . -q ../../examples/*.fitd   # prints nothing when every fi
 No plugin needed: build the parser into the runtime path and start highlighting on the filetype.
 
 ```sh
+mkdir -p ~/.local/share/nvim/site/parser ~/.local/share/nvim/site/queries/fitd
 cc -shared -fPIC -O2 -I src src/parser.c -o ~/.local/share/nvim/site/parser/fitd.so
-mkdir -p ~/.local/share/nvim/site/queries/fitd
 cp queries/highlights.scm ~/.local/share/nvim/site/queries/fitd/
 ```
 

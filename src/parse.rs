@@ -109,9 +109,11 @@ impl Parser<'_> {
 
     fn edge(&mut self) -> PResult<StmtKind> {
         let from = self.name("a node name")?;
-        let link = match self.peek() {
-            Tok::Arrow | Tok::DashDash => false,
-            Tok::DotArrow | Tok::DotDot => true,
+        let (link, directed) = match self.peek() {
+            Tok::Arrow => (false, true),
+            Tok::DashDash => (false, false),
+            Tok::DotArrow => (true, true),
+            Tok::DotDot => (true, false),
             _ => return Err(self.unexpected("`->`, `--`, `..>`, or `..`")),
         };
         self.bump();
@@ -124,7 +126,7 @@ impl Parser<'_> {
             _ => None,
         };
         let (classes, attrs) = self.looks()?;
-        Ok(StmtKind::Edge { from, link, to, label, classes, attrs })
+        Ok(StmtKind::Edge { from, link, directed, to, label, classes, attrs })
     }
 
     /// looks reads the `.style` and `key=value` items that end a node or edge statement.
@@ -288,7 +290,9 @@ mod tests {
         assert!(matches!(&stmts[15].kind, StmtKind::Edge { classes, attrs, .. } if classes.len() == 1 && attrs.len() == 1));
         assert!(matches!(&stmts[4].kind, StmtKind::Theme { preset: Some(_), attrs } if attrs.len() == 2));
         assert!(matches!(&stmts[8].kind, StmtKind::Edge { to, label: Some(_), link: false, .. } if to.len() == 2));
-        assert!(matches!(&stmts[10].kind, StmtKind::Edge { link: true, .. }));
+        assert!(matches!(&stmts[9].kind, StmtKind::Edge { link: false, directed: false, .. }));
+        assert!(matches!(&stmts[10].kind, StmtKind::Edge { link: true, directed: false, .. }));
+        assert!(matches!(&stmts[15].kind, StmtKind::Edge { directed: true, .. }));
         assert!(matches!(&stmts[12].kind, StmtKind::Constraint { hard: false, rel: Rel::Align { .. }, .. }));
     }
 
