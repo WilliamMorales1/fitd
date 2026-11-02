@@ -22,13 +22,13 @@ require align row(bnb, core)
 prefer core at bottom-right weight=2
 ```
 
-![examples/compiler.fitd rendered to PNG](docs/compiler.png)
+![examples/compiler.fitd rendered to PNG](docs/examples/compiler.png)
 
 ## Usage
 
 ```fish
 cargo build --release
-./target/release/fitd examples/compiler.fitd -o docs/compiler.png
+./target/release/fitd examples/compiler.fitd -o docs/examples/compiler.png
 ./target/release/fitd examples/compiler.fitd --tikz out/compiler.tex
 ./target/release/fitd guide          # the language on one page
 ./target/release/fitd explain E0110  # explain an error code
@@ -51,6 +51,28 @@ Those languages have far wider adoption and tooling; `fitd import` translates Gr
 - Unsat cores at source lines: when `require`s conflict, a minimal conflicting set is reported, rustc style, at the lines that wrote them.
 
 Why not a layout plugin for one of them instead? D2, Mermaid (v11 layouts), and Graphviz all accept external layout engines, but each measures text before layout and renders after it. A plugin receives boxes already sized, so it cannot search for the largest font that fits the page, and the checker would verify a drawing other than the one written. D2 also rejects unknown keywords and Mermaid has no attribute syntax, so `require` and `prefer` would live in comments. The language front end is about a quarter of the code; the solver and checker, which a plugin would cripple, are the rest.
+
+## Examples
+
+Each image is the PNG output of the file under it, built with no flags. What each one shows is listed in [Internals](docs/INTERNALS.md#examples).
+
+[`examples/group_theory.fitd`](examples/group_theory.fitd): a radial map on the defaults.
+
+![Group theory](docs/examples/group_theory.png)
+
+[`examples/earth_science.fitd`](examples/earth_science.fitd): a radial map with styles and labeled links.
+
+![The water cycle](docs/examples/earth_science.png)
+
+[`examples/french_history.fitd`](examples/french_history.fitd): a layered timeline with colored period frames.
+
+![Histoire externe du français](docs/examples/french_history.png)
+
+[`examples/cell_biology.fitd`](examples/cell_biology.fitd): a layered flowchart that wraps into two bands.
+
+![Cellular respiration](docs/examples/cell_biology.png)
+
+[`examples/compiler.fitd`](examples/compiler.fitd) is the image at the top.
 
 ## Docs
 

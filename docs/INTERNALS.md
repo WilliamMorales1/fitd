@@ -73,3 +73,5 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 | `cell_biology.fitd` | layered flowchart (right) that wraps into two bands: a group frame, circle molecules, a solid `fill` (text turns white), labeled arrows, an edge `color=` |
 
 `tests/fixtures/` holds inputs that fail or strain the solver on purpose.
+
+The README shows each example as rendered to `docs/examples/NAME.png`. After a change to layout or drawing, rebuild them all: `for f in examples/*.fitd; ./target/release/fitd $f -o docs/examples/(basename $f .fitd).png; end` (fish).
