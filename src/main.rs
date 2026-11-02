@@ -454,7 +454,11 @@ fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
     }
     // Through a temporary file and a rename, so a viewer never reads half an image.
     let tmp = format!("{path}.fitd-tmp{}", std::process::id());
-    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path)).map_err(|e| {
+    let renamed = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path));
+    // Windows refuses to replace a file another program holds open, as viewers often do.
+    #[cfg(windows)]
+    let renamed = renamed.or_else(|_| std::fs::write(path, bytes).and_then(|_| std::fs::remove_file(&tmp)));
+    renamed.map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("{path}: {e}")
     })

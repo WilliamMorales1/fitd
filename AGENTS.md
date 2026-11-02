@@ -6,12 +6,11 @@ Ground rules for any fix: `cargo test --release` passes, every example still bui
 
 ## 1. macOS and Windows CI has never run
 
-`.github/workflows/ci.yml` builds every example on macOS and Windows with the embedded fonts, but no run has happened. Windows is the risk: the atomic `write` in `src/main.rs` renames over an existing file, `--watch` polls modification times, and `src/lsp.rs` maps `file:///C:/...` URIs by hand.
+`.github/workflows/ci.yml` runs the full test suite on Linux, macOS, and Windows, but no run has happened. Windows is the risk: the atomic `write` in `src/main.rs` renames over an existing file (with a plain-write fallback when a viewer holds it open), `--watch` polls modification times, and `src/lsp.rs` maps `file:///C:/...` URIs by hand. `fitd_cpu` in `tests/e2e.rs` falls back to wall time off Unix. `.gitattributes` pins LF so fixtures read the same everywhere. None of this has been compiled for Windows or macOS.
 
 Work:
 
 - Push and fix whatever fails.
-- Run the e2e suite on Windows too; `fitd_cpu` uses `wait4`, so gate it behind `cfg(unix)` and fall back to wall time.
 
 ## 2. `--watch` and the LSP block on long builds
 

@@ -205,6 +205,7 @@ const EXAMPLES: [(&str, usize, u64); 5] = [
 
 const HANG_SECS: f64 = 60.0;
 
+#[cfg(unix)]
 #[repr(C)]
 struct Rusage {
     utime: [i64; 2],
@@ -212,11 +213,13 @@ struct Rusage {
     rest: [i64; 14],
 }
 
+#[cfg(unix)]
 unsafe extern "C" {
     fn wait4(pid: i32, status: *mut i32, options: i32, usage: *mut Rusage) -> i32;
 }
 
 /// fitd_cpu runs fitd and also returns the CPU seconds it used across all its threads.
+#[cfg(unix)]
 #[allow(clippy::zombie_processes, reason = "reaped by wait4")]
 fn fitd_cpu(args: &[&str]) -> (bool, String, f64) {
     use std::io::Read;
@@ -229,6 +232,14 @@ fn fitd_cpu(args: &[&str]) -> (bool, String, f64) {
     let secs = |t: [i64; 2]| t[0] as f64 + t[1] as f64 * 1e-6;
     // Exited normally with status 0.
     (status & 0xffff == 0, log, secs(ru.utime) + secs(ru.stime))
+}
+
+/// fitd_cpu runs fitd and returns its wall seconds, which stand in for CPU time without wait4.
+#[cfg(not(unix))]
+fn fitd_cpu(args: &[&str]) -> (bool, String, f64) {
+    let start = std::time::Instant::now();
+    let out = Command::new(env!("CARGO_BIN_EXE_fitd")).args(args).output().unwrap();
+    (out.status.success(), String::from_utf8_lossy(&out.stderr).into_owned(), start.elapsed().as_secs_f64())
 }
 
 #[test]

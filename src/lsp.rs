@@ -304,6 +304,8 @@ mod tests {
     #[test]
     fn file_uris_decode() {
         assert_eq!(path_of("file:///home/a%20b/m.fitd").as_deref(), Some("/home/a b/m.fitd"));
+        assert_eq!(path_of("file:///c%3A/Users/m.fitd").as_deref(), Some("c:/Users/m.fitd"));
+        assert_eq!(path_of("file:///C:/m.fitd").as_deref(), Some("C:/m.fitd"));
         assert_eq!(path_of("untitled:1"), None);
     }
 }
