@@ -7,6 +7,7 @@ examples/deepseek_v4_1_flash.fitd	5703112	1.610
 examples/earth_science.fitd	80934070	14.268
 examples/french_history.fitd	2317945	0.419
 examples/group_theory.fitd	44886959	4.256
+examples/pipeline.fitd	41549	0.750
 examples/release_pipeline.fitd	1346740	3.022
 fixtures/complex_constraints.fitd	388135	0.217
 fixtures/missing_glyph.fitd	0	0.177

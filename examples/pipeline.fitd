@@ -1,0 +1,34 @@
+title "How fitd compiles a diagram"
+layout layered dir=down
+page a4 portrait margin=1cm
+theme dark link=#FFD54F
+
+style stage color=#42A5F5
+style check color=#EF5350
+style io color=#26A69A shape=circle
+
+node src "Source .fitd" .io
+node parse "Parser" .stage
+| tokens, statements, names
+node csp "CSP search"
+| largest font that fits the page
+node bnb "Branch and bound"
+| weighs every `prefer`
+node core "QuickXplain"
+| minimal unsat core
+node checker "Checker" .check
+| re-derives overlaps and crossings
+node out "SVG, PNG, TikZ" .io
+
+src -> parse
+parse -> csp
+csp -> bnb, core
+bnb -> checker
+checker -> out
+core ..> src "points back at source"
+
+group "Solver" csp, bnb, core color=#AB47BC
+
+require bnb left-of core gap=2em
+require align row(bnb, core)
+prefer out at bottom-left weight=2

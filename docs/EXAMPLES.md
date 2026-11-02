@@ -20,6 +20,12 @@ Radial map: `root=`, theme overrides (`root=`, `link=`), styles on nodes and edg
 
 ![The water cycle](examples/earth_science.png)
 
+## [`pipeline.fitd`](../examples/pipeline.fitd)
+
+The README example, short enough to show whole: `theme dark` with a `link=` color, three styles (one with `shape=circle`), bodies, a colored `group`, a labeled `..>` link, `left-of ... gap=`, `align row`, and a weighted `prefer ... at`.
+
+![How fitd compiles a diagram](examples/pipeline.png)
+
 ## [`compiler.fitd`](../examples/compiler.fitd)
 
 Layered flowchart (down): `theme dark`, `page ... margin=`, `shape=circle` terminals, two groups, a row alignment, `gap=`, `near ... within=`.
@@ -63,7 +69,7 @@ Model architecture: DeepSeek-V4.1-Flash (September 2026), drawn only from its [m
 | `layout radial`, center chosen by fitd | coffee |
 | `layout radial root=` | earth_science |
 | `root` statement | group_theory |
-| `layout layered dir=down` | compiler, french_history, debugging, deepseek_v4_1_flash |
+| `layout layered dir=down` | pipeline, compiler, french_history, debugging, deepseek_v4_1_flash |
 | `layout layered dir=right` | cell_biology, release_pipeline |
 | `bands=N` | release_pipeline, debugging |
 | `page` paper name | most |
@@ -72,7 +78,7 @@ Model architecture: DeepSeek-V4.1-Flash (September 2026), drawn only from its [m
 | `page ... margin=` | compiler, release_pipeline, debugging |
 | `font LO..HI wrap=` | all but group_theory and debugging |
 | `font SIZE` (fixed) | debugging |
-| `theme dark` | compiler |
+| `theme dark` | pipeline, compiler |
 | `theme mono` | debugging |
 | theme color overrides | earth_science, compiler, release_pipeline |
 | `theme palette=` | coffee |

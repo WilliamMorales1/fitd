@@ -213,7 +213,7 @@ fn theme_colors_reach_svg_and_tikz() {
 /// busy core run slower per CPU second, so a CPU budget failed under load with identical
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
-const EXAMPLES: [(&str, usize, u64); 9] = [
+const EXAMPLES: [(&str, usize, u64); 10] = [
     ("cell_biology", 0, 2_400_000),
     ("coffee", 0, 93_000_000),
     ("compiler", 0, 4_600_000),
@@ -222,6 +222,7 @@ const EXAMPLES: [(&str, usize, u64); 9] = [
     ("earth_science", 2, 89_000_000),
     ("french_history", 0, 2_600_000),
     ("group_theory", 0, 50_000_000),
+    ("pipeline", 0, 46_000),
     ("release_pipeline", 0, 1_500_000),
 ];
 
@@ -688,4 +689,11 @@ fn split_pages_each_build_alone() {
     assert_eq!(pages, 6);
     let (ok, log) = fitd(&["split", "tests/fixtures/stress_test.fitd", "-o", dir.to_str().unwrap()]);
     assert!(!ok && log.contains("has errors"), "{log}");
+}
+
+#[test]
+fn readme_shows_pipeline_example_whole() {
+    let readme = std::fs::read_to_string("README.md").unwrap();
+    let src = std::fs::read_to_string("examples/pipeline.fitd").unwrap();
+    assert!(readme.contains(&format!("```\n{src}```")), "README code block differs from examples/pipeline.fitd");
 }

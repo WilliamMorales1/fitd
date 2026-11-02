@@ -4,31 +4,50 @@ A small diagram language with a constraint solver for layout. Write nodes, edges
 
 ```
 title "How fitd compiles a diagram"
-layout layered
-page a3
+layout layered dir=down
+page a4 portrait margin=1cm
+theme dark link=#FFD54F
 
-node lex "Lexer"
-| tokens with byte spans
-node parse "Parser"
+style stage color=#42A5F5
+style check color=#EF5350
+style io color=#26A69A shape=circle
+
+node src "Source .fitd" .io
+node parse "Parser" .stage
+| tokens, statements, names
+node csp "CSP search"
+| largest font that fits the page
 node bnb "Branch and bound"
+| weighs every `prefer`
 node core "QuickXplain"
+| minimal unsat core
+node checker "Checker" .check
+| re-derives overlaps and crossings
+node out "SVG, PNG, TikZ" .io
 
-lex -> parse
-parse -> bnb, core
-core ..> lex "points back at source"
+src -> parse
+parse -> csp
+csp -> bnb, core
+bnb -> checker
+checker -> out
+core ..> src "points back at source"
 
-require bnb left-of core
+group "Solver" csp, bnb, core color=#AB47BC
+
+require bnb left-of core gap=2em
 require align row(bnb, core)
-prefer core at bottom-right weight=2
+prefer out at bottom-left weight=2
 ```
 
-![examples/compiler.fitd rendered to PNG](docs/examples/compiler.png)
+![examples/pipeline.fitd rendered to PNG](docs/examples/pipeline.png)
+
+That is the whole file. [docs/EXAMPLES.md](docs/EXAMPLES.md) has larger ones, including [the full pipeline](examples/compiler.fitd).
 
 ## Usage
 
 ```fish
 cargo build --release
-./target/release/fitd examples/compiler.fitd -o docs/examples/compiler.png
+./target/release/fitd examples/pipeline.fitd -o docs/examples/pipeline.png
 ./target/release/fitd examples/compiler.fitd --tikz out/compiler.tex
 ./target/release/fitd guide          # the language on one page
 ./target/release/fitd explain E0110  # explain an error code
