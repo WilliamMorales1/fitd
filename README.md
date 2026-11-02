@@ -35,7 +35,7 @@ cargo build --release
 ./target/release/fitd examples/compiler.fitd --watch   # rebuild on save: draft, then full
 ```
 
-Editors: `fitd lsp` is a language server (front-end diagnostics as you type, full layout on save, go-to-definition and completion for node and style names). `editors/vscode/` holds a TextMate grammar packaged as a VS Code extension; copy or symlink it into `~/.vscode/extensions/fitd` for highlighting.
+Editors: `fitd lsp` is a language server (front-end diagnostics as you type, full layout on save, cancelled by a newer save, go-to-definition and completion for node and style names). `editors/vscode/` holds a TextMate grammar packaged as a VS Code extension; copy or symlink it into `~/.vscode/extensions/fitd` for highlighting.
 
 Tests: `cargo test --release`.
 

@@ -94,13 +94,18 @@ const POLL: std::time::Duration = std::time::Duration::from_millis(200);
 const IDLE: std::time::Duration = std::time::Duration::from_millis(1500);
 
 /// watch rebuilds whenever the input changes: a draft at once, then a full build once the
-/// file has been idle for IDLE. It runs until interrupted.
+/// file has been idle for IDLE. Each build runs as a child process, so a change kills the build
+/// in progress instead of waiting out a slow full layout. It runs until interrupted.
 fn watch(args: &[String]) -> Result<ExitCode, String> {
     let mut it = args.iter();
     let mut input = None;
+    let mut outs = Vec::new();
     while let Some(a) = it.next() {
         if VALUED.contains(&a.as_str()) {
-            it.next();
+            let v = it.next();
+            if matches!(a.as_str(), "-o" | "--tikz" | "--stable") {
+                outs.extend(v.cloned());
+            }
         } else if a == "-" {
             return Err("--watch needs a file, not stdin".into());
         } else if !a.starts_with('-') {
@@ -111,17 +116,33 @@ fn watch(args: &[String]) -> Result<ExitCode, String> {
     if !std::path::Path::new(&input).exists() {
         input.push_str(".fitd");
     }
+    let exe = std::env::current_exe().map_err(|e| format!("cannot find fitd itself: {e}"))?;
     let full = args.to_vec();
     let mut draft = full.clone();
     draft.push("--draft".into());
     let stamp = || std::fs::metadata(&input).and_then(|m| m.modified()).ok();
     let (mut seen, mut changed, mut full_done) = (None, std::time::Instant::now(), true);
+    let mut running: Option<std::process::Child> = None;
     loop {
+        if let Some(c) = &mut running
+            && !matches!(c.try_wait(), Ok(None))
+        {
+            running = None;
+        }
         let now = stamp();
         let pass = if now != seen {
             (seen, changed, full_done) = (now, std::time::Instant::now(), false);
+            if let Some(mut c) = running.take() {
+                let _ = c.kill();
+                let _ = c.wait();
+                // A build killed between writing and renaming leaves its temporary file.
+                for o in &outs {
+                    let _ = std::fs::remove_file(format!("{o}.fitd-tmp{}", c.id()));
+                }
+                eprintln!("--- cancelled, {input} changed");
+            }
             Some((&draft, "draft"))
-        } else if !full_done && changed.elapsed() >= IDLE {
+        } else if !full_done && running.is_none() && changed.elapsed() >= IDLE {
             full_done = true;
             Some((&full, "full"))
         } else {
@@ -131,8 +152,9 @@ fn watch(args: &[String]) -> Result<ExitCode, String> {
             && now.is_some()
         {
             eprintln!("--- {what} build of {input}");
-            if let Err(e) = build(a) {
-                eprintln!("{e}");
+            match std::process::Command::new(&exe).args(a).spawn() {
+                Ok(c) => running = Some(c),
+                Err(e) => eprintln!("cannot start build: {e}"),
             }
         }
         std::thread::sleep(POLL);

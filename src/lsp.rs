@@ -105,14 +105,49 @@ fn front_end(path: &str, text: &str) -> Vec<Value> {
 
 /// layout builds the saved file in a child process and reads back its `--short` diagnostics,
 /// so the server shares every check with the command line.
-fn layout(path: &str, text: &str) -> Vec<Value> {
-    let out = std::env::temp_dir().join(format!("fitd-lsp-{}.svg", std::process::id()));
-    let Ok(exe) = std::env::current_exe() else { return Vec::new() };
-    let Ok(run) = std::process::Command::new(exe).args([path, "-o", out.to_str().unwrap_or("fitd-lsp.svg"), "--short"]).output() else { return Vec::new() };
+/// Layout children by document uri, so a newer save can kill the build it replaces.
+type Running = Arc<Mutex<HashMap<String, std::process::Child>>>;
+
+/// cancel kills the layout child running for `uri`, if any.
+fn cancel(running: &Running, uri: &str) {
+    if let Some(mut c) = running.lock().unwrap().remove(uri) {
+        let _ = c.kill();
+        let _ = c.wait();
+    }
+}
+
+/// layout runs a full build of `path` as a child registered under `uri`; None when it was
+/// cancelled or could not start.
+fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Vec<Value>> {
+    use std::io::Read;
+    static RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = RUN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let out = std::env::temp_dir().join(format!("fitd-lsp-{}-{n}.svg", std::process::id()));
+    let exe = std::env::current_exe().ok()?;
+    let mut child = std::process::Command::new(exe)
+        .args([path, "-o", out.to_str()?, "--short"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .ok()?;
+    let (id, mut err) = (child.id(), child.stderr.take()?);
+    cancel(running, uri);
+    running.lock().unwrap().insert(uri.to_string(), child);
+    let mut log = Vec::new();
+    let _ = err.read_to_end(&mut log);
+    // Still registered means nobody killed it; reap it here.
+    let mine = {
+        let mut r = running.lock().unwrap();
+        if r.get(uri).is_some_and(|c| c.id() == id) { r.remove(uri) } else { None }
+    };
     let _ = std::fs::remove_file(&out);
+    let _ = std::fs::remove_file(format!("{}.fitd-tmp{id}", out.display()));
+    let status = mine?.wait().ok()?;
+    // Killed by a signal: no exit code, and the log is cut short.
+    status.code()?;
     let src = Source::new(path, text);
     let mut diags = Vec::new();
-    for line in String::from_utf8_lossy(&run.stderr).lines() {
+    for line in String::from_utf8_lossy(&log).lines() {
         let (at, rest) = match line.strip_prefix(path).and_then(|l| l.strip_prefix(':')) {
             Some(l) => {
                 let mut it = l.splitn(3, ':');
@@ -139,7 +174,7 @@ fn layout(path: &str, text: &str) -> Vec<Value> {
         };
         diags.push(json!({ "range": r, "severity": severity, "code": code, "source": "fitd", "message": msg }));
     }
-    diags
+    Some(diags)
 }
 
 /// Declarations of node ids and style names, for definitions and completion.
@@ -220,6 +255,7 @@ pub fn serve() -> std::process::ExitCode {
     let publish = |out: &Out, uri: &str, diags: Vec<Value>| send(out, json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": diags } }));
     // Uri to the change count when its last full layout started, so a stale result is dropped.
     let versions: Arc<Mutex<HashMap<String, u64>>> = Arc::default();
+    let running: Running = Arc::default();
     let mut shutdown = false;
     while let Some(msg) = read(&mut input) {
         let method = msg["method"].as_str().unwrap_or("");
@@ -251,15 +287,16 @@ pub fn serve() -> std::process::ExitCode {
             "textDocument/didClose" => {
                 docs.remove(&uri);
                 bump(&uri);
+                cancel(&running, &uri);
                 publish(&out, &uri, Vec::new());
             }
             "textDocument/didSave" => {
                 let (Some(path), Some(text)) = (path_of(&uri), docs.get(&uri).cloned()) else { continue };
                 bump(&uri);
                 let at = versions.lock().unwrap()[&uri];
-                let (out, versions) = (out.clone(), versions.clone());
+                let (out, versions, running) = (out.clone(), versions.clone(), running.clone());
                 std::thread::spawn(move || {
-                    let diags = layout(&path, &text);
+                    let Some(diags) = layout(&path, &text, &uri, &running) else { return };
                     if versions.lock().unwrap().get(&uri) == Some(&at) {
                         publish(&out, &uri, diags);
                     }
@@ -270,6 +307,10 @@ pub fn serve() -> std::process::ExitCode {
             _ if msg.get("id").is_some() => send(&out, json!({ "jsonrpc": "2.0", "id": msg["id"], "error": { "code": -32601, "message": format!("unsupported method {method}") } })),
             _ => {}
         }
+    }
+    for (_, mut c) in running.lock().unwrap().drain() {
+        let _ = c.kill();
+        let _ = c.wait();
     }
     if shutdown { std::process::ExitCode::SUCCESS } else { std::process::ExitCode::FAILURE }
 }

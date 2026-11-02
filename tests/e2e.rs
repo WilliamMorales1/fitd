@@ -434,6 +434,40 @@ fn watch_rebuilds_on_change() {
 }
 
 #[test]
+fn watch_cancels_a_slow_build_on_change() {
+    use std::io::Read;
+    let (src, svg) = (tmp("watch-slow.fitd"), tmp("watch-slow.svg"));
+    std::fs::copy("examples/earth_science.fitd", &src).unwrap();
+    let _ = std::fs::remove_file(&svg);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fitd")).args([src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--watch"]).stderr(std::process::Stdio::piped()).spawn().unwrap();
+    let mut err = child.stderr.take().unwrap();
+    let log = std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = err.read_to_string(&mut s);
+        s
+    });
+    let start = std::time::Instant::now();
+    while !std::fs::read_to_string(&svg).is_ok_and(|s| s.contains("</svg>")) && start.elapsed().as_secs() < 60 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    // The draft is out; the full build starts after the idle time and runs for seconds.
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+    std::fs::write(&src, "node a \"Alpha\"\nnode b \"Swapped\"\na -> b\n").unwrap();
+    let start = std::time::Instant::now();
+    while !std::fs::read_to_string(&svg).is_ok_and(|s| s.contains(">Swapped<")) && start.elapsed().as_secs() < 30 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let swapped = std::fs::read_to_string(&svg).unwrap().contains(">Swapped<");
+    // Let the small file's full build finish so nothing is mid-write when the watcher dies.
+    std::thread::sleep(std::time::Duration::from_millis(2500));
+    child.kill().unwrap();
+    child.wait().unwrap();
+    let log = log.join().unwrap();
+    assert!(swapped && log.contains("--- cancelled"), "{log}");
+    assert!(std::fs::read_to_string(&svg).unwrap().contains(">Swapped<"), "the cancelled build overwrote the new one\n{log}");
+}
+
+#[test]
 fn language_server_reports_and_navigates() {
     use std::io::{BufRead, BufReader, Read, Write};
     let src = tmp("lsp.fitd");
