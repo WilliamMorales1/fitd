@@ -525,6 +525,12 @@ impl Lsp {
     }
 }
 
+/// file_uri is the `file://` uri of a path, with Windows separators and drive turned around.
+fn file_uri(p: &std::path::Path) -> String {
+    let s = p.display().to_string().replace('\\', "/");
+    if s.starts_with('/') { format!("file://{s}") } else { format!("file:///{s}") }
+}
+
 fn esc(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n")
 }
@@ -534,7 +540,7 @@ fn language_server_reports_and_navigates() {
     let src = tmp("lsp.fitd");
     let text = "node a \"Alpha\"\nnode b \"Beta\"\na -> b\na -> ghost\n";
     std::fs::write(&src, text).unwrap();
-    let uri = format!("file://{}", src.display());
+    let uri = file_uri(&src);
     let mut l = Lsp::start();
     l.open(&uri, text);
     let diags = l.recv();
@@ -561,7 +567,7 @@ fn language_server_follows_includes() {
     std::fs::write(&part, "node far \"Far 𐀀\"\nfar -> ghost\n").unwrap();
     let text = "node a \"A\"\ninclude \"part.fitd\"\na -> far\n";
     std::fs::write(&main, text).unwrap();
-    let (uri, part_uri) = (format!("file://{}", main.display()), format!("file://{}", part.display()));
+    let (uri, part_uri) = (file_uri(&main), file_uri(&part));
     let mut l = Lsp::start();
     l.open(&uri, text);
     let own = l.recv();

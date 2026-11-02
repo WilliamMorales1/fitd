@@ -37,7 +37,8 @@ fn read(input: &mut impl BufRead) -> Option<Value> {
     }
     let mut body = vec![0; len?];
     input.read_exact(&mut body).ok()?;
-    serde_json::from_slice(&body).ok()
+    // A malformed message is skipped, not taken for the end of input.
+    Some(serde_json::from_slice(&body).unwrap_or(Value::Null))
 }
 
 /// position converts a byte offset to an LSP position, whose character counts UTF-16 units.
