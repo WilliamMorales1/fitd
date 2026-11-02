@@ -1,3 +1,6 @@
+; A later pattern overrides an earlier one, so the catch-all comes first.
+(name) @variable
+
 ["title" "root" "layout" "page" "font" "theme" "style" "node" "group" "require" "prefer" "include" "align" "at"] @keyword
 
 (edge_operator) @operator
@@ -20,4 +23,3 @@
 (theme_statement preset: (name) @constant.builtin)
 
 (node_statement id: (name) @label)
-(name) @variable
