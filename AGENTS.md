@@ -21,13 +21,13 @@ Work:
 - Draw a cross-page edge on each endpoint's page to a small stub of the other end that names its page.
 - Split a group or constraint into the part each page can keep, when the relation allows it.
 
-## 3. Editor support beyond VS Code
+## 3. Helix setup is untested
 
-`editors/vscode/` has a TextMate grammar only.
+`editors/tree-sitter-fitd/` has the grammar, corpus tests, and CI; the Neovim setup in its README was run headless (highlights and LSP diagnostics). The Helix `languages.toml` and `queries/helix/highlights.scm` were written from Helix's docs but never loaded in Helix.
 
 Work:
 
-- tree-sitter grammar for Helix and Neovim.
+- Install Helix, follow the README, and fix what breaks.
 
 ## 4. Import covers flowcharts only
 

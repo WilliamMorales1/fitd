@@ -1,0 +1,17 @@
+{
+  "grammars": [
+    {
+      "name": "fitd",
+      "camelcase": "Fitd",
+      "scope": "source.fitd",
+      "path": ".",
+      "file-types": ["fitd"],
+      "highlights": "queries/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "fitd diagram sources"
+  }
+}

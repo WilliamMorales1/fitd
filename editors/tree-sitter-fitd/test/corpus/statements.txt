@@ -1,0 +1,138 @@
+================================================================================
+Every statement kind
+================================================================================
+
+title "Map"   # comment
+layout radial root=core
+page a3 portrait margin=1cm
+font 7pt..40pt wrap=16em
+theme dark link=#FFD54F
+style stage color=#1565C0 shape=box
+node lex "Lexer" .stage color=#fff
+| tokens with byte spans # not a comment
+lex -> parse, sema "label" .stage
+core ..> sema
+group "Front end" lex, parse color=#1565C0
+require bnb left-of core gap=2em
+require a above b above c
+require align row(bnb, core)
+prefer emit at bottom-right weight=2
+include "parts/x.fitd"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (title_statement
+    (string))
+  (comment)
+  (layout_statement
+    kind: (name)
+    (attribute
+      key: (name)
+      value: (name)))
+  (page_statement
+    size: (name)
+    (flag
+      (name))
+    (attribute
+      key: (name)
+      value: (number)))
+  (font_statement
+    size: (number)
+    max: (number)
+    (attribute
+      key: (name)
+      value: (number)))
+  (theme_statement
+    preset: (name)
+    (attribute
+      key: (name)
+      value: (color)))
+  (style_statement
+    name: (name)
+    (attribute
+      key: (name)
+      value: (color))
+    (attribute
+      key: (name)
+      value: (name)))
+  (node_statement
+    id: (name)
+    title: (string)
+    (class
+      (name))
+    (attribute
+      key: (name)
+      value: (color)))
+  (body)
+  (edge_statement
+    from: (name)
+    operator: (edge_operator)
+    to: (name)
+    to: (name)
+    label: (string)
+    (class
+      (name)))
+  (edge_statement
+    from: (name)
+    operator: (edge_operator)
+    to: (name))
+  (group_statement
+    title: (string)
+    to: (name)
+    to: (name)
+    (attribute
+      key: (name)
+      value: (color)))
+  (constraint_statement
+    (chain
+      (name)
+      relation: (relation
+        (name))
+      (name))
+    (attribute
+      key: (name)
+      value: (number)))
+  (constraint_statement
+    (chain
+      (name)
+      relation: (relation
+        (name))
+      (name)
+      relation: (relation
+        (name))
+      (name)))
+  (constraint_statement
+    (align
+      side: (name)
+      (name)
+      (name)))
+  (constraint_statement
+    (placement
+      (name)
+      place: (name))
+    (attribute
+      key: (name)
+      value: (number)))
+  (include_statement
+    path: (string)))
+
+================================================================================
+Hash after equals is a color, elsewhere a comment
+================================================================================
+
+node a color=#fff # accent
+node b "x"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (node_statement
+    id: (name)
+    (attribute
+      key: (name)
+      value: (color)))
+  (comment)
+  (node_statement
+    id: (name)
+    title: (string)))
