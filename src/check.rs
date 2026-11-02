@@ -13,7 +13,7 @@ use crate::metrics::Fonts;
 
 pub const EXPLAIN: &[(&str, &str)] = &[
     ("E0001", "An edge, constraint, or `root` names a node id that is never declared with `node`."),
-    ("E0002", "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `require REL`, `prefer REL [weight=N]`."),
+    ("E0002", "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`."),
     ("E0003", "Two `node` (or `style`) statements declare the same name."),
     ("E0004", "A node uses `.name` but no `style name` is declared."),
     ("E0005", "An attribute is not valid on this statement, such as `weight=` on `require`."),
@@ -22,6 +22,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ("E0008", "Hard constraints contradict each other on one axis: orderings (`left-of`, `above`) form a cycle, possibly through alignments. Found before search; no layout can satisfy them."),
     ("E0009", "An unknown keyword value: layout, relation, alignment side, place, shape, or page flag."),
     ("E0010", "A node is listed in two `group` statements. Groups cannot share or nest nodes, since each frame must hold its own members and nothing else."),
+    ("E0011", "An `include` names a file that is already being included (a cycle), or a file that cannot be read. The include is skipped. Paths are relative to the including file."),
     ("E0101", "Two nodes claim overlapping regions. Each node owns its box exclusively, like a mutable borrow."),
     ("E0102", "An edge passes through a node that is neither of its endpoints, so a reader cannot tell where it goes."),
     ("E0103", "Two tree edges cross. Radial trees must stay planar so each branch reads as one direction."),
@@ -30,7 +31,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ("E0106", "The body font is below --min-font, so the map is not readable at the target size."),
     ("E0108", "The finished layout breaks a `require` constraint or a `group` (its frame leaves the page, holds a node that is not a member, or meets another frame). The solver should never produce this; it indicates a solver bug."),
     ("E0109", "An edge label is covered by a node, overlaps another label, or is clipped by the page. The solver should never produce this."),
-    ("E0110", "Even at --min-font, the listed `require` constraints cannot all hold together on this page. The set is minimal: drop any one and the rest fit (QuickXplain over the search budget)."),
+    ("E0110", "Even at --min-font, the listed `require` constraints cannot all hold together on this page. The set is minimal: drop any one and the rest fit (QuickXplain). Positions come from the strategy's candidate grid. A note says whether the core is proved or the search ran out of checks; in the latter case a larger `--budget` may shrink or dissolve it."),
     ("E0107", "A child sits closer to the center than its parent, breaking the general-to-specific direction."),
     ("W0201", "A cross link passes through an unrelated node. Allowed, but harder to follow."),
     ("W0202", "A character has no glyph in any fallback font and will render as a box."),
@@ -118,8 +119,13 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
             push(false, "W0201", Some(e.b), format!("link {} -> {} passes through {}", id(e.a), id(e.b), id(u)), vec![]);
         }
     }
-    for c in fonts.missing.lock().unwrap().iter() {
-        push(false, "W0202", None, format!("no glyph for {c:?} (U+{:04X})", *c as u32), vec![]);
+    for &c in fonts.missing.lock().unwrap().iter() {
+        let msg = format!("no glyph for {c:?} (U+{:04X})", c as u32);
+        let mut x = Diag::warning("W0202", msg);
+        if let Some(span) = glyph_owner(g, c) {
+            x = x.primary(span, "needed here");
+        }
+        d.push(x);
     }
     let labels: Vec<(usize, Rect)> = lay.edges.iter().enumerate().filter_map(|(i, e)| lay.label_rect(e).map(|r| (i, r))).collect();
     for (k, &(i, r)) in labels.iter().enumerate() {
@@ -169,13 +175,21 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
     d
 }
 
+/// glyph_owner finds the first statement, in source order, whose drawn text contains `c`.
+fn glyph_owner(g: &Graph, c: char) -> Option<crate::diag::Span> {
+    let nodes = g.nodes.iter().filter(|v| v.title.contains(c) || v.body.iter().any(|l| l.contains(c))).map(|v| v.span);
+    let edges = g.edges.iter().filter(|e| e.label.as_deref().is_some_and(|l| l.contains(c))).map(|e| e.span);
+    let groups = g.constraints.iter().filter(|k| matches!(&k.rel, Relation::Group { title: Some(t), .. } if t.contains(c))).map(|k| k.span);
+    nodes.chain(edges).chain(groups).min_by_key(|s| s.lo)
+}
+
 #[cfg(test)]
 mod tests {
     use super::EXPLAIN;
 
     #[test]
     fn every_code_has_an_explain_page() {
-        let sources = [include_str!("diag.rs"), include_str!("lex.rs"), include_str!("parse.rs"), include_str!("sema.rs"), include_str!("check.rs"), include_str!("main.rs")];
+        let sources = [include_str!("diag.rs"), include_str!("lex.rs"), include_str!("parse.rs"), include_str!("sema.rs"), include_str!("check.rs"), include_str!("main.rs"), include_str!("include.rs")];
         let mut seen = 0;
         for src in sources {
             for (i, _) in src.match_indices('"') {

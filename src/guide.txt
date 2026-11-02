@@ -19,6 +19,7 @@ Syntax: one statement per line, # comment. Only `node` lines and edges are neede
   group "Title" a, b, c color=#hex   # framed, nothing else inside; one group per node
   require REL                   # must hold, or build fails with E0110
   prefer REL weight=2           # soft, warns W0205 if unmet
+  include "part.fitd"           # splice in a file, path relative to this one
 REL:
   a left-of b gap=2em | right-of | above | below   # chains: a above b above c
   a near b within=4em

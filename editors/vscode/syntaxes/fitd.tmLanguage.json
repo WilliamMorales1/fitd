@@ -1,0 +1,95 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "fitd",
+  "scopeName": "source.fitd",
+  "fileTypes": ["fitd"],
+  "patterns": [
+    { "include": "#body" },
+    { "include": "#comment" },
+    { "include": "#declaration" },
+    { "include": "#statement" },
+    { "include": "#string" },
+    { "include": "#color" },
+    { "include": "#attribute" },
+    { "include": "#class" },
+    { "include": "#number" },
+    { "include": "#operator" },
+    { "include": "#relation" }
+  ],
+  "repository": {
+    "body": {
+      "comment": "A `|` first on a line makes the rest of it a body line, verbatim.",
+      "match": "^\\s*(\\|)(.*)$",
+      "captures": {
+        "1": { "name": "punctuation.definition.body.fitd" },
+        "2": { "name": "string.unquoted.body.fitd" }
+      }
+    },
+    "comment": {
+      "comment": "`#` right after `=` is a color, anywhere else a comment.",
+      "match": "(?<!=)#.*$",
+      "name": "comment.line.number-sign.fitd"
+    },
+    "declaration": {
+      "patterns": [
+        {
+          "match": "^\\s*(node)\\s+([\\w-]+)",
+          "captures": {
+            "1": { "name": "keyword.control.fitd" },
+            "2": { "name": "entity.name.function.node.fitd" }
+          }
+        },
+        {
+          "match": "^\\s*(style)\\s+([\\w-]+)",
+          "captures": {
+            "1": { "name": "keyword.control.fitd" },
+            "2": { "name": "entity.name.type.style.fitd" }
+          }
+        }
+      ]
+    },
+    "statement": {
+      "match": "^\\s*(title|root|layout|page|font|theme|group|require|prefer|include)\\b",
+      "name": "keyword.control.fitd"
+    },
+    "string": {
+      "begin": "\"",
+      "end": "\"|$",
+      "name": "string.quoted.double.fitd",
+      "patterns": [
+        { "match": "\\\\.", "name": "constant.character.escape.fitd" },
+        { "match": "[\\^_]\\{", "name": "keyword.operator.script.fitd" }
+      ]
+    },
+    "color": {
+      "match": "(?<==)#[0-9A-Fa-f]+",
+      "name": "constant.other.color.fitd"
+    },
+    "attribute": {
+      "match": "\\b([\\w-]+)(=)",
+      "captures": {
+        "1": { "name": "entity.other.attribute-name.fitd" },
+        "2": { "name": "keyword.operator.assignment.fitd" }
+      }
+    },
+    "class": {
+      "match": "(?<![\\w.])(\\.)([A-Za-z_][\\w-]*)",
+      "captures": {
+        "1": { "name": "punctuation.definition.class.fitd" },
+        "2": { "name": "entity.name.type.style.fitd" }
+      }
+    },
+    "number": {
+      "match": "\\b\\d+(?:\\.\\d+)?(?:x\\d+(?:\\.\\d+)?)?(?:pt|mm|cm|in|em)?\\b",
+      "name": "constant.numeric.fitd"
+    },
+    "operator": {
+      "match": "->|--|\\.\\.>|\\.\\.",
+      "name": "keyword.operator.edge.fitd"
+    },
+    "relation": {
+      "match": "\\b(left-of|right-of|above|below|near|align|at|radial|layered)\\b",
+      "name": "keyword.other.relation.fitd"
+    }
+  }
+}

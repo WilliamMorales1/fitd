@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --release
+      # Solver checks are deterministic, so they gate on any machine; time is only reported.
+      - run: python3 scripts/bench.py --runs 1 --check bench/baseline.tsv
+
+  # macOS and Windows have no fontconfig, so this proves the embedded fonts alone carry a build.
+  examples:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release
+      - shell: bash
+        run: |
+          mkdir -p out
+          for f in examples/*.fitd; do
+            n=$(basename "$f" .fitd)
+            ./target/release/fitd "$f" -o "out/$n.svg" 2>&1 | tee "out/$n.log"
+            grep -q " 0 errors" "out/$n.log"
+          done

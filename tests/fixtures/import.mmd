@@ -1,0 +1,13 @@
+flowchart TD
+    %% A typical Mermaid flowchart.
+    Start([Bill introduced]) --> Committee[Committee review]
+    Committee -->|approved| Floor{Floor vote}
+    Committee -.->|tabled| Dead((Dies))
+    Floor -- passes --> Other[Other chamber]
+    Floor -- fails --> Dead
+    Other --> President & Dead
+    subgraph Exec [Executive]
+        President[President signs] --> Law[Becomes law]
+    end
+    classDef bad fill:#fdd
+    class Dead bad

@@ -1,0 +1,22 @@
+{
+  "name": "fitd",
+  "displayName": "fitd",
+  "description": "Syntax highlighting for fitd diagram sources",
+  "version": "0.1.0",
+  "license": "MIT",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "fitd",
+        "aliases": ["fitd"],
+        "extensions": [".fitd"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      { "language": "fitd", "scopeName": "source.fitd", "path": "./syntaxes/fitd.tmLanguage.json" }
+    ]
+  }
+}

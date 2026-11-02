@@ -1,0 +1,9 @@
+# file	checks	cpu_seconds
+examples/cell_biology.fitd	2143098	0.960
+examples/compiler.fitd	4028513	4.700
+examples/earth_science.fitd	80934070	14.268
+examples/french_history.fitd	2317945	0.419
+examples/group_theory.fitd	44886959	4.256
+fixtures/complex_constraints.fitd	388135	0.217
+fixtures/missing_glyph.fitd	0	0.177
+fixtures/stress_test.fitd	0	0.001

@@ -62,6 +62,7 @@ Only `node` lines and edges are required. Leave out `page`, `font`, `theme`, and
 | `--tikz FILE.tex` | Also write standalone LaTeX. |
 | `--short` | One line per diagnostic. Always use it. |
 | `--draft` | 2 to 6 times faster; use while iterating, drop it for the final build. |
+| `--stable FILE.lock` | Keep nodes and font in place when editing a map someone already saw. |
 | `--page a0..a4` or `WxHmm` | Page size; smaller pages give smaller fonts. |
 | `--portrait` / `--landscape` | Fix orientation. |
 | `--theme light\|dark\|mono` | Color preset; `mono` for print. |

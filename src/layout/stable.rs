@@ -1,0 +1,75 @@
+//! Lock files that keep a layout in place across small edits (`--stable`).
+//!
+//! The lock records the body font, page, radial rotation, and every node's center. The next
+//! build tries the locked spots first, keeps the locked font while it still fits, and pays
+//! for every node that leaves its spot during polish and the font trade-off.
+
+use super::*;
+
+pub struct Anchor {
+    pub body: f64,
+    pub page: (f64, f64),
+    pub rot: f64,
+    /// Locked center of each node, by node index; None for a node the lock does not name.
+    pub pos: Vec<Option<P>>,
+}
+
+/// Penalty for a node that leaves its locked spot, about one edge crossing, plus a pull per
+/// em of distance so a node that must move stays near.
+const MOVE_COST: f64 = 40.0;
+const MOVE_PER_EM: f64 = 2.0;
+
+impl Anchor {
+    /// parse reads a lock written by `render`; nodes it names that no longer exist are skipped.
+    pub fn parse(g: &Graph, text: &str) -> Result<Anchor, String> {
+        let mut a = Anchor { body: 0.0, page: (0.0, 0.0), rot: 0.0, pos: vec![None; g.nodes.len()] };
+        let num = |s: Option<&str>| s.and_then(|s| s.parse::<f64>().ok()).filter(|x| x.is_finite());
+        for (i, line) in text.lines().enumerate() {
+            let mut w = line.split_whitespace();
+            let bad = || format!("line {}: cannot read `{line}`", i + 1);
+            match w.next() {
+                None => {}
+                Some(s) if s.starts_with('#') => {}
+                Some("font") => a.body = num(w.next()).ok_or_else(bad)?,
+                Some("page") => a.page = (num(w.next()).ok_or_else(bad)?, num(w.next()).ok_or_else(bad)?),
+                Some("rot") => a.rot = num(w.next()).ok_or_else(bad)?,
+                Some("node") => {
+                    let id = w.next().ok_or_else(bad)?;
+                    let p = (num(w.next()).ok_or_else(bad)?, num(w.next()).ok_or_else(bad)?);
+                    if let Some(v) = g.nodes.iter().position(|n| n.id == id) {
+                        a.pos[v] = Some(p);
+                    }
+                }
+                Some(_) => return Err(bad()),
+            }
+        }
+        if a.body <= 0.0 || a.page.0 <= 0.0 {
+            return Err("missing `font` or `page` line".into());
+        }
+        Ok(a)
+    }
+
+    /// render writes the lock for a finished layout. Numbers use Rust's shortest round-trip
+    /// form, so a reread lock reproduces the spots exactly.
+    pub fn render(g: &Graph, lay: &Layout, cfg: &Config) -> String {
+        let mut s = String::from("# fitd lock: node centers in pt from the page center, y up. Delete to re-layout freely.\n");
+        s += &format!("font {}\npage {} {}\nrot {}\n", lay.body, cfg.page_w, cfg.page_h, lay.rot);
+        for (v, n) in g.nodes.iter().enumerate() {
+            s += &format!("node {} {} {}\n", n.id, lay.pos[v].0, lay.pos[v].1);
+        }
+        s
+    }
+
+    /// cost is what node `v` pays at `at` for leaving its locked spot, with distance in ems.
+    pub(super) fn cost(&self, v: usize, at: P, body: f64) -> f64 {
+        match self.pos[v] {
+            Some(q) if (at.0 - q.0).hypot(at.1 - q.1) > 0.01 => MOVE_COST + MOVE_PER_EM * (at.0 - q.0).hypot(at.1 - q.1) / body,
+            _ => 0.0,
+        }
+    }
+
+    /// drift is the total move cost of a finished layout.
+    pub fn drift(&self, lay: &Layout) -> f64 {
+        (0..lay.pos.len()).map(|v| self.cost(v, lay.pos[v], lay.body)).sum()
+    }
+}

@@ -42,7 +42,8 @@ stmt      = "title" STRING
           | "|" REST_OF_LINE
           | NAME edgeop targets [ STRING ] { "." NAME | attr }
           | "group" [ STRING ] targets { attr }
-          | ( "require" | "prefer" ) rel { attr } .
+          | ( "require" | "prefer" ) rel { attr }
+          | "include" STRING .
 edgeop    = "->" | "--" | "..>" | ".." .
 targets   = NAME { [ "," ] NAME } .
 rel       = "align" NAME "(" NAME { "," NAME } ")"
@@ -56,6 +57,8 @@ value     = NAME | STRING | NUMBER | COLOR .
 
 A statement that fails to parse is reported and skipped to the end of its line, so one typo never hides the errors after it.
 
+`include "parts/cells.fitd"` splices that file in, line for line, where the statement stands; the path is relative to the including file. Included files may include others. Diagnostics name the file and line each statement came from. Including a file that is already being included is a cycle (E0011), as is a file that cannot be read; the include is then skipped. Including one file twice declares its nodes twice (E0003).
+
 ## Semantics
 
 Analysis runs in two passes. The first collects `node` and `style` declarations (and attaches `|` bodies), so edges and constraints may name nodes declared further down. The second resolves every reference, applies styles in order (node attributes win), and types every value.
@@ -65,7 +68,7 @@ Analysis runs in two passes. The first collects `node` and `style` declarations 
 | `layout radial` | `root=NODE` | Default. Root defaults to the graph center (minimum eccentricity). |
 | `layout layered` | `dir=down\|right`, `bands=N` | Flowchart. Directed cycles are broken; back edges are drawn as links. A flow too long to reach a readable font in one line wraps into bands that run back and forth; `bands=N` allows at most N (`bands=1` never wraps). |
 | `page` | flags `portrait`, `landscape`; `margin=LEN` | Absolute lengths only. A paper name without a flag (and without `--portrait` or `--landscape`) leaves the orientation open: when a layout has warnings, fitd also tries the turned page (and, in radial maps, branches reordered toward their links) and keeps the one with fewer. A flag or a `WxH` size fixes it. |
-| `font LO..HI` or `font SIZE` | `wrap=EM`, `family="NAME"` | The solver maximizes the body font within the range. `family` must be installed; it is used for measuring and drawing. Default DejaVu Serif. |
+| `font LO..HI` or `font SIZE` | `wrap=EM`, `family="NAME"` | The solver maximizes the body font within the range. `family` must be installed (found with `fc-match`); it is used for measuring and drawing. Default DejaVu Serif, built into fitd, so the default layout is the same on every machine. |
 | `theme [light\|dark\|mono]` | `background`, `text`, `edge`, `link`, `label`, `root` (colors); `palette="#hex ..."` | Preset defaults to `light`; each attribute overrides one preset value. |
 | `node`, `style` | `color=#hex`, `fill=#hex`, `text=#hex`, `shape=circle\|box` | `color` is the accent (border, tint, branch); `fill` replaces the tint; `text` defaults to the theme text, or black/white by contrast on a solid fill. |
 | edge | `color=#hex` | Stroke and arrowhead color. A `.style` on an edge gives only its `color`. Width and arrowheads follow the layout (hierarchy lines, flow arrows, dashed links) and cannot be set. |
@@ -89,7 +92,7 @@ Coordinates have y pointing up. Each relation is a predicate on the nodes' final
 
 Two-node relations chain: `a left-of b left-of c` means `a left-of b` and `b left-of c`. Steps may mix relations (`a above b near c`). Attributes apply to every step. Each step is its own constraint, so diagnostics point at the step that fails.
 
-`require` is hard: the layout must satisfy it, or compilation fails. `prefer` is soft: the solver minimizes the total weight of unmet preferences after fixing the font, and the checker reports each unmet one as `W0205`.
+`require` is hard: the layout must satisfy it, or compilation fails. Satisfiable means satisfiable on the strategy's grid of candidate positions, not in continuous space: a set of `require` constraints may fail on the grid although some hand-placed layout would meet them all. `prefer` is soft: the solver minimizes the total weight of unmet preferences after fixing the font, and the checker reports each unmet one as `W0205`.
 
 ### Groups
 
@@ -111,7 +114,7 @@ error[E0008]: contradictory vertical constraints
    | ^^^^^^^^^^^^^^^^^^^^^^^ these constraints cannot all hold
 ```
 
-Contradictions that depend on geometry (sizes, page bounds, the strategy's candidate positions) are found later by search and reported as a minimal core (E0110; `fitd explain E0110`).
+Contradictions that depend on geometry (sizes, page bounds, the strategy's candidate positions) are found later by search and reported as a minimal core (E0110; `fitd explain E0110`). The E0110 notes say whether the core is proved for the candidate grid or whether a probe ran out of checks, in which case the core may be an artifact of `--budget` and a larger one is suggested. The "no layout fits" error makes the same distinction.
 
 ## Diagnostics
 
@@ -129,6 +132,7 @@ Codes run `E00xx` (front end), `E01xx` (layout), `W02xx` (warnings). `fitd expla
 | E0008 | contradictory hard orderings (static) |
 | E0009 | unknown layout, relation, side, place, shape, or flag |
 | E0010 | node listed in two groups |
+| E0011 | `include` cycle or unreadable file |
 | E0101-E0107 | checker: overlap, edge through node, crossing, off page, text overflow, font too small, child nearer center |
 | E0108 | layout breaks a `require` or a `group` (a solver bug if it ever appears) |
 | E0109 | an edge label is covered by a node, overlaps another label, or is clipped (a solver bug if it ever appears) |

@@ -62,6 +62,9 @@ pub enum StmtKind {
     /// `group "Front end" lex, parse, sema color=#1565C0`.
     Group { title: Option<String>, items: Vec<Name>, attrs: Vec<Attr> },
     Constraint { hard: bool, rel: Rel, attrs: Vec<Attr> },
+    /// `include "parts/cells.fitd"`; spliced in before parsing (`include::expand`), so later
+    /// passes skip it.
+    Include(String),
 }
 
 #[derive(Clone, Debug)]

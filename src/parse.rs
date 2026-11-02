@@ -222,10 +222,17 @@ impl Parser<'_> {
                 };
                 StmtKind::Group { title, items: self.targets()?, attrs: self.attrs()? }
             }
+            "include" => match self.peek().clone() {
+                Tok::Str(s) => {
+                    self.bump();
+                    StmtKind::Include(s)
+                }
+                _ => return Err(self.unexpected("a quoted file name")),
+            },
             "require" | "prefer" => StmtKind::Constraint { hard: kw.text == "require", rel: self.rel()?, attrs: self.attrs()? },
             _ => {
                 let d = Diag::error("E0002", format!("unknown statement `{}`", kw.text)).primary(kw.span, "not a statement");
-                return Err(d.help("statements: title, root, layout, page, font, theme, style, node, `|` body, `a -> b`, `a ..> b`, group, require, prefer"));
+                return Err(d.help("statements: title, root, layout, page, font, theme, style, node, `|` body, `a -> b`, `a ..> b`, group, require, prefer, include"));
             }
         })
     }

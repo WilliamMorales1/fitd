@@ -6,10 +6,13 @@ mod emit;
 #[cfg(test)]
 mod fuzz;
 mod geom;
+mod import;
+mod include;
 mod graph;
 mod layered;
 mod layout;
 mod lex;
+mod lsp;
 mod metrics;
 mod parse;
 mod quality;
@@ -18,7 +21,7 @@ mod sema;
 mod theme;
 mod tree;
 
-use diag::{Diag, Level, Source};
+use diag::{Diag, Level};
 use geom::Rect;
 use graph::LayoutKind;
 use layout::{Config, Failure};
@@ -28,7 +31,10 @@ const USAGE: &str = "usage:
   fitd <input[.fitd]|-> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
               [--portrait|--landscape] [--bands N] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
               [--short] [--budget CHECKS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
+              [--stable LOCK] [--watch]
   fitd explain <CODE>
+  fitd lsp              language server on stdin/stdout
+  fitd import <file.dot|file.mmd> [-o out.fitd]   translate Graphviz or Mermaid
   fitd guide            the whole language on one page, with examples";
 
 /// GUIDE is the language reference sized for an agent's context: everything needed to write a
@@ -48,6 +54,23 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             println!("{code}: {text}");
             Ok(ExitCode::SUCCESS)
         }
+        Some("lsp") => Ok(lsp::serve()),
+        Some("import") => {
+            let path = args.get(1).ok_or(USAGE)?;
+            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+            let (fitd, dropped) = import::import(path, &text)?;
+            if !dropped.is_empty() {
+                eprintln!("warning: no fitd equivalent, dropped: {}", dropped.join("; "));
+            }
+            match args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1)) {
+                Some(out) => {
+                    write(out, fitd.as_bytes())?;
+                    eprintln!("wrote {out}");
+                }
+                None => print!("{fitd}"),
+            }
+            Ok(ExitCode::SUCCESS)
+        }
         Some("guide") => {
             print!("{GUIDE}");
             Ok(ExitCode::SUCCESS)
@@ -56,8 +79,63 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             println!("{USAGE}");
             Ok(ExitCode::SUCCESS)
         }
+        Some(_) if args.iter().any(|a| a == "--watch") => watch(&args.iter().filter(|a| *a != "--watch").cloned().collect::<Vec<_>>()),
         Some(_) => build(args),
         None => Err(USAGE.into()),
+    }
+}
+
+/// VALUED lists the build flags that take a value, so `watch` can find the input among them.
+const VALUED: &[&str] = &["-o", "--tikz", "--page", "--bands", "--margin", "--min-font", "--max-font", "--wrap", "--budget", "--scale", "--theme", "--font-family", "--stable"];
+
+/// How often `watch` looks at the input, and how long the input must stay unchanged before
+/// the full build follows the draft.
+const POLL: std::time::Duration = std::time::Duration::from_millis(200);
+const IDLE: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// watch rebuilds whenever the input changes: a draft at once, then a full build once the
+/// file has been idle for IDLE. It runs until interrupted.
+fn watch(args: &[String]) -> Result<ExitCode, String> {
+    let mut it = args.iter();
+    let mut input = None;
+    while let Some(a) = it.next() {
+        if VALUED.contains(&a.as_str()) {
+            it.next();
+        } else if a == "-" {
+            return Err("--watch needs a file, not stdin".into());
+        } else if !a.starts_with('-') {
+            input = Some(a.clone());
+        }
+    }
+    let mut input = input.ok_or(USAGE)?;
+    if !std::path::Path::new(&input).exists() {
+        input.push_str(".fitd");
+    }
+    let full = args.to_vec();
+    let mut draft = full.clone();
+    draft.push("--draft".into());
+    let stamp = || std::fs::metadata(&input).and_then(|m| m.modified()).ok();
+    let (mut seen, mut changed, mut full_done) = (None, std::time::Instant::now(), true);
+    loop {
+        let now = stamp();
+        let pass = if now != seen {
+            (seen, changed, full_done) = (now, std::time::Instant::now(), false);
+            Some((&draft, "draft"))
+        } else if !full_done && changed.elapsed() >= IDLE {
+            full_done = true;
+            Some((&full, "full"))
+        } else {
+            None
+        };
+        if let Some((a, what)) = pass
+            && now.is_some()
+        {
+            eprintln!("--- {what} build of {input}");
+            if let Err(e) = build(a) {
+                eprintln!("{e}");
+            }
+        }
+        std::thread::sleep(POLL);
     }
 }
 
@@ -69,7 +147,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     let (mut margin, mut min_font, mut max_font, mut wrap) = (None, None, None, None);
     let mut budget = 20_000_000;
     let mut scale = 2.0;
-    let (mut theme_name, mut family) = (None, None);
+    let (mut theme_name, mut family, mut lock) = (None, None, None);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut val = || it.next().cloned().ok_or(format!("{a} needs a value"));
@@ -92,6 +170,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             "--scale" => scale = num(val()?)?,
             "--theme" => theme_name = Some(val()?),
             "--font-family" => family = Some(val()?),
+            "--stable" => lock = Some(val()?),
             s if (s == "-" || !s.starts_with('-')) && input.is_none() => input = Some(s.to_string()),
             s => return Err(format!("unknown argument `{s}`\n{USAGE}")),
         }
@@ -109,9 +188,10 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     } else {
         std::fs::read_to_string(&input).map_err(|e| format!("{input}: {e}"))?
     };
-    let src = Source::new(&input, &text);
+    let (src, mut diags) = include::expand(&input, &text);
     let show = |diags: &[Diag]| eprint!("{}", if short { diag::render_short(&src, diags) } else { diag::render(&src, diags) });
-    let (stmts, mut diags) = parse::parse(&text);
+    let (stmts, parse_diags) = parse::parse(&src.text);
+    diags.extend(parse_diags);
     let (mut g, sema_diags) = sema::analyze(&stmts);
     diags.extend(sema_diags);
     diags.sort_by_key(Diag::pos);
@@ -136,6 +216,21 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         (page_w, page_h) = (page_w.max(page_h), page_w.min(page_h));
     }
     let page_fixed = portrait || landscape || page_spec.as_ref().map_or(set.page_fixed, |p| sema::paper(&p.to_ascii_lowercase()).is_none());
+    let mut anchor = None;
+    if let Some(path) = &lock
+        && let Ok(text) = std::fs::read_to_string(path)
+    {
+        let a = layout::Anchor::parse(&g, &text).map_err(|e| format!("{path}: {e}"))?;
+        // An open orientation follows the lock, so a page turned last time stays turned.
+        if !page_fixed && a.page == (page_h, page_w) {
+            (page_w, page_h) = (page_h, page_w);
+        }
+        if a.page == (page_w, page_h) {
+            anchor = Some(a);
+        } else {
+            show(&[Diag::info(format!("{path} was made for a {:.0}x{:.0}pt page; laying out afresh", a.page.0, a.page.1))]);
+        }
+    }
     let font = set.font.unwrap_or((7.0, 48.0));
     let mut cfg = Config {
         page_w,
@@ -150,6 +245,8 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         first_cap: budget / if draft { 20 } else { 4 },
         legible: legible(page_w, page_h, min_font.unwrap_or(font.0)),
         draft,
+        // Leaked: the anchor lives for the whole run, and a static keeps Config Copy.
+        anchor: anchor.map(|a| &*Box::leak(Box::new(a))),
     };
 
     let t = tree::build(&g);
@@ -157,13 +254,18 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         show(&t.notes);
     }
     let fonts = metrics::Fonts::load(family.as_deref().or(set.family.as_deref()))?;
+    show(&fonts.notes.iter().map(|n| Diag::info(n.clone())).collect::<Vec<_>>());
     let name = theme_name.as_deref().or(set.theme.as_deref()).unwrap_or("light");
     let th = theme::Theme::preset(name).ok_or(format!("unknown theme `{name}` (expected one of: {})", theme::PRESETS.join(", ")))?.with(&set.theme_over);
     layout::measure_groups(&mut g, &fonts);
     let mut lay = match layout::solve(&g, &t, &fonts, &cfg) {
         Ok(lay) => lay,
-        Err(Failure::NoRoom(crowded)) => {
+        Err(Failure::NoRoom { crowded, cut_off }) => {
             eprintln!("error: no layout fits at the {}pt font floor on a {:.0}x{:.0}pt page, even ignoring `require` constraints", cfg.min_font, cfg.page_w, cfg.page_h);
+            match cut_off {
+                Some(n) => eprintln!("  = note: the search was cut off after {n} checks, so a layout may still exist; try `--budget {}`", budget * 4),
+                None => eprintln!("  = note: proved for every candidate position this layout considers"),
+            }
             match (crowded, g.settings.layout) {
                 (Some((layers, need, have)), Some(LayoutKind::Layered(dir))) => {
                     let (along, other) = if dir == graph::Dir::Down { ("tall", "right") } else { ("wide", "down") };
@@ -172,9 +274,17 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
                 }
                 _ => eprintln!("  = help: use a larger page, a lower font floor (`font 6pt..30pt`), or a narrower `wrap`"),
             }
+            if let Some((b, n, share)) = layout::largest_branch(&g, &t, &fonts, &cfg) {
+                eprintln!(
+                    "  = help: or split the map: the branch under `{}` ({n} nodes, {:.0}% of the box area at {}pt) could become its own diagram, leaving one stub node here",
+                    g.nodes[b].id,
+                    100.0 * share,
+                    cfg.min_font
+                );
+            }
             return Ok(ExitCode::FAILURE);
         }
-        Err(Failure::Core(core)) => {
+        Err(Failure::Core { core, cut_off }) => {
             let what = if core.len() == 1 { "this constraint cannot hold".to_string() } else { format!("these {} constraints cannot all hold", core.len()) };
             let mut d = Diag::error("E0110", format!("{what} at {}pt on this page", cfg.min_font));
             for (k, &ci) in core.iter().enumerate() {
@@ -190,7 +300,11 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             let d = if core.len() == 1 {
                 d.note("it fails even with every other `require` removed")
             } else {
-                d.note("drop any one of them and the rest can be satisfied (within the search budget)")
+                d.note("drop any one of them and the rest can be satisfied")
+            };
+            let d = match cut_off {
+                Some(n) => d.note(format!("the search was cut off after {n} checks, so this may be an artifact of the budget; try `--budget {}`", budget * 4)),
+                None => d.note("proved for every candidate position this layout considers"),
             };
             let d = if g.settings.layout.unwrap_or(LayoutKind::Radial) == LayoutKind::Radial {
                 d.note("radial layout keeps each branch within 30 degrees of its wedge; try `layout layered` for free placement")
@@ -202,7 +316,8 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         }
     };
     let mut diags = check::check(&g, &fonts, &cfg, &lay);
-    if !diags.is_empty() && !draft {
+    // Retry variants reorder branches or turn the page, which would undo the lock.
+    if !diags.is_empty() && !draft && cfg.anchor.is_none() {
         let (cfg2, notes) = retry(&g, &t, &fonts, cfg, page_fixed, &mut lay, &mut diags);
         cfg = cfg2;
         show(&notes);
@@ -270,6 +385,15 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         write(&p, emit::tikz(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h, &th).as_bytes())?;
         eprintln!("wrote {p}");
     }
+    if let Some(p) = lock {
+        write(&p, layout::Anchor::render(&g, &lay, &cfg).as_bytes())?;
+        if let Some(a) = cfg.anchor {
+            let kept = (0..g.nodes.len()).filter(|&v| a.pos[v].is_some_and(|q| (q.0 - lay.pos[v].0).hypot(q.1 - lay.pos[v].1) <= 0.01)).count();
+            eprintln!("wrote {p} ({kept} of {} locked nodes kept their spots)", a.pos.iter().flatten().count());
+        } else {
+            eprintln!("wrote {p}");
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -328,7 +452,12 @@ fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
     if let Some(dir) = std::path::Path::new(path).parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    std::fs::write(path, bytes).map_err(|e| format!("{path}: {e}"))
+    // Through a temporary file and a rename, so a viewer never reads half an image.
+    let tmp = format!("{path}.fitd-tmp{}", std::process::id());
+    std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path)).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("{path}: {e}")
+    })
 }
 
 /// legible is the smallest comfortable body font for a page read from about its diagonal:

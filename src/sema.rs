@@ -438,7 +438,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             StmtKind::Constraint { hard, rel, attrs } => {
                 constraints.extend(constraint(&mut s, *hard, rel, attrs, st.span));
             }
-            StmtKind::Body(_) => {}
+            StmtKind::Body(_) | StmtKind::Include(_) => {}
         }
     }
     let mut unused: Vec<_> = styles.iter().filter(|(_, v)| !v.2).collect();

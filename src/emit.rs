@@ -157,6 +157,7 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
     if let Some(title) = &g.title {
         let _ = writeln!(o, "<title>{}</title>", xml(title));
     }
+    let _ = writeln!(o, "<!-- fitd fonts: {} -->", fonts.fingerprint().replace("--", "- -"));
     o.push_str("<defs>");
     // Arrowheads take their edge's color, so each edge color gets its own marker.
     let mut markers = vec![("arr".to_string(), th.edge.as_str()), ("lnk".to_string(), th.link.as_str())];

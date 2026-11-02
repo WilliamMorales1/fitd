@@ -44,8 +44,9 @@ pub(super) const SOFT_PENALTY: f64 = 1000.0;
 
 /// polish moves one node at a time to a nearby candidate spot, keeping every hard constraint,
 /// and anneals on readability plus unmet `prefer` weight. The walk is seeded, so the result is
-/// deterministic. Returns the final soft cost.
-pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize) -> u64 {
+/// deterministic. With an anchor, a node pays for leaving its locked spot. Returns the final
+/// soft cost.
+pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize, anchor: Option<&Anchor>) -> u64 {
     let nv = sc.node.len();
     let mut hard = vec![Vec::new(); nv];
     let mut soft = vec![Vec::new(); nv];
@@ -58,7 +59,9 @@ pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize) 
     let rects: Vec<Rect> = (0..nv).map(|v| sc.node_rect(v, val)).collect();
     let mut soft_cost: u64 = (0..sc.scopes.len()).filter(|&c| sc.weights[c] > 0 && !sc.holds(c, val)).map(|c| sc.weights[c]).sum();
     let mut layout = ctx.incremental(&rects);
-    let mut cur = layout.score().total() + SOFT_PENALTY * soft_cost as f64;
+    let drift = |i: usize, a: u32| anchor.map_or(0.0, |an| an.cost(sc.node[i], sc.at[i][a as usize], sc.body));
+    let mut moved: f64 = (0..nv).map(|i| drift(i, val[i])).sum();
+    let mut cur = layout.score().total() + SOFT_PENALTY * soft_cost as f64 + moved;
     let (mut best, mut best_val, mut best_soft) = (cur, val.to_vec(), soft_cost);
     let movable: Vec<usize> = (0..nv).filter(|&i| sc.at[i].len() > 1).collect();
     if movable.is_empty() {
@@ -102,12 +105,14 @@ pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize) 
             continue;
         }
         let new_soft = soft_cost - before + unmet(&soft[i], val);
-        let e = layout.try_move(u, sc.rects[i][a as usize]).total() + SOFT_PENALTY * new_soft as f64;
+        let new_moved = moved - drift(i, old) + drift(i, a);
+        let e = layout.try_move(u, sc.rects[i][a as usize]).total() + SOFT_PENALTY * new_soft as f64 + new_moved;
         let x = (next(1 << 20) as f64 + 0.5) / (1 << 20) as f64;
         if e <= cur || x < ((cur - e) / temp).exp() {
             layout.accept();
             cur = e;
             soft_cost = new_soft;
+            moved = new_moved;
             if cur < best {
                 (best, best_soft) = (cur, soft_cost);
                 best_val.copy_from_slice(&val[..]);

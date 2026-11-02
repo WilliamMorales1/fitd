@@ -1,0 +1,24 @@
+// A typical hand-written Graphviz file.
+digraph pipeline {
+    rankdir=TB;
+    fontname="Helvetica";
+    node [shape=box, style=filled, fillcolor="#E3F2FD"];
+    edge [color="#455A64"];
+
+    subgraph cluster_front {
+        label = "Front end";
+        color = blue;
+        lex [label="Lexer"];
+        parse [label="Parser"];
+        sema [label="Semantic\nanalysis"];
+    }
+    subgraph cluster_back {
+        label = "Back end";
+        solve [label="Solver"];
+        emit [label="Emitter"];
+    }
+    lex -> parse -> sema;
+    sema -> solve [label="graph"];
+    solve -> emit;
+    emit -> lex [style=dashed, label="errors", constraint=false];
+}

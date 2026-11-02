@@ -48,9 +48,48 @@ pub struct Fonts {
     // Mutexes, not RefCells, so layouts at several fonts can be measured in parallel.
     cache: Mutex<HashMap<(bool, char), (f64, usize)>>,
     pub missing: Mutex<BTreeSet<char>>,
+    /// Things worth telling the user about how fonts were chosen.
+    pub notes: Vec<String>,
 }
 
+/// EMBEDDED is the default font set, compiled in so the layout does not depend on which fonts
+/// (or whether fontconfig) are installed.
+#[cfg(feature = "embedded-fonts")]
+const EMBEDDED: [(&str, &str, &[u8]); 4] = [
+    ("DejaVu Serif", "DejaVuSerif.ttf", include_bytes!("../fonts/DejaVuSerif.ttf")),
+    ("DejaVu Serif", "DejaVuSerif-Bold.ttf", include_bytes!("../fonts/DejaVuSerif-Bold.ttf")),
+    // Bold symbols the serif lacks (such as ≇) read better in bold sans than in regular math.
+    ("DejaVu Sans", "DejaVuSans-Bold.ttf", include_bytes!("../fonts/DejaVuSans-Bold.ttf")),
+    ("DejaVu Math TeX Gyre", "DejaVuMathTeXGyre.ttf", include_bytes!("../fonts/DejaVuMathTeXGyre.ttf")),
+];
+
+/// fallbacks is the chain behind any named family, as indices into EMBEDDED.
+#[cfg(feature = "embedded-fonts")]
+fn fallbacks(bold: bool) -> Vec<Font> {
+    let chain: &[usize] = if bold { &[1, 2, 3] } else { &[0, 3] };
+    chain.iter().map(|&i| {
+        let (family, file, data) = EMBEDDED[i];
+        Font { family: family.into(), bold, path: format!("embedded:{file}"), index: 0, data: data.to_vec() }
+    }).collect()
+}
+
+#[cfg(not(feature = "embedded-fonts"))]
+fn fallbacks(bold: bool) -> Vec<Font> {
+    chain(if bold { BOLD } else { REGULAR })
+}
+
+fn fontconfig() -> bool {
+    Command::new("fc-match").arg("--version").output().is_ok_and(|o| o.status.success())
+}
+
+/// fnv1a hashes font files for the SVG fingerprint; stable across builds and platforms.
+fn fnv1a(data: &[u8]) -> u64 {
+    data.iter().fold(0xcbf29ce484222325, |h, &b| (h ^ b as u64).wrapping_mul(0x100000001b3))
+}
+
+#[cfg(not(feature = "embedded-fonts"))]
 const REGULAR: &[&str] = &["DejaVu Serif:style=Book", "DejaVu Math TeX Gyre", "Noto Sans Math", "DejaVu Sans"];
+#[cfg(not(feature = "embedded-fonts"))]
 const BOLD: &[&str] = &["DejaVu Serif:style=Bold", "DejaVu Sans:style=Bold", "DejaVu Math TeX Gyre", "Noto Sans Math"];
 
 fn locate(pattern: &str) -> Option<Font> {
@@ -66,6 +105,7 @@ fn locate(pattern: &str) -> Option<Font> {
     Some(Font { family, bold: style.contains("Bold"), path, index, data })
 }
 
+#[cfg(not(feature = "embedded-fonts"))]
 fn chain(patterns: &[&str]) -> Vec<Font> {
     // Each lookup spawns fc-match, so they run at once.
     let found: Vec<Option<Font>> = std::thread::scope(|s| {
@@ -120,19 +160,25 @@ pub fn spans(s: &str) -> Vec<(Script, String)> {
 impl Fonts {
     /// load puts `family`, when given and installed, ahead of the default fallback chain.
     pub fn load(family: Option<&str>) -> Result<Fonts, String> {
-        let mut fonts = Fonts { regular: Vec::new(), bold: Vec::new(), cache: Mutex::new(HashMap::new()), missing: Mutex::new(BTreeSet::new()) };
-        if let Some(fam) = family {
-            // fc-match always answers, so a substitute for a missing family must be rejected here.
-            let wanted = |f: &Font| f.family.eq_ignore_ascii_case(fam);
-            match locate(&format!("{fam}:weight=regular")).filter(wanted) {
-                Some(f) => fonts.regular.push(f),
-                None => return Err(format!("font family `{fam}` not found by fc-match (see `fc-list : family`)")),
+        let mut fonts = Fonts { regular: Vec::new(), bold: Vec::new(), cache: Mutex::new(HashMap::new()), missing: Mutex::new(BTreeSet::new()), notes: Vec::new() };
+        match family {
+            Some(fam) if cfg!(feature = "embedded-fonts") && !fontconfig() => {
+                fonts.notes.push(format!("font family `{fam}` ignored: fc-match is not installed, so only the built-in DejaVu Serif is available"));
             }
-            fonts.bold.extend(locate(&format!("{fam}:weight=bold")).filter(wanted));
+            Some(fam) => {
+                // fc-match always answers, so a substitute for a missing family must be rejected here.
+                let wanted = |f: &Font| f.family.eq_ignore_ascii_case(fam);
+                match locate(&format!("{fam}:weight=regular")).filter(wanted) {
+                    Some(f) => fonts.regular.push(f),
+                    None => return Err(format!("font family `{fam}` not found by fc-match (see `fc-list : family`)")),
+                }
+                fonts.bold.extend(locate(&format!("{fam}:weight=bold")).filter(wanted));
+            }
+            None => {}
         }
         let (regular, bold) = std::thread::scope(|s| {
-            let bold = s.spawn(|| chain(BOLD));
-            (chain(REGULAR), bold.join().expect("font lookup thread"))
+            let bold = s.spawn(|| fallbacks(true));
+            (fallbacks(false), bold.join().expect("font lookup thread"))
         });
         for (dst, found) in [(&mut fonts.regular, regular), (&mut fonts.bold, bold)] {
             for f in found {
@@ -145,6 +191,22 @@ impl Fonts {
             return Err("no usable fonts found via fc-match (install ttf-dejavu)".into());
         }
         Ok(fonts)
+    }
+
+    /// fingerprint names each font file in use with a hash of its bytes, so a layout difference
+    /// between machines can be traced to fonts.
+    pub fn fingerprint(&self) -> String {
+        let mut seen: Vec<(u64, u32)> = Vec::new();
+        let mut out = Vec::new();
+        for f in self.regular.iter().chain(&self.bold) {
+            let hash = fnv1a(&f.data);
+            if !seen.contains(&(hash, f.index)) {
+                seen.push((hash, f.index));
+                let file = f.path.rsplit('/').next().unwrap_or(&f.path);
+                out.push(format!("{} ({file}) {hash:016x}", f.family));
+            }
+        }
+        out.join(", ")
     }
 
     pub fn font(&self, bold: bool, i: usize) -> &Font {

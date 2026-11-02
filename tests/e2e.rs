@@ -71,7 +71,8 @@ fn labeled_arrows_get_room_between_layers() {
 fn impossible_page_is_rejected() {
     let (ok, log) = fitd(&["examples/group_theory.fitd", "-o", tmp("x.svg").to_str().unwrap(), "--page", "200x150"]);
     assert!(!ok);
-    assert!(log.contains("no layout fits"), "{log}");
+    assert!(log.contains("no layout fits") && log.contains("proved for every candidate"), "{log}");
+    assert!(log.contains("split the map: the branch under `cos` (9 nodes"), "{log}");
 }
 
 #[test]
@@ -127,7 +128,10 @@ fn unsat_constraints_report_minimal_core() {
     assert!(!ok);
     assert!(log.contains("error[E0110]: these 2 constraints"), "{log}");
     assert!(log.contains("11 | require c at left") && log.contains("13 | require b left-of c gap=20em"), "{log}");
-    assert!(log.contains("7pt is the default font floor"), "{log}");
+    assert!(log.contains("7pt is the default font floor") && log.contains("proved for every candidate"), "{log}");
+    // A starved search cannot prove anything, so the core it finds is flagged as such.
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", tmp("core.svg").to_str().unwrap(), "--budget", "3000"]);
+    assert!(!ok && log.contains("error[E0110]") && log.contains("cut off after 750 checks") && log.contains("--budget 12000"), "{log}");
 }
 
 #[test]
@@ -253,6 +257,55 @@ fn fixtures_fail_or_build_as_designed() {
     assert!(!ok && log.contains("error[E0008]"), "{log}");
     let (ok, log) = fitd(&["tests/fixtures/complex_constraints.fitd", "-o", tmp("complex.svg").to_str().unwrap()]);
     assert!(ok && log.contains(" 0 errors"), "{log}");
+    let (ok, log) = fitd(&["tests/fixtures/missing_glyph.fitd", "-o", tmp("glyph.svg").to_str().unwrap()]);
+    assert!(ok && log.contains("warning[W0202]") && log.contains("missing_glyph.fitd:4:6"), "{log}");
+}
+
+/// centers reads node centers from a `--stable` lock.
+fn centers(lock: &std::path::Path) -> std::collections::HashMap<String, (f64, f64)> {
+    let text = std::fs::read_to_string(lock).unwrap();
+    text.lines().filter_map(|l| l.strip_prefix("node ")).map(|l| {
+        let w: Vec<&str> = l.split(' ').collect();
+        (w[0].to_string(), (w[1].parse().unwrap(), w[2].parse().unwrap()))
+    }).collect()
+}
+
+#[test]
+fn stable_lock_keeps_nodes_in_place_after_adding_a_leaf() {
+    // Radial with the font pinned to isolate positions; layered free, since its font holds.
+    for (name, last, pin) in [("compiler", "failure", false), ("cell_biology", "regulation", true)] {
+        let lock = tmp(&format!("{name}.lock"));
+        let _ = std::fs::remove_file(&lock);
+        let (ok, log) = fitd(&[&format!("examples/{name}.fitd"), "-o", tmp(&format!("{name}-s0.svg")).to_str().unwrap(), "--stable", lock.to_str().unwrap()]);
+        assert!(ok, "{log}");
+        let before = centers(&lock);
+        let font = std::fs::read_to_string(&lock).unwrap().lines().find_map(|l| l.strip_prefix("font ").map(str::to_string)).unwrap();
+        let src = tmp(&format!("{name}-leaf.fitd"));
+        let text = std::fs::read_to_string(format!("examples/{name}.fitd")).unwrap();
+        assert!(text.contains(&format!("node {last} ")), "{name} has no node {last}");
+        std::fs::write(&src, text + &format!("\nnode extra \"Extra leaf\"\n{last} -> extra\n")).unwrap();
+        let mut args = vec![src.to_str().unwrap().to_string(), "-o".into(), tmp(&format!("{name}-s1.svg")).to_str().unwrap().into(), "--stable".into(), lock.to_str().unwrap().into()];
+        if pin {
+            args.extend(["--max-font".into(), font]);
+        }
+        let (ok, log) = fitd(&args.iter().map(String::as_str).collect::<Vec<_>>());
+        assert!(ok && log.contains(" 0 errors"), "{log}");
+        let after = centers(&lock);
+        assert!(after.contains_key("extra"));
+        let kept = before.iter().filter(|(id, p)| after[*id] == **p).count();
+        assert!(kept * 5 >= before.len() * 4, "{name}: only {kept} of {} nodes kept their spots\n{log}", before.len());
+    }
+}
+
+#[test]
+fn layout_needs_no_fontconfig() {
+    let (with, without) = (tmp("fc-with.svg"), tmp("fc-without.svg"));
+    assert!(fitd(&["examples/compiler.fitd", "-o", with.to_str().unwrap()]).0);
+    let out = Command::new(env!("CARGO_BIN_EXE_fitd")).args(["examples/compiler.fitd", "-o", without.to_str().unwrap()]).env("PATH", "").output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let s = std::fs::read_to_string(&without).unwrap();
+    assert!(s.contains("<!-- fitd fonts: DejaVu Serif (embedded:DejaVuSerif.ttf) "), "{s}");
+    assert!(s == std::fs::read_to_string(&with).unwrap(), "layout depends on fc-match");
 }
 
 #[test]
@@ -343,4 +396,111 @@ fn layers_that_exactly_fill_the_page_fit_and_crowded_flows_say_why() {
     std::fs::write(&right, text.replace("dir=down", "dir=right").replace("page a4 portrait", "page 400x150pt")).unwrap();
     let (ok, log) = fitd(&[right.to_str().unwrap(), "-o", tmp("bill-right.svg").to_str().unwrap()]);
     assert!(!ok && log.contains("the longest path has 9 layers") && log.contains("dir=down"), "{log}");
+}
+
+#[test]
+fn watch_rebuilds_on_change() {
+    let (src, svg) = (tmp("watch.fitd"), tmp("watch.svg"));
+    std::fs::write(&src, "node a \"Alpha\"\nnode b \"Beta\"\na -> b\n").unwrap();
+    let _ = std::fs::remove_file(&svg);
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fitd")).args([src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--watch"]).stderr(std::process::Stdio::null()).spawn().unwrap();
+    let wait_for = |text: &str| {
+        let start = std::time::Instant::now();
+        while start.elapsed().as_secs() < 30 {
+            if std::fs::read_to_string(&svg).is_ok_and(|s| s.contains(text)) {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        false
+    };
+    let first = wait_for(">Beta<");
+    // Some filesystems keep whole-second modification times.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    std::fs::write(&src, "node a \"Alpha\"\nnode b \"Gamma\"\na -> b\n").unwrap();
+    let second = wait_for(">Gamma<");
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert!(first && second, "watch did not rebuild (first {first}, second {second})");
+    let leftovers = std::fs::read_dir(svg.parent().unwrap()).unwrap().filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().contains("fitd-tmp")).count();
+    assert_eq!(leftovers, 0, "temporary output files left behind");
+}
+
+#[test]
+fn language_server_reports_and_navigates() {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let src = tmp("lsp.fitd");
+    let text = "node a \"Alpha\"\nnode b \"Beta\"\na -> b\na -> ghost\n";
+    std::fs::write(&src, text).unwrap();
+    let uri = format!("file://{}", src.display());
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fitd")).arg("lsp").stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).spawn().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut send = |body: String| write!(stdin, "Content-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+    let mut recv = || {
+        let mut len = 0;
+        loop {
+            let mut line = String::new();
+            stdout.read_line(&mut line).unwrap();
+            if line.trim().is_empty() {
+                break;
+            }
+            len = line.trim().strip_prefix("Content-Length: ").map_or(len, |n| n.parse().unwrap());
+        }
+        let mut body = vec![0; len];
+        stdout.read_exact(&mut body).unwrap();
+        String::from_utf8(body).unwrap()
+    };
+    let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n");
+    send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#.into());
+    assert!(recv().contains("definitionProvider"));
+    send(format!(r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"fitd","version":1,"text":"{}"}}}}}}"#, esc(text)));
+    let diags = recv();
+    assert!(diags.contains("E0001") && diags.contains(r#""line":3"#), "{diags}");
+    send(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":2,"character":5}}}}}}"#));
+    let def = recv();
+    assert!(def.contains(r#""start":{"character":5,"line":1}"#), "{def}");
+    // Fixed on disk and saved: the full layout finds only the uncovered glyph.
+    let fixed = "node a \"Alpha\"\nnode b \"Beta 𐀀\"\na -> b\n";
+    std::fs::write(&src, fixed).unwrap();
+    send(format!(r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"{}"}}]}}}}"#, esc(fixed)));
+    assert!(recv().contains(r#""diagnostics":[]"#));
+    send(format!(r#"{{"jsonrpc":"2.0","method":"textDocument/didSave","params":{{"textDocument":{{"uri":"{uri}"}}}}}}"#));
+    let saved = recv();
+    assert!(saved.contains("W0202") && saved.contains(r#""line":1"#), "{saved}");
+    send(r#"{"jsonrpc":"2.0","id":3,"method":"shutdown"}"#.into());
+    recv();
+    send(r#"{"jsonrpc":"2.0","method":"exit"}"#.into());
+    assert!(child.wait().unwrap().success());
+}
+
+#[test]
+fn includes_splice_files_and_keep_their_names_in_diagnostics() {
+    let dir = tmp("inc");
+    std::fs::create_dir_all(dir.join("parts")).unwrap();
+    std::fs::write(dir.join("parts/more.fitd"), "node c \"Gamma\"\nc -> ghost\n").unwrap();
+    let main = dir.join("main.fitd");
+    std::fs::write(&main, "layout layered\nnode a \"Alpha\"\ninclude \"parts/more.fitd\"\na -> c\n").unwrap();
+    let (ok, log) = fitd(&[main.to_str().unwrap(), "-o", dir.join("m.svg").to_str().unwrap(), "--short"]);
+    assert!(!ok && log.contains("parts/more.fitd:2:6: error[E0001]: unknown node `ghost`"), "{log}");
+    std::fs::write(dir.join("parts/more.fitd"), "node c \"Gamma\"\ninclude \"../main.fitd\"\n").unwrap();
+    let (ok, log) = fitd(&[main.to_str().unwrap(), "-o", dir.join("m.svg").to_str().unwrap(), "--short"]);
+    assert!(!ok && log.contains("parts/more.fitd:2:1: error[E0011]"), "{log}");
+    std::fs::write(dir.join("parts/more.fitd"), "node c \"Gamma\"\n").unwrap();
+    let (ok, log) = fitd(&[main.to_str().unwrap(), "-o", dir.join("m.svg").to_str().unwrap()]);
+    assert!(ok && log.contains(" 0 errors"), "{log}");
+    assert!(std::fs::read_to_string(dir.join("m.svg")).unwrap().contains(">Gamma<"));
+}
+
+#[test]
+fn imported_dot_and_mermaid_build_cleanly() {
+    for (src, dropped) in [("import.dot", "edge attribute `constraint=false`"), ("import.mmd", "`classDef` statements")] {
+        let out = tmp(&format!("{src}.fitd"));
+        let (ok, log) = fitd(&["import", &format!("tests/fixtures/{src}"), "-o", out.to_str().unwrap()]);
+        assert!(ok && log.contains(dropped), "{log}");
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert!(text.contains("group \"") && text.contains("..>"), "{text}");
+        let (ok, log) = fitd(&[out.to_str().unwrap(), "-o", tmp(&format!("{src}.svg")).to_str().unwrap()]);
+        assert!(ok && log.contains(" 0 errors, 0 warnings"), "{src}\n{text}\n{log}");
+    }
 }

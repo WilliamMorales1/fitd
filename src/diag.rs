@@ -72,18 +72,51 @@ impl Diag {
     }
 }
 
-/// Source maps byte offsets to lines and columns.
+/// Source maps byte offsets to lines and columns, and lines back to the files that were
+/// spliced together by `include`.
 pub struct Source {
     pub path: String,
     pub text: String,
     starts: Vec<usize>,
+    segs: Vec<Seg>,
+}
+
+/// Seg is a run of whole lines copied from one file, from `line` of the spliced text on.
+#[derive(Clone, Debug)]
+pub struct Seg {
+    pub line: usize,
+    /// Byte offset of `line` in the spliced text and in the file.
+    pub at: usize,
+    pub file_at: usize,
+    pub path: String,
+    pub file_line: usize,
 }
 
 impl Source {
     pub fn new(path: &str, text: &str) -> Source {
+        Source::spliced(path, text, vec![Seg { line: 1, at: 0, file_at: 0, path: path.to_string(), file_line: 1 }])
+    }
+
+    pub fn spliced(path: &str, text: &str, segs: Vec<Seg>) -> Source {
         let mut starts = vec![0];
         starts.extend(text.match_indices('\n').map(|(i, _)| i + 1));
-        Source { path: path.to_string(), text: text.to_string(), starts }
+        Source { path: path.to_string(), text: text.to_string(), starts, segs }
+    }
+
+    fn seg(&self, line: usize) -> &Seg {
+        &self.segs[self.segs.partition_point(|s| s.line <= line).max(1) - 1]
+    }
+
+    /// file_line maps a line of the spliced text to its file and its line there.
+    pub fn file_line(&self, line: usize) -> (&str, usize) {
+        let s = self.seg(line);
+        (&s.path, s.file_line + line - s.line)
+    }
+
+    /// file_offset maps a byte offset of the spliced text to its file and its offset there.
+    pub fn file_offset(&self, off: usize) -> (&str, usize) {
+        let s = self.seg(self.line_col(off).0);
+        (&s.path, s.file_at + off - s.at)
     }
 
     /// line_col is 1-based; the column counts characters, not bytes.
@@ -162,11 +195,14 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
         }
         let mut labels: Vec<&Label> = d.labels.iter().collect();
         labels.sort_by_key(|l| (src.line_col(l.span.lo).0, !l.primary));
-        let width = labels.iter().map(|l| src.line_col(l.span.lo).0.to_string().len()).max().unwrap_or(1);
+        let width = labels.iter().map(|l| src.file_line(src.line_col(l.span.lo).0).1.to_string().len()).max().unwrap_or(1);
         let pad = " ".repeat(width);
+        let mut file = "";
         if let Some(l) = labels.iter().find(|l| l.primary).or(labels.first()) {
             let (line, col) = src.line_col(l.span.lo);
-            s += &format!("{pad}--> {}:{line}:{col}\n{pad} |\n", src.path);
+            let (path, fline) = src.file_line(line);
+            s += &format!("{pad}--> {path}:{fline}:{col}\n{pad} |\n");
+            file = path;
         }
         let mut last = 0;
         for (i, l) in labels.iter().enumerate() {
@@ -174,11 +210,16 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
             if line == last {
                 continue;
             }
-            if last != 0 && line > last + 1 {
+            let (path, fline) = src.file_line(line);
+            // A line from another file gets its own header, as rustc does.
+            if path != file {
+                s += &format!("{pad}::: {path}:{fline}:{}\n", src.line_col(l.span.lo).1);
+                file = path;
+            } else if last != 0 && line > last + 1 {
                 s += &format!("{pad} ...\n");
             }
             let text = src.line_text(line);
-            s += &format!("{line:>width$} | {text}\n");
+            s += &format!("{fline:>width$} | {text}\n");
             last = line;
             // (start column, mark, message) for every label on this line, left to right.
             let mut marks: Vec<(usize, String, &str)> = labels[i..]
@@ -215,11 +256,16 @@ pub fn render_short(src: &Source, diags: &[Diag]) -> String {
     for d in diags.iter().filter(|d| d.level != Level::Note) {
         let level = if d.level == Level::Error { "error" } else { "warning" };
         let (line, col) = d.labels.iter().find(|l| l.primary).or(d.labels.first()).map_or((0, 0), |l| src.line_col(l.span.lo));
-        s += &format!("{}:{line}:{col}: {level}[{}]: {}", src.path, d.code, d.msg);
+        let (path, fline) = if line == 0 { (src.path.as_str(), 0) } else { src.file_line(line) };
+        s += &format!("{path}:{fline}:{col}: {level}[{}]: {}", d.code, d.msg);
         let mut also: Vec<usize> = d.labels.iter().map(|l| src.line_col(l.span.lo).0).filter(|&l| l != line).collect();
         also.dedup();
         if !also.is_empty() {
-            s += &format!("; also line {}", also.iter().map(|l| l.to_string()).collect::<Vec<_>>().join(", "));
+            let at = |l: usize| match src.file_line(l) {
+                (p, n) if p == path => n.to_string(),
+                (p, n) => format!("{p}:{n}"),
+            };
+            s += &format!("; also line {}", also.iter().map(|&l| at(l)).collect::<Vec<_>>().join(", "));
         }
         if let Some(h) = &d.help {
             s += &format!("; {h}");

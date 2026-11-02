@@ -390,6 +390,14 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
         LayoutKind::Layered(dir) => layered::plan(g, fonts, boxes, cfg, b, dir),
     };
     let mut plan = plan;
+    // Locked spots go before the plan's own; a known layout below goes before both.
+    if let Some(a) = cfg.anchor {
+        for (v, c) in plan.cands.iter_mut().enumerate() {
+            if let Some(q) = a.pos[v] {
+                c.insert(0, Cand { cost: f64::NEG_INFINITY, at: q, r: (q.0 / plan.kx).hypot(q.1 / plan.ky) });
+            }
+        }
+    }
     // Starting from a known layout guarantees a first solution; search then improves on it.
     if let Users::Shrunk(prev) | Users::All(prev) | Users::Routes(prev) = users {
         for (v, c) in plan.cands.iter_mut().enumerate() {

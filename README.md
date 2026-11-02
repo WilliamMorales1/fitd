@@ -32,9 +32,24 @@ cargo build --release
 ./target/release/fitd examples/compiler.fitd --tikz out/compiler.tex
 ./target/release/fitd guide          # the language on one page
 ./target/release/fitd explain E0110  # explain an error code
+./target/release/fitd examples/compiler.fitd --watch   # rebuild on save: draft, then full
 ```
 
+Editors: `fitd lsp` is a language server (front-end diagnostics as you type, full layout on save, go-to-definition and completion for node and style names). `editors/vscode/` holds a TextMate grammar packaged as a VS Code extension; copy or symlink it into `~/.vscode/extensions/fitd` for highlighting.
+
 Tests: `cargo test --release`.
+
+## Compared with DOT, Mermaid, and D2
+
+Those languages have far wider adoption and tooling; `fitd import file.dot` or `file.mmd` translates nodes, labels, edges, and clusters or subgraphs (as `group`), and lists whatever has no equivalent. What fitd adds:
+
+- Hard constraints: `require a left-of b`, `align row(...)`, `a at top-left` hold in the output or the build fails.
+- Weighted preferences: `prefer ... weight=N` trades soft wishes against each other explicitly.
+- A fixed page, filled: the solver maximizes the font that fits the page you name, instead of growing the canvas.
+- Verified output: an independent checker re-derives overlaps, crossings, clipping, and overflow from the finished drawing.
+- Unsat cores at source lines: when `require`s conflict, a minimal conflicting set is reported, rustc style, at the lines that wrote them.
+
+Why not a layout plugin for one of them instead? D2, Mermaid (v11 layouts), and Graphviz all accept external layout engines, but each measures text before layout and renders after it. A plugin receives boxes already sized, so it cannot search for the largest font that fits the page, and the checker would verify a drawing other than the one written. D2 also rejects unknown keywords and Mermaid has no attribute syntax, so `require` and `prefer` would live in comments. The language front end is about a quarter of the code; the solver and checker, which a plugin would cripple, are the rest.
 
 ## Docs
 

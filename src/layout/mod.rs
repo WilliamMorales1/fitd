@@ -22,6 +22,7 @@ mod path;
 mod polish;
 mod relations;
 mod scene;
+mod stable;
 
 use explain::quickxplain;
 use measure::measure_all;
@@ -34,6 +35,7 @@ pub use measure::{label_size, line_height};
 pub use path::{curve, label_rect, paths_meet};
 pub use polish::Readable;
 pub use relations::{FRAME_PAD, TITLE_BAND, frame, frame_clear, relation_holds};
+pub use stable::Anchor;
 
 /// measure_groups sets each group's title width, which frames need, from the loaded fonts.
 pub fn measure_groups(g: &mut Graph, fonts: &Fonts) {
@@ -65,6 +67,8 @@ pub struct Config {
     pub legible: f64,
     /// Trade quality for speed while editing: coarser font search, one font, short polish.
     pub draft: bool,
+    /// A previous layout to stay close to (`--stable`); static since it lives for the whole run.
+    pub anchor: Option<&'static Anchor>,
 }
 
 impl Config {
@@ -108,6 +112,9 @@ pub struct Stats {
     pub soft_total: u64,
     /// Checks the winning plan of the latest attempt spent.
     pub probe_checks: u64,
+    /// Largest check budget a failed attempt ran out of since this was last cleared; None
+    /// when every failure was proved.
+    pub cut_off: Option<u64>,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -286,7 +293,11 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
     let boxes = measure_all(g, t, fonts, cfg, b);
     let rots = match (kind, users) {
         (_, Users::All(prev) | Users::Routes(prev) | Users::Shrunk(prev)) => vec![prev.rot],
-        (LayoutKind::Radial, Users::Hard(_) | Users::Wanted) => ROTATIONS.to_vec(),
+        // The locked rotation goes first, so it wins whenever it solves.
+        (LayoutKind::Radial, Users::Hard(_) | Users::Wanted) => match cfg.anchor {
+            Some(a) => std::iter::once(a.rot).chain(ROTATIONS.into_iter().filter(|&r| r != a.rot)).collect(),
+            None => ROTATIONS.to_vec(),
+        },
         (LayoutKind::Layered(_), Users::Hard(_) | Users::Wanted) => vec![0.0],
     };
     let optimizing = matches!(users, Users::All(_));
@@ -332,6 +343,10 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
             eprintln!("font {b:.2}{} rot {}: {what} after {st:?}", if optimizing { " (optimizing)" } else { "" }, rots[i]);
         }
     }
+    if first.is_none() && runs.iter().any(|(out, ..)| *out == Outcome::Unknown) {
+        let budget = if optimizing || routing { cfg.opt_budget } else { cfg.budget };
+        stats.cut_off = stats.cut_off.max(Some(budget));
+    }
     let win = first?;
     let (Outcome::Sat(val), cost, st) = &runs[win] else { unreachable!() };
     let (sc, mut edges, plan) = built.into_iter().nth(win).unwrap();
@@ -340,7 +355,7 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
     let mut cost = *cost;
     if optimizing {
         let ctx = Readable::new(t, kind, &edges, sc.page, cfg.legible);
-        cost = polish(&sc, &ctx, &mut val, if cfg.draft { POLISH_MOVES / 10 } else { POLISH_MOVES });
+        cost = polish(&sc, &ctx, &mut val, if cfg.draft { POLISH_MOVES / 10 } else { POLISH_MOVES }, cfg.anchor);
     }
     if optimizing || routing {
         stats.soft_cost += cost;
@@ -363,13 +378,35 @@ fn attempt(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: User
     Some(Layout { kind, body: b, boxes, pos, edges, kx: plan.0, ky: plan.1, tol: plan.2, rot: rots[win], tradeoff: Vec::new(), stats: *stats })
 }
 
+/// Failures carry `cut_off`, the largest check budget a deciding probe ran out of; None means
+/// the verdict is proved for the strategy's candidate positions.
 pub enum Failure {
     /// Nothing fits even without user constraints; for a layered layout whose layers are too
     /// many for the page, how crowded the flow is (see `Plan::crowded`).
-    NoRoom(Option<(usize, f64, f64)>),
+    NoRoom { crowded: Option<(usize, f64, f64)>, cut_off: Option<u64> },
     /// These hard user constraints cannot all hold at the minimum font; removing any one of
-    /// them makes the rest satisfiable (within the search budget).
-    Core(Vec<usize>),
+    /// them makes the rest satisfiable.
+    Core { core: Vec<usize>, cut_off: Option<u64> },
+}
+
+/// largest_branch finds the depth-1 subtree whose boxes take the most area at the font floor,
+/// as (its top node, its node count, its share of all box area): the best part to split out
+/// when nothing fits. None when the root has fewer than two branches.
+pub fn largest_branch(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Option<(usize, usize, f64)> {
+    if t.children[t.root].len() < 2 {
+        return None;
+    }
+    let boxes = measure_all(g, t, fonts, cfg, cfg.min_font);
+    let area = |v: usize| boxes[v].w * boxes[v].h;
+    let total: f64 = (0..boxes.len()).map(area).sum();
+    let mut per: Vec<(usize, usize, f64)> = t.children[t.root].iter().map(|&b| (b, 0, 0.0)).collect();
+    for v in 0..boxes.len() {
+        if let Some(e) = t.branch(v).and_then(|b| per.iter_mut().find(|e| e.0 == b)) {
+            e.1 += 1;
+            e.2 += area(v);
+        }
+    }
+    per.into_iter().max_by(|a, b| a.2.total_cmp(&b.2).then(b.0.cmp(&a.0))).map(|(b, n, a)| (b, n, a / total))
 }
 
 /// Fractions of the largest feasible font that the final trade-off polishes and compares.
@@ -386,7 +423,8 @@ pub fn merit(g: &Graph, t: &Tree, cfg: &Config, lay: &Layout) -> f64 {
     let q = Readable::new(t, lay.kind, &lay.edges, cfg.page(), cfg.legible).score(&rects);
     let rect = |v: usize| lay.rect(v);
     let unmet: u64 = g.constraints.iter().filter(|c| !c.hard && !relation_holds(&c.rel, &rect, lay.body, &cfg.page(), lay.tol)).map(|c| c.weight as u64).sum();
-    q.total() + SOFT_PENALTY * unmet as f64 - W_FONT * (lay.body / cfg.legible).ln()
+    let drift = cfg.anchor.map_or(0.0, |a| a.drift(lay));
+    q.total() + SOFT_PENALTY * unmet as f64 + drift - W_FONT * (lay.body / cfg.legible).ln()
 }
 
 /// solve binary-searches the largest body font for which the hard constraints are
@@ -412,7 +450,10 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
                 // Settle whether anything fits before bisecting further: on an unsatisfiable
                 // input every probe down to the floor would otherwise run its whole cap.
                 if found.is_none() {
-                    found = if next > lo || cap < cfg.budget { probe(lo, &hard, cfg.budget, &mut stats) } else { None };
+                    if next > lo || cap < cfg.budget {
+                        stats.cut_off = None;
+                        found = probe(lo, &hard, cfg.budget, &mut stats);
+                    }
                     if found.is_none() {
                         break;
                     }
@@ -428,27 +469,46 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
     let mut best = match found {
         Some(l) => l,
         None => {
+            // Only failed probes can be cut off, and a cut-off one may hide a layout.
+            let full_cut = stats.cut_off.take();
             if hard.is_empty() || probe(cfg.min_font, &[], cfg.budget, &mut stats).is_none() {
                 let crowded = match g.settings.layout {
                     Some(LayoutKind::Layered(dir)) => layered::plan(g, fonts, &measure_all(g, t, fonts, cfg, cfg.min_font), cfg, cfg.min_font, dir).crowded,
                     _ => None,
                 };
-                return Err(Failure::NoRoom(crowded));
+                let cut_off = if hard.is_empty() { full_cut } else { stats.cut_off };
+                return Err(Failure::NoRoom { crowded, cut_off });
             }
             // The full set already failed on the whole budget. Subsets that fit usually solve
-            // fast, so core probes get the first probe's cap; a core is minimal within it.
+            // fast, so core probes get the first probe's cap.
             let mut feasible = |set: &[usize]| probe(cfg.min_font, set, cfg.budget / 4, &mut stats).is_some();
             let mut core = quickxplain(&mut feasible, &[], false, &hard);
             core.sort();
-            return Err(Failure::Core(core));
+            return Err(Failure::Core { core, cut_off: full_cut.max(stats.cut_off) });
         }
     };
     // Then trade font against readability. Above the legibility floor a larger font helps
     // less and less, so a slightly smaller font may buy a clearer arrangement: polish a few
     // fonts and keep the best merit. Below the floor nothing smaller is tried.
+    // A locked font that still fits is kept unless the new largest is over 5% larger; the
+    // binary search stops short of the exact largest, so a locked font above it may still fit.
+    let mut kept = false;
+    if let Some(a) = cfg.anchor
+        && a.body >= cfg.min_font
+        && a.body <= cfg.max_font
+        && best.body <= 1.05 * a.body
+    {
+        if a.body == best.body {
+            kept = true;
+        } else if let Some(l) = probe(a.body, &hard, cap, &mut stats) {
+            (best, kept) = (l, true);
+        }
+    }
     let top = best.body;
-    let trade: &[f64] = if cfg.draft { &TRADE[..1] } else { &TRADE };
-    let fonts_tried: Vec<f64> = trade.iter().map(|k| k * top).filter(|&f| f == top || (f >= cfg.legible && f >= cfg.min_font)).collect();
+    let trade: &[f64] = if cfg.draft || kept { &TRADE[..1] } else { &TRADE };
+    // Leaving a locked font is only worth it for more than 5%, so smaller steps are not tried.
+    let worth = |f: f64| cfg.anchor.is_none_or(|a| kept || f > 1.05 * a.body);
+    let fonts_tried: Vec<f64> = trade.iter().map(|k| k * top).filter(|&f| f == top || (f >= cfg.legible && f >= cfg.min_font && worth(f))).collect();
     // Each font is independent, so they run in parallel, each with its own stats; the soft
     // cost is the polished winner's. The first round starts from the largest font's layout.
     // When its winner still misses a `prefer`, a second round starts each font from a layout
