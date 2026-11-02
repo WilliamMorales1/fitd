@@ -1,8 +1,8 @@
 //! Lock files that keep a layout in place across small edits (`--stable`).
 //!
 //! The lock records the body font, page, radial rotation, and every node's center. The next
-//! build tries the locked spots first, keeps the locked font while it still fits, and pays
-//! for every node that leaves its spot during polish and the font trade-off.
+//! build tries the locked spots first, pits the locked font against the new largest one, and
+//! pays for every node that leaves its spot during polish and the font trade-off.
 
 use super::*;
 

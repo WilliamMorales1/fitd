@@ -272,22 +272,18 @@ fn centers(lock: &std::path::Path) -> std::collections::HashMap<String, (f64, f6
 
 #[test]
 fn stable_lock_keeps_nodes_in_place_after_adding_a_leaf() {
-    // Radial with the font pinned to isolate positions; layered free, since its font holds.
-    for (name, last, pin) in [("compiler", "failure", false), ("cell_biology", "regulation", true)] {
+    // No font pinned: an edit must not grow the font at the cost of moving most nodes.
+    for (name, last) in [("compiler", "failure"), ("cell_biology", "regulation"), ("group_theory", "disprove")] {
         let lock = tmp(&format!("{name}.lock"));
         let _ = std::fs::remove_file(&lock);
         let (ok, log) = fitd(&[&format!("examples/{name}.fitd"), "-o", tmp(&format!("{name}-s0.svg")).to_str().unwrap(), "--stable", lock.to_str().unwrap()]);
         assert!(ok, "{log}");
         let before = centers(&lock);
-        let font = std::fs::read_to_string(&lock).unwrap().lines().find_map(|l| l.strip_prefix("font ").map(str::to_string)).unwrap();
         let src = tmp(&format!("{name}-leaf.fitd"));
         let text = std::fs::read_to_string(format!("examples/{name}.fitd")).unwrap();
         assert!(text.contains(&format!("node {last} ")), "{name} has no node {last}");
         std::fs::write(&src, text + &format!("\nnode extra \"Extra leaf\"\n{last} -> extra\n")).unwrap();
-        let mut args = vec![src.to_str().unwrap().to_string(), "-o".into(), tmp(&format!("{name}-s1.svg")).to_str().unwrap().into(), "--stable".into(), lock.to_str().unwrap().into()];
-        if pin {
-            args.extend(["--max-font".into(), font]);
-        }
+        let args = [src.to_str().unwrap().to_string(), "-o".into(), tmp(&format!("{name}-s1.svg")).to_str().unwrap().into(), "--stable".into(), lock.to_str().unwrap().into()];
         let (ok, log) = fitd(&args.iter().map(String::as_str).collect::<Vec<_>>());
         assert!(ok && log.contains(" 0 errors"), "{log}");
         let after = centers(&lock);

@@ -490,25 +490,33 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
     // Then trade font against readability. Above the legibility floor a larger font helps
     // less and less, so a slightly smaller font may buy a clearer arrangement: polish a few
     // fonts and keep the best merit. Below the floor nothing smaller is tried.
-    // A locked font that still fits is kept unless the new largest is over 5% larger; the
-    // binary search stops short of the exact largest, so a locked font above it may still fit.
-    let mut kept = false;
+    // With a lock, the locked font competes with the new largest on `merit`, which charges
+    // every node that leaves its spot, so a font gain wins only when it outweighs the moves.
+    // The locked spots can lift the search above what the edit alone allows, so a fixed
+    // threshold on the gain kept losing to them. The binary search stops short of the exact
+    // largest, so a locked font above it may still fit; then it is simply kept.
+    let (mut kept, mut locked) = (false, None);
     if let Some(a) = cfg.anchor
         && a.body >= cfg.min_font
         && a.body <= cfg.max_font
-        && best.body <= 1.05 * a.body
     {
         if a.body == best.body {
             kept = true;
         } else if let Some(l) = probe(a.body, &hard, cap, &mut stats) {
-            (best, kept) = (l, true);
+            if a.body > best.body {
+                (best, kept) = (l, true);
+            } else {
+                locked = Some(l);
+            }
         }
     }
     let top = best.body;
-    let trade: &[f64] = if cfg.draft || kept { &TRADE[..1] } else { &TRADE };
-    // Leaving a locked font is only worth it for more than 5%, so smaller steps are not tried.
-    let worth = |f: f64| cfg.anchor.is_none_or(|a| kept || f > 1.05 * a.body);
-    let fonts_tried: Vec<f64> = trade.iter().map(|k| k * top).filter(|&f| f == top || (f >= cfg.legible && f >= cfg.min_font && worth(f))).collect();
+    let fonts_tried: Vec<f64> = match &locked {
+        Some(l) => vec![top, l.body],
+        None if cfg.draft || kept => vec![top],
+        None => TRADE.iter().map(|k| k * top).filter(|&f| f == top || (f >= cfg.legible && f >= cfg.min_font)).collect(),
+    };
+    let locked = locked.as_ref();
     // Each font is independent, so they run in parallel, each with its own stats; the soft
     // cost is the polished winner's. The first round starts from the largest font's layout.
     // When its winner still misses a `prefer`, a second round starts each font from a layout
@@ -521,16 +529,17 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
                 .map(|&f| {
                     s.spawn(move || {
                         let mut st = Stats::default();
-                        let start = match (wanted, f == top) {
+                        let base = locked.filter(|l| l.body == f);
+                        let start = match (wanted, f == top || base.is_some()) {
                             (true, _) => attempt(g, t, fonts, &Config { budget: cap, ..*cfg }, f, Users::Wanted, &mut st),
                             (false, false) => attempt(g, t, fonts, &Config { budget: cap, ..*cfg }, f, Users::Shrunk(best), &mut st),
                             (false, true) => None,
                         };
-                        if start.is_none() && (wanted || f != top) {
+                        if start.is_none() && (wanted || (f != top && base.is_none())) {
                             return (f, None, st);
                         }
                         let mut one = Stats::default();
-                        let polished = attempt(g, t, fonts, cfg, f, Users::All(start.as_ref().unwrap_or(best)), &mut one);
+                        let polished = attempt(g, t, fonts, cfg, f, Users::All(start.as_ref().or(base).unwrap_or(best)), &mut one);
                         st.attempts += one.attempts;
                         st.search += one.search;
                         (f, polished.map(|l| (merit(g, t, cfg, &l), l, (one.soft_cost, one.soft_total))), st)
