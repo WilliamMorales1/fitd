@@ -616,3 +616,26 @@ fn imported_dot_and_mermaid_build_cleanly() {
         assert!(ok && log.contains(" 0 errors, 0 warnings"), "{src}\n{text}\n{log}");
     }
 }
+
+#[test]
+fn split_pages_each_build_alone() {
+    let dir = tmp("split");
+    let _ = std::fs::remove_dir_all(&dir);
+    let (ok, log) = fitd(&["split", "examples/group_theory.fitd", "-o", dir.to_str().unwrap()]);
+    assert!(ok && log.contains("left out: corr ..> classif"), "{log}");
+    let overview = std::fs::read_to_string(dir.join("group_theory.fitd")).unwrap();
+    assert!(overview.contains("| see page group_theory-cyc"), "{overview}");
+    let mut pages = 0;
+    for e in std::fs::read_dir(&dir).unwrap() {
+        let p = e.unwrap().path();
+        if p.to_string_lossy().ends_with("-shared.fitd") {
+            continue;
+        }
+        let (ok, log) = fitd(&[p.to_str().unwrap(), "-o", p.with_extension("svg").to_str().unwrap()]);
+        assert!(ok && log.contains(" 0 errors, 0 warnings"), "{}\n{log}", p.display());
+        pages += 1;
+    }
+    assert_eq!(pages, 6);
+    let (ok, log) = fitd(&["split", "tests/fixtures/stress_test.fitd", "-o", dir.to_str().unwrap()]);
+    assert!(!ok && log.contains("has errors"), "{log}");
+}

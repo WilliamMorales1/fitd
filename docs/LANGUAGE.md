@@ -57,7 +57,7 @@ value     = NAME | STRING | NUMBER | COLOR .
 
 A statement that fails to parse is reported and skipped to the end of its line, so one typo never hides the errors after it.
 
-`include "parts/cells.fitd"` splices that file in, line for line, where the statement stands; the path is relative to the including file. Included files may include others. Diagnostics name the file and line each statement came from. Including a file that is already being included is a cycle (E0011), as is a file that cannot be read; the include is then skipped. Including one file twice declares its nodes twice (E0003).
+`include "parts/cells.fitd"` splices that file in, line for line, where the statement stands; the path is relative to the including file. Included files may include others. Diagnostics name the file and line each statement came from. Including a file that is already being included is a cycle (E0011), as is a file that cannot be read; the include is then skipped. Including one file twice declares its nodes twice (E0003). A style declared in an included file is never reported unused (W0203), so one file of styles can serve many diagrams.
 
 ## Semantics
 

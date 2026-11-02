@@ -33,6 +33,12 @@ pub fn expand(path: &str, text: &str) -> (Source, Vec<Diag>) {
     (Source::spliced(path, &out.text, out.segs), out.diags)
 }
 
+/// unused_shared_style tells whether `d` reports a style declared in an included file as
+/// unused; such a file may serve many diagrams, and none of them need use every style.
+pub fn unused_shared_style(src: &Source, d: &Diag) -> bool {
+    d.code == "W0203" && src.file_line(src.line_col(d.pos()).0).0 != src.path
+}
+
 fn canonical(p: &Path) -> PathBuf {
     p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
 }

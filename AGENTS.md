@@ -12,14 +12,14 @@ Work:
 
 - Push and fix whatever fails.
 
-## 2. No multi-page output
+## 2. `fitd split` drops statements that span pages
 
-A map too big for one page fails with E0110 or NoRoom; fitd now names the largest branch to split out (`layout::largest_branch`), but the user does the split by hand.
+`src/split.rs` writes an overview plus one page per top-level branch, all including a shared settings file. A cross link between branches, a `require` relating them, or a group across them has no page and is left out with a warning; `earth_science.fitd` loses its water-cycle edges this way.
 
 Work:
 
-- One page per top-level branch, with a stub node on the overview that names its page.
-- Reuse `include` so each page can also be built alone.
+- Draw a cross-page edge on each endpoint's page to a small stub of the other end that names its page.
+- Split a group or constraint into the part each page can keep, when the relation allows it.
 
 ## 3. Editor support beyond VS Code
 

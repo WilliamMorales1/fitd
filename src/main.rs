@@ -18,6 +18,7 @@ mod parse;
 mod quality;
 mod radial;
 mod sema;
+mod split;
 mod theme;
 mod tree;
 
@@ -35,6 +36,7 @@ const USAGE: &str = "usage:
   fitd explain <CODE>
   fitd lsp              language server on stdin/stdout
   fitd import <file.dot|file.mmd> [-o out.fitd]   translate Graphviz or Mermaid
+  fitd split <input.fitd> [-o DIR]   an overview page plus one page per top-level branch
   fitd guide            the whole language on one page, with examples";
 
 /// GUIDE is the language reference sized for an agent's context: everything needed to write a
@@ -68,6 +70,25 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                     eprintln!("wrote {out}");
                 }
                 None => print!("{fitd}"),
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Some("split") => {
+            let path = args.get(1).filter(|a| !a.starts_with('-')).ok_or(USAGE)?;
+            let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+            let stem = std::path::Path::new(path).file_stem().map_or("map".into(), |s| s.to_string_lossy().into_owned());
+            let dir = match args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1)) {
+                Some(d) => std::path::PathBuf::from(d),
+                None => std::path::Path::new(path).with_file_name(format!("{stem}-pages")),
+            };
+            let out = split::split(path, &text, &stem)?;
+            for d in &out.dropped {
+                eprintln!("warning: spans pages, left out: {d}");
+            }
+            for (name, text) in &out.files {
+                let p = dir.join(name);
+                write(&p.to_string_lossy(), text.as_bytes())?;
+                eprintln!("wrote {}", p.display());
             }
             Ok(ExitCode::SUCCESS)
         }
@@ -216,6 +237,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     diags.extend(parse_diags);
     let (mut g, sema_diags) = sema::analyze(&stmts);
     diags.extend(sema_diags);
+    diags.retain(|d| !include::unused_shared_style(&src, d));
     diags.sort_by_key(Diag::pos);
     show(&diags);
     if diags.iter().any(|d| d.level == Level::Error) {
@@ -298,7 +320,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             }
             if let Some((b, n, share)) = layout::largest_branch(&g, &t, &fonts, &cfg) {
                 eprintln!(
-                    "  = help: or split the map: the branch under `{}` ({n} nodes, {:.0}% of the box area at {}pt) could become its own diagram, leaving one stub node here",
+                    "  = help: or split the map: the branch under `{}` ({n} nodes, {:.0}% of the box area at {}pt) could become its own diagram, leaving one stub node here; `fitd split` makes one page per branch",
                     g.nodes[b].id,
                     100.0 * share,
                     cfg.min_font

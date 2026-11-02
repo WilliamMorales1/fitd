@@ -105,6 +105,7 @@ fn front_end(path: &str, text: &str) -> Diags {
     let (stmts, parse_diags) = crate::parse::parse(&src.text);
     diags.extend(parse_diags);
     diags.extend(crate::sema::analyze(&stmts).1);
+    diags.retain(|d| !crate::include::unused_shared_style(&src, d));
     let mut out = Diags::from([(path.to_string(), Vec::new())]);
     for d in diags.iter().filter(|d| d.level != Level::Note) {
         let span = d.labels.iter().find(|l| l.primary).or(d.labels.first()).map_or(NOWHERE, |l| l.span);

@@ -71,7 +71,7 @@ Flags override settings in the file.
 
 ## Checking the result
 
-Open the PNG (read the image) and check that labels are legible and nothing important is missing. The success line reports the chosen font and page, e.g. `body font 48.0pt on 2384x1684pt; 0 errors, 0 warnings`. A very small font means too much content for the page: split the diagram, shorten bodies, or use a larger page.
+Open the PNG (read the image) and check that labels are legible and nothing important is missing. The success line reports the chosen font and page, e.g. `body font 48.0pt on 2384x1684pt; 0 errors, 0 warnings`. A very small font means too much content for the page: split the diagram (`fitd split map.fitd` writes an overview plus one page per top-level branch), shorten bodies, or use a larger page.
 
 The chosen font is often not the largest that fits. fitd also lays out at 5% and 10% below it and keeps the one that reads best (fewer crossings, related nodes closer), as long as it stays above a legibility floor of 16pt per meter of page diagonal. A font a little under the maximum is intended, not a failure; `--min-font` raises that floor.
 
