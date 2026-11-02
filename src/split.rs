@@ -4,7 +4,7 @@
 
 use crate::ast::{Attr, Name, Rel, StmtKind};
 use crate::diag::Level;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Page is where a statement goes: the overview, or the page of a top-level branch, by its
 /// index among the root's children.
@@ -55,6 +55,9 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let mut body: Vec<Vec<String>> = vec![Vec::new(); heads.len() + 1];
     let slot = |p: Page| if p == OVERVIEW { heads.len() } else { p };
     let mut dropped = Vec::new();
+    // Member sets of the frames on each page: a nested group cut down to its parent's part
+    // would repeat a frame, which sema rejects.
+    let mut framed: BTreeMap<Page, Vec<BTreeSet<String>>> = BTreeMap::new();
     // Nodes from other pages that a page's cross-page edges reach, drawn there as stubs.
     let mut stubs: Vec<Vec<usize>> = vec![Vec::new(); heads.len() + 1];
     // The pages every named node appears on.
@@ -83,10 +86,10 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let decl: Vec<String> = {
         let mut d = vec![String::new(); g.nodes.len()];
         for st in &stmts {
-            if let StmtKind::Node { id, .. } = &st.kind {
-                if let Some(v) = index(id) {
-                    d[v] = snippet(st.span.lo, st.span.hi);
-                }
+            if let StmtKind::Node { id, .. } = &st.kind
+                && let Some(v) = index(id)
+            {
+                d[v] = snippet(st.span.lo, st.span.hi);
             }
         }
         d
@@ -146,6 +149,15 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         }
         // A statement on a head alone belongs with its page, where the head is the root.
         if let Some(&p) = on.iter().find(|&&p| p != OVERVIEW).or(on.first()) {
+            if let StmtKind::Group { items, .. } = &st.kind {
+                let set: BTreeSet<String> = items.iter().map(|n| n.text.clone()).collect();
+                let sets = framed.entry(p).or_default();
+                if sets.contains(&set) {
+                    dropped.push(format!("{own} (frames the same nodes as another group on its page)"));
+                    continue;
+                }
+                sets.push(set);
+            }
             body[slot(p)].push(own);
             continue;
         }
@@ -176,7 +188,15 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 let title = title.as_ref().map_or(String::new(), |t| format!(" {}", quoted(t)));
                 for (p, part) in parts(items) {
                     let ids: Vec<&str> = part.iter().map(|n| n.text.as_str()).collect();
-                    body[slot(p)].push(format!("group{title} {}{}", ids.join(", "), attrs_of(attrs)));
+                    let line = format!("group{title} {}{}", ids.join(", "), attrs_of(attrs));
+                    let set: BTreeSet<String> = ids.iter().map(|i| i.to_string()).collect();
+                    let sets = framed.entry(p).or_default();
+                    if sets.contains(&set) {
+                        dropped.push(format!("{line} (frames the same nodes as another group on its page)"));
+                        continue;
+                    }
+                    sets.push(set);
+                    body[slot(p)].push(line);
                 }
             }
             // A chain keeps each run of links within one page; an alignment keeps each page's part.
@@ -284,5 +304,10 @@ mod tests {
         assert!(a.contains("group \"G\" a1, a2 color=#6D4C41\n") && b.contains("group \"G\" b1 color=#6D4C41\n"), "{a}\n{b}");
         assert!(a.contains("require a1 left-of a2 gap=1em\n") && b.contains("require b1 left-of b2 gap=1em\n") && a.contains("prefer align top(a1, a2)\n"), "{a}\n{b}");
         assert_eq!(out.dropped, ["require a2 left-of b1 gap=1em", "prefer align top(a1, a2, b1) (for b1)"]);
+        let nested = "node r\nnode a\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\ngroup \"O\" a, a1, b1\ngroup \"I\" a, a1\n";
+        let out = split("m.fitd", nested, "m").unwrap();
+        let a = &out.files.iter().find(|f| f.0 == "m-a.fitd").unwrap().1;
+        assert!(a.contains("group \"O\" a, a1\n") && !a.contains("\"I\""), "{a}");
+        assert_eq!(out.dropped, ["group \"I\" a, a1 (frames the same nodes as another group on its page)"]);
     }
 }

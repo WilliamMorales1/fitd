@@ -19,13 +19,12 @@ pub(super) fn aligned(side: Side, a: &Rect, b: &Rect, tol: f64) -> bool {
 pub const FRAME_PAD: f64 = 0.5;
 pub const FRAME_CLEAR: f64 = 0.4;
 
-/// frame is a group's border: around its members' boxes, with a title band on top that is
-/// wide enough for the title. Only defined for `Relation::Group`.
+/// frame is a group's border: around its members' boxes and nested groups' frames, with a
+/// title band on top that is wide enough for the title. Only defined for `Relation::Group`.
 pub fn frame(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64) -> Rect {
-    let Relation::Group { items, title, title_em, .. } = rel else { unreachable!("frame of a non-group") };
+    let Relation::Group { items, title, title_em, inner, .. } = rel else { unreachable!("frame of a non-group") };
     let mut r = rect(items[0]);
-    for &v in &items[1..] {
-        let b = rect(v);
+    for b in items[1..].iter().map(|&v| rect(v)).chain(inner.iter().map(|g| frame(g, rect, body))) {
         r = Rect { x0: r.x0.min(b.x0), y0: r.y0.min(b.y0), x1: r.x1.max(b.x1), y1: r.y1.max(b.y1) };
     }
     let mut r = r.inflate(FRAME_PAD * body);
@@ -68,7 +67,7 @@ pub fn relation_holds(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64, p
 }
 
 /// frame_clear reports whether a group's frame keeps clear of `other`: a box outside the group,
-/// or another group's frame.
+/// or the frame of a group that shares none of its nodes.
 pub fn frame_clear(frame: &Rect, other: &Rect, body: f64) -> bool {
     !frame.inflate(FRAME_CLEAR * body).intersects(other)
 }

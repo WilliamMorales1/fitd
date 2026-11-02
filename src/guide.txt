@@ -16,7 +16,7 @@ Syntax: one statement per line, # comment. Only `node` lines and edges are neede
   font 8pt..30pt wrap=16em      # range searched; one size fixes it, so give a range
   theme light|dark|mono
   style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle
-  group "Title" a, b, c color=#hex   # framed, nothing else inside; one group per node
+  group "Title" a, b, c color=#hex   # framed, nothing else inside; a group of a subset nests inside
   require REL                   # must hold, or build fails with E0110
   prefer REL weight=2           # soft, warns W0205 if unmet
   include "part.fitd"           # splice in a file, path relative to this one

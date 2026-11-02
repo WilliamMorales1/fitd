@@ -96,12 +96,14 @@ struct Group<'a> {
     color: Option<&'a str>,
 }
 
+/// groups lists the frames outermost first, so nested frames are drawn over their parents.
 fn groups<'a>(g: &'a Graph, lay: &Layout) -> Vec<Group<'a>> {
-    g.constraints
-        .iter()
-        .filter_map(|c| match &c.rel {
-            Relation::Group { title, color, .. } => Some(Group { rect: frame(&c.rel, &|v| lay.rect(v), lay.body), title: title.as_deref(), color: color.as_deref() }),
-            _ => None,
+    let mut rels: Vec<&Relation> = g.constraints.iter().map(|c| &c.rel).filter(|r| matches!(r, Relation::Group { .. })).collect();
+    rels.sort_by_key(|r| std::cmp::Reverse(r.depth()));
+    rels.into_iter()
+        .map(|r| {
+            let Relation::Group { title, color, .. } = r else { unreachable!() };
+            Group { rect: frame(r, &|v| lay.rect(v), lay.body), title: title.as_deref(), color: color.as_deref() }
         })
         .collect()
 }

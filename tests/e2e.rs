@@ -119,6 +119,24 @@ fn groups_frame_members_and_edges_take_colors() {
 }
 
 #[test]
+fn nested_groups_draw_inner_frames_inside_outer() {
+    let src = tmp("nested.fitd");
+    let body = "node a\nnode b\nnode c\nnode d\nnode e\na -> b\nb -> c\nc -> d\nd -> e\ngroup \"Outer\" b, c, d color=#1565C0\ngroup \"Inner\" b, c color=#2E7D32\n";
+    for layout in ["layout layered\npage a4\n", "layout radial root=a\npage a4\n"] {
+        std::fs::write(&src, format!("{layout}{body}")).unwrap();
+        let svg = tmp("nested.svg");
+        let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
+        assert!(ok && log.contains(" 0 errors, 0 warnings"), "{log}");
+        let s = std::fs::read_to_string(&svg).unwrap();
+        // Outer frame comes first so the inner one is drawn on top.
+        assert!(s.find(">Outer<").unwrap() < s.find(">Inner<").unwrap(), "{s}");
+    }
+    std::fs::write(&src, format!("layout layered\npage a4\n{body}group b, e\n")).unwrap();
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", tmp("nested.svg").to_str().unwrap()]);
+    assert!(!ok && log.contains("error[E0010]"), "{log}");
+}
+
+#[test]
 fn unsat_constraints_report_minimal_core() {
     let src = tmp("core.fitd");
     let text = "layout layered\npage 420x300pt\nnode a\nnode b\nnode c\nnode d\na -> b, c\nc -> d\n\

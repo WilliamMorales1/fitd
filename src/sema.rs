@@ -256,8 +256,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     let mut set = Settings::default();
     let (mut title, mut root, mut edges, mut constraints) = (None, None, Vec::new(), Vec::new());
     let mut seen_setting: HashMap<&str, Span> = HashMap::new();
-    // Span of the group statement each node belongs to.
-    let mut member: Vec<Option<Span>> = vec![None; s.nodes.len()];
+    // Each group's constraint index and the spans of its listed members.
+    let mut grouped: Vec<(usize, Vec<Span>)> = Vec::new();
     for st in stmts {
         let key = match &st.kind {
             StmtKind::Title(_) => "title",
@@ -422,18 +422,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     s.diags.push(Diag::error("E0007", format!("group names `{}` twice", s.nodes[dup].id)).primary(st.span, "listed twice"));
                     continue;
                 }
-                let mut ok = true;
-                for (k, &v) in ids.iter().enumerate() {
-                    if let Some(prev) = member[v] {
-                        let d = Diag::error("E0010", format!("`{}` is already in a group", s.nodes[v].id)).primary(items[k].span, "second group");
-                        s.diags.push(d.secondary(prev, "first group").help("groups cannot share or nest nodes"));
-                        ok = false;
-                    }
-                    member[v] = Some(st.span);
-                }
-                if ok {
-                    constraints.push(Constraint { rel: Relation::Group { items: ids, title: title.clone(), color: col, title_em: 0.0 }, hard: true, weight: 1, span: st.span });
-                }
+                grouped.push((constraints.len(), items.iter().map(|n| n.span).collect()));
+                constraints.push(Constraint { rel: Relation::Group { items: ids, title: title.clone(), color: col, title_em: 0.0, inner: Vec::new() }, hard: true, weight: 1, span: st.span });
             }
             StmtKind::Constraint { hard, rel, attrs } => {
                 constraints.extend(constraint(&mut s, *hard, rel, attrs, st.span));
@@ -446,12 +436,57 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     for (name, (span, ..)) in unused {
         s.diags.push(Diag::warning("W0203", format!("style `{name}` is never used")).primary(*span, "declared here"));
     }
+    nest_groups(&mut constraints, &grouped, &s.nodes, &mut s.diags);
     s.diags.extend(contradictions(&constraints));
     if s.nodes.is_empty() {
         s.diags.push(Diag::error("E0002", "diagram has no nodes").primary(Span::new(0, 0), "expected at least one `node`"));
     }
     let g = Graph { title, root, nodes: s.nodes, edges, constraints, settings: set };
     (g, s.diags)
+}
+
+/// nest_groups drops each group that shares nodes with an earlier one without one holding the
+/// other (E0010), then gives every group copies of the groups directly inside it.
+fn nest_groups(constraints: &mut Vec<Constraint>, grouped: &[(usize, Vec<Span>)], nodes: &[Node], diags: &mut Vec<Diag>) {
+    let items = |c: &Constraint| match &c.rel {
+        Relation::Group { items, .. } => items.clone(),
+        _ => unreachable!("grouped holds only groups"),
+    };
+    let within = |a: &[usize], b: &[usize]| a.len() < b.len() && a.iter().all(|v| b.contains(v));
+    let mut kept: Vec<usize> = Vec::new();
+    for (ci, spans) in grouped {
+        let mine = items(&constraints[*ci]);
+        let clash = kept.iter().find_map(|&cj| {
+            let theirs = items(&constraints[cj]);
+            let k = mine.iter().position(|v| theirs.contains(v))?;
+            (!within(&mine, &theirs) && !within(&theirs, &mine)).then_some((cj, k))
+        });
+        match clash {
+            Some((cj, k)) => {
+                let d = Diag::error("E0010", format!("`{}` is already in a group", nodes[mine[k]].id)).primary(spans[k], "second group");
+                diags.push(d.secondary(constraints[cj].span, "first group").help("a group may sit wholly inside another, but two groups cannot share only some nodes"));
+            }
+            None => kept.push(*ci),
+        }
+    }
+    let dropped: Vec<usize> = grouped.iter().map(|g| g.0).filter(|ci| !kept.contains(ci)).collect();
+    // Smaller groups first, so each group's nested copies are complete before its parent takes them.
+    kept.sort_by_key(|&ci| items(&constraints[ci]).len());
+    for (k, &ci) in kept.iter().enumerate() {
+        let mine = items(&constraints[ci]);
+        let parent = kept[k + 1..].iter().copied().find(|&cj| within(&mine, &items(&constraints[cj])));
+        if let Some(cj) = parent {
+            let copy = constraints[ci].rel.clone();
+            if let Relation::Group { inner, .. } = &mut constraints[cj].rel {
+                inner.push(copy);
+            }
+        }
+    }
+    let mut i = 0;
+    constraints.retain(|_| {
+        i += 1;
+        !dropped.contains(&(i - 1))
+    });
 }
 
 fn theme_overrides(attrs: &[Attr], diags: &mut Vec<Diag>) -> Overrides {
@@ -715,7 +750,12 @@ mod tests {
         assert_eq!((g.edges[0].color.as_deref(), g.edges[1].color.as_deref()), (Some("#f00"), Some("#00f")));
         assert!(matches!(&g.constraints[0], Constraint { rel: Relation::Group { items, title: Some(_), color: Some(_), .. }, hard: true, .. } if items == &[1, 2]));
         assert_eq!(codes("node a\nnode b\na -> b width=2pt\n"), vec!["E0005"]);
-        assert_eq!(codes("node a\nnode b\ngroup a, b\ngroup b\n"), vec!["E0010"]);
+        assert_eq!(codes("node a\nnode b\nnode c\ngroup a, b\ngroup b, c\n"), vec!["E0010"]);
+        assert_eq!(codes("node a\nnode b\ngroup a, b\ngroup b, a\n"), vec!["E0010"]);
+        let (g, d) = run("node a\nnode b\nnode c\ngroup \"I\" b\ngroup \"O\" a, b, c\ngroup \"M\" b, c\n");
+        assert!(d.is_empty());
+        assert_eq!(g.constraints[1].rel.depth(), 3);
+        assert!(matches!(&g.constraints[1].rel, Relation::Group { inner, .. } if inner.len() == 1 && inner[0].depth() == 2));
         assert_eq!(codes("node a\ngroup a, a\n"), vec!["E0007"]);
         assert_eq!(codes("node a\ngroup a, ghost\n"), vec!["E0001"]);
     }

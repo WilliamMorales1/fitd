@@ -139,11 +139,10 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     let n = boxes.len();
     let page = cfg.page();
     // Layers fill the page along the flow, so leave room at both ends for group frames.
-    let framed = g.constraints.iter().any(|c| matches!(c.rel, Relation::Group { .. }));
-    let (lead, trail) = match (framed, dir) {
-        (false, _) => (0.0, 0.0),
-        (true, Dir::Down) => ((FRAME_PAD + TITLE_BAND) * b, FRAME_PAD * b),
-        (true, Dir::Right) => (FRAME_PAD * b, FRAME_PAD * b),
+    let depth = g.constraints.iter().map(|c| c.rel.depth()).max().unwrap_or(0) as f64;
+    let (lead, trail) = match dir {
+        Dir::Down => (depth * (FRAME_PAD + TITLE_BAND) * b, depth * FRAME_PAD * b),
+        Dir::Right => (depth * FRAME_PAD * b, depth * FRAME_PAD * b),
     };
     let (main_len, cross_len) = match dir {
         Dir::Down => (page.y1 - page.y0 - lead - trail, page.x1 - page.x0),

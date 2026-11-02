@@ -91,8 +91,9 @@ pub enum Relation {
     At { a: usize, place: Place },
     /// A frame, with the title on top, around these nodes and no others, on the page.
     /// `title_em` is the title's width in ems of the body font, measured once fonts are
-    /// loaded (`layout::measure_groups`).
-    Group { items: Vec<usize>, title: Option<String>, color: Option<String>, title_em: f64 },
+    /// loaded (`layout::measure_groups`). `inner` holds copies of the groups directly nested
+    /// in this one, whose frames this frame must enclose.
+    Group { items: Vec<usize>, title: Option<String>, color: Option<String>, title_em: f64, inner: Vec<Relation> },
 }
 
 impl Relation {
@@ -101,6 +102,15 @@ impl Relation {
             Relation::LeftOf { a, b, .. } | Relation::Above { a, b, .. } | Relation::Near { a, b, .. } => vec![*a, *b],
             Relation::Align { items, .. } | Relation::Group { items, .. } => items.clone(),
             Relation::At { a, .. } => vec![*a],
+        }
+    }
+
+    /// depth counts the frames from this group's own down to its deepest nested one; 0 for a
+    /// relation that is not a group.
+    pub fn depth(&self) -> usize {
+        match self {
+            Relation::Group { inner, .. } => 1 + inner.iter().map(Relation::depth).max().unwrap_or(0),
+            _ => 0,
         }
     }
 }

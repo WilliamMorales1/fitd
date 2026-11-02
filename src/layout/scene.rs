@@ -461,7 +461,9 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
                     cons.push(([&items[..], &[u]].concat(), Kind::Outside(ci, u), 0));
                 }
                 for (cj, d) in g.constraints.iter().enumerate().take(ci) {
+                    // Groups that share nodes are nested, and the outer frame encloses the inner.
                     if let Relation::Group { items: other, .. } = &d.rel
+                        && !other.iter().any(|v| items.contains(v))
                         && cons.iter().any(|c| matches!(c.1, Kind::Rel(k) if k == cj))
                     {
                         cons.push(([&items[..], &other[..]].concat(), Kind::Frames(cj, ci), 0));

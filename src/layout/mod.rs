@@ -39,10 +39,16 @@ pub use stable::Anchor;
 
 /// measure_groups sets each group's title width, which frames need, from the loaded fonts.
 pub fn measure_groups(g: &mut Graph, fonts: &Fonts) {
-    for c in &mut g.constraints {
-        if let Relation::Group { title: Some(t), title_em, .. } = &mut c.rel {
-            *title_em = label_size(fonts, t, 1.0).0;
+    fn measure(rel: &mut Relation, fonts: &Fonts) {
+        if let Relation::Group { title, title_em, inner, .. } = rel {
+            if let Some(t) = title {
+                *title_em = label_size(fonts, t, 1.0).0;
+            }
+            inner.iter_mut().for_each(|r| measure(r, fonts));
         }
+    }
+    for c in &mut g.constraints {
+        measure(&mut c.rel, fonts);
     }
 }
 

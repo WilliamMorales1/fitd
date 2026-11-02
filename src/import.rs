@@ -1,5 +1,5 @@
 //! `fitd import`: translates Graphviz DOT, Mermaid flowcharts and mind maps, and D2 to fitd.
-//! Nodes, labels, edges, and clusters, subgraphs, or containers (as `group`) carry over;
+//! Nodes, labels, edges, and clusters, subgraphs, or containers (as nested `group`s) carry over;
 //! everything else is dropped and listed, since fitd places nodes itself.
 
 use std::collections::{BTreeSet, HashMap};
@@ -27,6 +27,8 @@ struct IEdge {
 struct IGroup {
     title: Option<String>,
     name: String,
+    /// The cluster this one is nested in.
+    parent: Option<usize>,
 }
 
 /// Doc is a diagram read from another language, before it is written as fitd.
@@ -40,25 +42,38 @@ struct Doc {
     index: HashMap<String, usize>,
     edges: Vec<IEdge>,
     groups: Vec<IGroup>,
-    /// Groups with members in clusters nested inside them, which fitd cannot nest.
-    nested: BTreeSet<usize>,
     dropped: BTreeSet<String>,
 }
 
 impl Doc {
     fn node(&mut self, id: &str, group: Option<usize>) -> usize {
         if let Some(&v) = self.index.get(id) {
-            if group.is_some() && self.nodes[v].group.is_some() && self.nodes[v].group != group {
-                self.dropped.insert(format!("membership of `{id}` in a second cluster"));
-            }
-            if self.nodes[v].group.is_none() {
-                self.nodes[v].group = group;
+            // A node mentioned again in a cluster nested inside its own moves into it.
+            match (self.nodes[v].group, group) {
+                (None, _) => self.nodes[v].group = group,
+                (Some(old), Some(new)) if self.within(new, old) => self.nodes[v].group = group,
+                (Some(old), Some(new)) if !self.within(old, new) => {
+                    self.dropped.insert(format!("membership of `{id}` in a second cluster"));
+                }
+                _ => {}
             }
             return v;
         }
         self.index.insert(id.to_string(), self.nodes.len());
         self.nodes.push(INode { id: id.to_string(), group, ..INode::default() });
         self.nodes.len() - 1
+    }
+
+    /// within says whether cluster `g` is `k` or nested somewhere inside it.
+    fn within(&self, g: usize, k: usize) -> bool {
+        let mut g = Some(g);
+        while let Some(h) = g {
+            if h == k {
+                return true;
+            }
+            g = self.groups[h].parent;
+        }
+        false
     }
 
     fn drop(&mut self, what: impl Into<String>) {
@@ -171,14 +186,18 @@ impl Doc {
             o.push('\n');
         }
         let mut wrote_group = false;
+        let mut written: Vec<Vec<&str>> = Vec::new();
         for (k, g) in self.groups.iter().enumerate() {
-            let members: Vec<&str> = (0..self.nodes.len()).filter(|&v| self.nodes[v].group == Some(k)).map(|v| ids[v].as_str()).collect();
-            if self.nested.contains(&k) {
-                self.dropped.insert(format!("nesting of clusters (`{}` frames only its own nodes)", g.name));
-            }
+            let members: Vec<&str> = (0..self.nodes.len()).filter(|&v| self.nodes[v].group.is_some_and(|g| self.within(g, k))).map(|v| ids[v].as_str()).collect();
             if members.is_empty() {
                 continue;
             }
+            // fitd nests a group only inside a strictly larger one.
+            if written.contains(&members) {
+                self.dropped.insert(format!("cluster `{}`, which holds the same nodes as the one around it", g.name));
+                continue;
+            }
+            written.push(members.clone());
             if !wrote_group {
                 o.push('\n');
                 wrote_group = true;
@@ -466,10 +485,8 @@ impl DotParser {
             self.expect("{")?;
             let cluster = name.starts_with("cluster");
             if cluster {
-                if let Some(&outer) = self.clusters.last() {
-                    self.doc.nested.insert(outer);
-                }
-                self.doc.groups.push(IGroup { title: None, name: name.clone() });
+                let parent = self.clusters.last().copied();
+                self.doc.groups.push(IGroup { title: None, name: name.clone(), parent });
                 self.clusters.push(self.doc.groups.len() - 1);
             }
             let vs = self.stmts(node_def, edge_def)?;
@@ -688,10 +705,7 @@ fn from_mermaid(text: &str) -> Result<Doc, String> {
                     (Some(j), Some(inner)) => (rest[..j].trim().to_string(), inner[j + 1..].trim().trim_matches('"').to_string()),
                     _ => (rest.to_string(), rest.trim_matches('"').to_string()),
                 };
-                if let Some(&outer) = clusters.last() {
-                    doc.nested.insert(outer);
-                }
-                doc.groups.push(IGroup { title: Some(title).filter(|t| !t.is_empty()), name });
+                doc.groups.push(IGroup { title: Some(title).filter(|t| !t.is_empty()), name, parent: clusters.last().copied() });
                 clusters.push(doc.groups.len() - 1);
                 continue;
             }
@@ -768,7 +782,7 @@ enum D2Seg {
 /// dropping `#` comments. A `|`-delimited block string becomes one quoted value.
 fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
     let mut out = Vec::new();
-    let (mut buf, mut line, mut quote) = (String::new(), 1, None);
+    let (mut buf, mut line, mut quote, mut depth) = (String::new(), 1, None, 0usize);
     let mut it = text.chars().peekable();
     let flush = |buf: &mut String, out: &mut Vec<D2Seg>, line: usize, opens: bool| {
         if !buf.trim().is_empty() || opens {
@@ -818,7 +832,14 @@ fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
                 let lines: Vec<&str> = body.trim().lines().map(|l| if lang == "md" { l.trim().trim_start_matches('#').trim() } else { l.trim() }).collect();
                 buf += &format!(" \"{}\"", lines.join("\n").replace('\\', "\\\\").replace('"', "\\\""));
             }
+            // `;` separates statements, except inside an array such as `class: [a; b]`.
+            '[' | ']' => {
+                depth = if c == '[' { depth + 1 } else { depth.saturating_sub(1) };
+                buf.push(c);
+            }
+            ';' if depth > 0 => buf.push(c),
             '\n' | ';' => {
+                depth = 0;
                 flush(&mut buf, &mut out, line, false);
                 line += usize::from(c == '\n');
             }
@@ -901,6 +922,8 @@ struct D2Node {
     fill: Option<String>,
     parent: Option<usize>,
     container: bool,
+    /// Names from `class`, applied once every class is known.
+    classes: Vec<String>,
 }
 
 /// D2Scope is what the statements inside a `{` block apply to.
@@ -911,6 +934,9 @@ enum D2Scope {
     Edges(Vec<usize>),
     /// Properties under a prefix (`style: {`) of an object, or of edges when it is None.
     Props(Option<String>, Vec<usize>, String),
+    /// The `classes` block, and inside it one class's properties under a prefix.
+    Classes,
+    Class(String, String),
     Skip,
 }
 
@@ -920,6 +946,8 @@ struct D2Doc {
     nodes: Vec<D2Node>,
     edges: Vec<IEdge>,
     direction: Option<String>,
+    /// Each class's properties, as (path, value), in source order.
+    classes: HashMap<String, Vec<(String, String)>>,
     dropped: BTreeSet<String>,
 }
 
@@ -978,6 +1006,13 @@ impl D2Doc {
             },
             (Some(v), "style.fill") => self.nodes[v].fill = hex_or_drop(&mut self.dropped, value),
             (Some(v), "style.stroke") => self.nodes[v].color = hex_or_drop(&mut self.dropped, value),
+            (Some(v), "class") => {
+                let names = value.trim().trim_start_matches('[').trim_end_matches(']');
+                self.nodes[v].classes.extend(names.split(';').map(|c| d2_unquote(c.trim())).filter(|c| !c.is_empty()));
+            }
+            (None, "class") => {
+                self.dropped.insert("classes on connections".into());
+            }
             (_, p) => {
                 self.dropped.insert(format!("`{p}`"));
             }
@@ -985,10 +1020,10 @@ impl D2Doc {
     }
 }
 
-/// from_d2 reads D2: objects, labels, connections, containers (as groups), and the shape,
+/// from_d2 reads D2: objects, labels, connections, containers (as groups), classes, and the shape,
 /// label, fill, and stroke of objects and connections. D2 lays out top to bottom by default.
 fn from_d2(text: &str) -> Result<Doc, String> {
-    let mut d = D2Doc { paths: Vec::new(), index: HashMap::new(), nodes: Vec::new(), edges: Vec::new(), direction: None, dropped: BTreeSet::new() };
+    let mut d = D2Doc { paths: Vec::new(), index: HashMap::new(), nodes: Vec::new(), edges: Vec::new(), direction: None, classes: HashMap::new(), dropped: BTreeSet::new() };
     let mut stack = vec![D2Scope::Container(String::new())];
     for seg in d2_lex(text)? {
         let (text, line, opens) = match seg {
@@ -1015,10 +1050,23 @@ fn from_d2(text: &str) -> Result<Doc, String> {
                 continue;
             }
             D2Scope::Edges(es) => D2Scope::Props(None, es.clone(), String::new()),
+            D2Scope::Classes => {
+                let k = keys(left);
+                D2Scope::Class(k[0].clone(), k[1..].join("."))
+            }
+            D2Scope::Class(name, pre) => D2Scope::Class(name.clone(), if pre.is_empty() { keys(left).join(".") } else { format!("{pre}.{}", keys(left).join(".")) }),
             D2Scope::Props(o, es, pre) => D2Scope::Props(o.clone(), es.clone(), pre.clone()),
             D2Scope::Container(p) => D2Scope::Container(p.clone()),
         };
         match scope {
+            // `name: {` or `name.style: {` opens a class; inside, a property opens a prefix or is set.
+            D2Scope::Class(name, prop) => match (value, opens) {
+                (_, true) => stack.push(D2Scope::Class(name, prop)),
+                (Some(val), false) if !prop.is_empty() => d.classes.entry(name).or_default().push((prop, val)),
+                _ => {
+                    d.dropped.insert("`classes` without a block".into());
+                }
+            },
             D2Scope::Props(obj, edges, pre) => {
                 let prop = if pre.is_empty() { keys(left).join(".") } else { format!("{pre}.{}", keys(left).join(".")) };
                 let v = obj.as_ref().map(|p| d.object(p));
@@ -1032,6 +1080,10 @@ fn from_d2(text: &str) -> Result<Doc, String> {
             }
             D2Scope::Container(prefix) => {
                 let (ends, ops) = d2_split(left, &["<->", "->", "<-", "--"]);
+                if prefix.is_empty() && left == "classes" && opens {
+                    stack.push(D2Scope::Classes);
+                    continue;
+                }
                 if left.starts_with('(') || ["vars", "classes", "layers", "scenarios", "steps", "imports", "...@"].iter().any(|k| left.starts_with(k)) {
                     d.dropped.insert(format!("`{}`", left.split(['.', ' ', '[']).next().unwrap_or(left)));
                     if opens {
@@ -1103,7 +1155,28 @@ fn from_d2(text: &str) -> Result<Doc, String> {
                     }
                 }
             }
-            D2Scope::Edges(_) | D2Scope::Skip => unreachable!("mapped to Props or skipped above"),
+            D2Scope::Edges(_) | D2Scope::Classes | D2Scope::Skip => unreachable!("mapped to Props or Class, or skipped above"),
+        }
+    }
+    // An object's own style wins over its classes', and a later class over an earlier one.
+    for v in 0..d.nodes.len() {
+        let (fill, color, label) = (d.nodes[v].fill.is_some(), d.nodes[v].color.is_some(), d.nodes[v].label.is_some());
+        for name in std::mem::take(&mut d.nodes[v].classes) {
+            let Some(props) = d.classes.get(&name).cloned() else {
+                d.dropped.insert(format!("undefined class `{name}`"));
+                continue;
+            };
+            for (p, val) in props {
+                match p.as_str() {
+                    "style.fill" if fill => {}
+                    "style.stroke" if color => {}
+                    "label" if label => {}
+                    "style.fill" | "style.stroke" | "shape" | "label" => d.prop(Some(v), &[], &p, &val),
+                    _ => {
+                        d.dropped.insert(format!("class property `{p}`"));
+                    }
+                }
+            }
         }
     }
 
@@ -1125,10 +1198,8 @@ fn from_d2(text: &str) -> Result<Doc, String> {
         if n.container {
             let last = d.paths[v].rsplit('.').next().unwrap_or("").to_string();
             group_of[v] = Some(doc.groups.len());
-            doc.groups.push(IGroup { title: Some(n.label.clone().unwrap_or(last)), name: d.paths[v].clone() });
-            if let Some(p) = n.parent {
-                doc.nested.insert(group_of[p].expect("parents come first"));
-            }
+            let parent = n.parent.map(|p| group_of[p].expect("parents come first"));
+            doc.groups.push(IGroup { title: Some(n.label.clone().unwrap_or(last)), name: d.paths[v].clone(), parent });
         }
     }
     let mut at = vec![None; d.nodes.len()];
@@ -1262,13 +1333,28 @@ mod tests {
 
     #[test]
     fn d2_carries_objects_connections_and_containers() {
-        let d2 = "direction: right\nx: Start {shape: circle}\n'q a'.b -> c: go {style.stroke-dash: 3}\nc <- d\nk: {\n  m -> _.c\n  m.style.stroke: \"#c62828\"\n  m.label: |md\n    ## Main\n  |\n}\nk -> x\nclasses: { hot: { style.fill: red } }\n";
+        let d2 = "direction: right\nx: Start {shape: circle}\n'q a'.b -> c: go {style.stroke-dash: 3}\nc <- d\nk: {\n  m -> _.c\n  m.style.stroke: \"#c62828\"\n  m.label: |md\n    ## Main\n  |\n}\nk -> x\nclasses: { hot: { style.fill: \"#ffcdd2\"; shape: circle; icon: x }; cool.style: { stroke: \"#1565c0\" } }\nd.class: [cool; hot]\nc.class: ghost\n(d -> c)[0].class: hot\n";
         let (out, dropped) = import("x.d2", d2).unwrap();
         assert!(out.contains("layout layered dir=right\n"), "{out}");
         assert!(out.contains("node x \"Start\" shape=circle\n") && out.contains("node q_a_b \"b\"\n") && out.contains("node k_m \"Main\" color=#C62828\n"), "{out}");
         assert!(out.contains("q_a_b ..> c \"go\"\nd -> c\nk_m -> c\n"), "{out}");
         assert!(out.contains("group \"q a\" q_a_b\ngroup \"k\" k_m\n"), "{out}");
-        assert_eq!(dropped, ["`classes`", "connections to containers"]);
+        assert!(out.contains("node d color=#1565C0 fill=#FFCDD2 shape=circle\n"), "{out}");
+        assert_eq!(dropped, ["`(d`", "class property `icon`", "connections to containers", "undefined class `ghost`"]);
+    }
+
+    #[test]
+    fn clusters_nest() {
+        let dot = "digraph { subgraph cluster_o { label=O; a; d; subgraph cluster_i { label=I; b; a; } } subgraph cluster_s { subgraph cluster_t { c; } } }";
+        let (out, dropped) = import("x.dot", dot).unwrap();
+        assert!(out.contains("group \"O\" a, d, b\ngroup \"I\" a, b\ngroup c\n"), "{out}");
+        assert_eq!(dropped, ["cluster `cluster_t`, which holds the same nodes as the one around it"]);
+        let d2 = "a: A { b: B { c }; d }\n";
+        let (out, _) = import("x.d2", d2).unwrap();
+        assert!(out.contains("group \"A\" a_b_c, a_d\ngroup \"B\" a_b_c\n"), "{out}");
+        let mmd = "flowchart TD\n  subgraph O\n    A\n    subgraph I\n      B\n    end\n  end\n";
+        let (out, _) = import("x.mmd", mmd).unwrap();
+        assert!(out.contains("group \"O\" A, B\ngroup \"I\" B\n"), "{out}");
     }
 
     #[test]

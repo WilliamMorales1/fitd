@@ -21,7 +21,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ("E0007", "A constraint names the same node twice, or an alignment lists fewer than two nodes."),
     ("E0008", "Hard constraints contradict each other on one axis: orderings (`left-of`, `above`) form a cycle, possibly through alignments. Found before search; no layout can satisfy them."),
     ("E0009", "An unknown keyword value: layout, relation, alignment side, place, shape, or page flag."),
-    ("E0010", "A node is listed in two `group` statements. Groups cannot share or nest nodes, since each frame must hold its own members and nothing else."),
+    ("E0010", "Two `group` statements share some nodes, but neither holds every node of the other, or both list the same nodes. Groups may nest: a group whose nodes all belong to a larger group is framed inside it. Partial overlap cannot be drawn with rectangles, since each frame must hold its own members and nothing else."),
     ("E0011", "An `include` names a file that is already being included (a cycle), or a file that cannot be read. The include is skipped. Paths are relative to the including file."),
     ("E0101", "Two nodes claim overlapping regions. Each node owns its box exclusively, like a mutable borrow."),
     ("E0102", "An edge passes through a node that is neither of its endpoints, so a reader cannot tell where it goes."),
@@ -159,7 +159,8 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
         if let Some(u) = (0..n).find(|&u| !items.contains(&u) && !frame_clear(&f, &lay.rect(u), lay.body)) {
             d.push(Diag::error("E0108", format!("group frame holds {}, which is not a member", id(u))).primary(c.span, "violated by the layout"));
         }
-        if let Some(&(cj, _)) = groups[k + 1..].iter().find(|(_, h)| !frame_clear(&f, h, lay.body)) {
+        let apart = |cj: usize| !g.constraints[cj].rel.nodes().iter().any(|v| items.contains(v));
+        if let Some(&(cj, _)) = groups[k + 1..].iter().find(|&&(cj, h)| apart(cj) && !frame_clear(&f, &h, lay.body)) {
             d.push(Diag::error("E0108", "group frames meet").primary(c.span, "this frame").secondary(g.constraints[cj].span, "meets this one"));
         }
     }

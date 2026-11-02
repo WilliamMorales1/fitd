@@ -96,7 +96,9 @@ Two-node relations chain: `a left-of b left-of c` means `a left-of b` and `b lef
 
 ### Groups
 
-`group "Title" a, b, c` draws a frame, title on top, around its members. It is a hard constraint, like a `require`: the frame stays on the page and keeps clear of every other node and of every other group's frame. Edges and links may cross it. A node belongs to at most one group (E0010), so groups never share or nest. When a group cannot fit, it shows up in the E0110 core like any `require`.
+`group "Title" a, b, c` draws a frame, title on top, around its members. It is a hard constraint, like a `require`: the frame stays on the page and keeps clear of every other node and of every other group's frame. Edges and links may cross it. When a group cannot fit, it shows up in the E0110 core like any `require`.
+
+Groups nest by membership: a group whose members all belong to a larger group is drawn inside that group's frame, which grows to hold the inner frame and its title. List every node of the inner group in the outer one too, so `group "Compiler" lex, parse, opt` and `group "Front end" lex, parse` put a Front end frame inside Compiler. Nested frames are exempt from keeping clear of each other; every other pair still must. Two groups that share some nodes but not all, or list the same nodes, are an error (E0010).
 
 In radial layout a frame is a rectangle, so it fits a branch's hub with its children far better than nodes from different branches. In layered layout the strategy keeps room for frames at both ends of the flow.
 
@@ -131,7 +133,7 @@ Codes run `E00xx` (front end), `E01xx` (layout), `W02xx` (warnings). `fitd expla
 | E0007 | constraint names a node twice, or `align` with one node |
 | E0008 | contradictory hard orderings (static) |
 | E0009 | unknown layout, relation, side, place, shape, or flag |
-| E0010 | node listed in two groups |
+| E0010 | two groups share some nodes without one holding the other |
 | E0011 | `include` cycle or unreadable file |
 | E0101-E0107 | checker: overlap, edge through node, crossing, off page, text overflow, font too small, child nearer center |
 | E0108 | layout breaks a `require` or a `group` (a solver bug if it ever appears) |
