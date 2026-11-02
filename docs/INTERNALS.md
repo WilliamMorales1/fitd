@@ -43,7 +43,7 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 
 ## Tests
 
-`cargo test --release`: unit tests for the lexer, parser, semantic checks, geometry, the solver (queens, pigeonhole, branch and bound, spatial index equivalence), layering, and QuickXplain; end-to-end runs of every example (zero errors, a warning baseline, a CPU-time budget, and two concurrent builds that must match byte for byte), unsat cores, static contradictions, and parse errors. A fuzzer feeds mutated sources to the front end for 2 seconds; `FITD_FUZZ_SECS=1800 cargo test --release fuzz` runs it longer.
+`cargo test --release`: unit tests for the lexer, parser, semantic checks, geometry, the solver (queens, pigeonhole, branch and bound, spatial index equivalence), layering, and QuickXplain; end-to-end runs of every example (zero errors, a warning baseline, a CPU-time budget, and two concurrent builds that must match byte for byte), unsat cores, static contradictions, and parse errors. A fuzzer feeds mutated sources to the front end for 2 seconds; `FITD_FUZZ_SECS=1800 cargo test --release fuzz` runs it longer. `tests/fixtures/` holds inputs that fail or strain the solver on purpose.
 
 ## Performance
 
@@ -61,17 +61,3 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 | `fixtures/stress_test.fitd` | 0.00 | 0.00 | 0 | fails (by design) |
 
 `compiler.fitd` spends most of its time in the warning-driven retry (turned page). `bench/baseline.tsv` holds the checks and CPU seconds above. CI runs `scripts/bench.py --check bench/baseline.tsv`, which fails when any file needs over 25% more solver checks; checks are deterministic, so this holds on any machine. `--time` also gates CPU time, which is only meaningful on the machine that wrote the baseline (`--write`), and even there one run can vary by a third under thermal throttling, so use the default three runs.
-
-## Examples
-
-| File | Shows |
-| --- | --- |
-| `group_theory.fitd` | group theory notes with no settings at all: a large radial map on the defaults, with bodies, math markup, and cross links |
-| `french_history.fitd` | real course notes: a layered timeline (down) on a portrait page, colored `group` frames per period, styles, a colored link, `require ... at` and `prefer ... at` |
-| `earth_science.fitd` | radial map: `root=`, theme overrides (`root=`, `link=`), styles on nodes and edges, a node `fill`, labeled links, `require` and `prefer` |
-| `compiler.fitd` | layered flowchart (down): `theme dark`, `page ... margin=`, `shape=circle` terminals, two groups, a row alignment, `gap=`, `near ... within=` |
-| `cell_biology.fitd` | layered flowchart (right) that wraps into two bands: a group frame, circle molecules, a solid `fill` (text turns white), labeled arrows, an edge `color=` |
-
-`tests/fixtures/` holds inputs that fail or strain the solver on purpose.
-
-The README shows each example as rendered to `docs/examples/NAME.png`. After a change to layout or drawing, rebuild them all: `for f in examples/*.fitd; ./target/release/fitd $f -o docs/examples/(basename $f .fitd).png; end` (fish).
