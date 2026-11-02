@@ -43,6 +43,10 @@ prefer out at bottom-left weight=2
 
 That is the whole file. [docs/EXAMPLES.md](docs/EXAMPLES.md) has larger ones, including [the full pipeline](examples/compiler.fitd).
 
+## Dependencies
+
+Rust 1.85+ (edition 2024) and Cargo. Crates, fetched by Cargo: `resvg` (SVG/PNG rendering), `ttf-parser` (font metrics), `serde_json` (LSP and lock files). DejaVu fonts are compiled in; a custom `family` needs fontconfig (`fc-match`). Compiling `--tikz` output needs a LaTeX install with TikZ.
+
 ## Usage
 
 ```fish
