@@ -5,14 +5,12 @@ page a4 landscape
 
 def collatz(k)
   node n${k} "${k}"
-  if k != 1
-    if k % 2 == 0
-      let next = k / 2
-    else
-      let next = 3 * k + 1
-    end
-    n${k} -> n${next}
-    use collatz(next)
+  if k > 1 and k % 2 == 0
+    n${k} -> n${k / 2}
+    use collatz(k / 2)
+  else if k > 1
+    n${k} -> n${3 * k + 1}
+    use collatz(3 * k + 1)
   end
 end
 use collatz(6)

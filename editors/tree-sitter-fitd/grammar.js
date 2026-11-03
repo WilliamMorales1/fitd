@@ -32,7 +32,6 @@ module.exports = grammar({
       $.group_statement,
       $.constraint_statement,
       $.include_statement,
-      $.let_statement,
       $.for_statement,
       $.if_statement,
       $.else_statement,
@@ -52,7 +51,7 @@ module.exports = grammar({
     body: _ => token(seq('|', /[^\n]*/)),
     edge_statement: $ => seq(
       // A node may be named like a macro keyword; the edge operator after it tells.
-      field('from', choice($.name, alias(choice('let', 'for', 'if', 'else', 'end', 'def', 'use'), $.name))),
+      field('from', choice($.name, alias(choice('for', 'if', 'else', 'end', 'def', 'use'), $.name))),
       field('operator', $.edge_operator),
       $._targets,
       optional(field('label', $.string)),
@@ -63,7 +62,6 @@ module.exports = grammar({
     include_statement: $ => seq('include', field('path', $.string)),
 
     // Macro lines stay flat, one per line like every statement; nesting is left to `end`.
-    let_statement: $ => seq('let', field('name', $.name), '=', field('value', $.expression)),
     for_statement: $ => seq('for', field('var', $.name), optional(seq(',', field('var', $.name))), 'in', field('items', $.expression)),
     if_statement: $ => seq('if', field('condition', $.expression)),
     else_statement: $ => seq('else', optional(seq('if', field('condition', $.expression)))),

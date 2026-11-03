@@ -431,32 +431,6 @@
     }
   },
   {
-    "type": "let_statement",
-    "named": true,
-    "fields": {
-      "name": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "name",
-            "named": true
-          }
-        ]
-      },
-      "value": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "expression",
-            "named": true
-          }
-        ]
-      }
-    }
-  },
-  {
     "type": "node_statement",
     "named": true,
     "fields": {
@@ -646,10 +620,6 @@
         },
         {
           "type": "layout_statement",
-          "named": true
-        },
-        {
-          "type": "let_statement",
           "named": true
         },
         {
@@ -883,10 +853,6 @@
   },
   {
     "type": "layout",
-    "named": false
-  },
-  {
-    "type": "let",
     "named": false
   },
   {

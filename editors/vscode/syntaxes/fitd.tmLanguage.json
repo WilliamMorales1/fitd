@@ -46,13 +46,6 @@
           }
         },
         {
-          "match": "^\\s*(let)\\s+(\\w+)",
-          "captures": {
-            "1": { "name": "keyword.control.macro.fitd" },
-            "2": { "name": "variable.other.fitd" }
-          }
-        },
-        {
           "match": "^\\s*(if|else|end)\\b(?!\\s*(->|--|\\.\\.))",
           "name": "keyword.control.macro.fitd"
         }

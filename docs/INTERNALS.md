@@ -5,7 +5,7 @@
 | Stage   | File                      | What it does |
 | ------- | ------------------------- | ------------ |
 | Include | `include.rs`              | Splices included files in, line for line; a segment table maps every line back to its file. |
-| Expand  | `macros.rs`               | Runs `let`, `for`, `if`, `def`, `use`, and `${...}` within a step budget. Every input line keeps one raw copy in the expanded text (blanked for the parser when it is a directive), so diagnostics can show it; generated lines map to the template line that wrote them. Files with no macro lines pass through untouched. |
+| Expand  | `macros.rs`               | Runs `for`, `if`, `def`, `use`, and `${...}` within a step budget. Every input line keeps one raw copy in the expanded text (blanked for the parser when it is a directive), so diagnostics can show it; generated lines map to the template line that wrote them. Files with no macro lines pass through untouched. |
 | Lex     | `lex.rs`                  | Tokens with byte spans; newlines are tokens (one statement per line). |
 | Parse   | `parse.rs`, `ast.rs`      | Recursive descent; a bad line is reported and skipped, so later errors still show. |
 | Analyze | `sema.rs`                 | Two passes: declarations, then references. Styles, typed values, units (`pt mm cm in em`), "did you mean" suggestions, and a static check that hard orderings and alignments do not contradict (union-find plus cycle search). |

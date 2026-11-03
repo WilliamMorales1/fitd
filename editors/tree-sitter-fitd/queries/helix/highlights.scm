@@ -2,7 +2,7 @@
 (name) @variable
 
 ["title" "root" "layout" "page" "font" "theme" "style" "node" "group" "require" "prefer" "include" "align" "at"] @keyword
-["let" "for" "in" "if" "else" "end" "def" "use"] @keyword.control
+["for" "in" "if" "else" "end" "def" "use"] @keyword.control
 
 (edge_operator) @operator
 ["=" ".." "." "," "(" ")"] @punctuation.delimiter

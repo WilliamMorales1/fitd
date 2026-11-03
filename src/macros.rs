@@ -1,4 +1,4 @@
-//! Macros: `let`, `for`, `if`, `def`, `use`, and `${expr}` expand to plain statements after
+//! Macros: `for`, `if`, `def`, `use`, and `${expr}` expand to plain statements after
 //! `include` and before parsing. Every input line appears once in the expanded text as its raw
 //! copy, blanked for the parser when it is a directive, so diagnostics can point at it; each
 //! generated line maps back to the template line it came from.
@@ -133,8 +133,6 @@ fn tokens(s: &str) -> Result<Vec<T>, String> {
 enum Expr {
     Lit(Val),
     Var(String),
-    Neg(Box<Expr>),
-    Not(Box<Expr>),
     Bin(&'static str, Box<Expr>, Box<Expr>),
     Call(String, Vec<Expr>),
 }
@@ -198,17 +196,14 @@ impl P {
     }
 
     fn and(&mut self) -> Result<Expr, String> {
-        let mut a = self.not()?;
+        let mut a = self.compare()?;
         while self.word("and") {
-            a = Expr::Bin("and", Box::new(a), Box::new(self.not()?));
+            a = Expr::Bin("and", Box::new(a), Box::new(self.compare()?));
         }
         Ok(a)
     }
 
-    fn not(&mut self) -> Result<Expr, String> {
-        if self.word("not") {
-            return Ok(Expr::Not(Box::new(self.not()?)));
-        }
+    fn compare(&mut self) -> Result<Expr, String> {
         let a = self.sum()?;
         for o in ["==", "!=", "<=", ">=", "<", ">"] {
             if self.op(o) {
@@ -236,9 +231,6 @@ impl P {
     }
 
     fn unary(&mut self) -> Result<Expr, String> {
-        if self.op("-") {
-            return Ok(Expr::Neg(Box::new(self.unary()?)));
-        }
         match self.peek().cloned() {
             Some(T::Int(n)) => {
                 self.i += 1;
@@ -248,7 +240,7 @@ impl P {
                 self.i += 1;
                 Ok(Expr::Lit(Val::Str(s)))
             }
-            Some(T::Id(x)) if !matches!(x.as_str(), "and" | "or" | "not") => {
+            Some(T::Id(x)) if !matches!(x.as_str(), "and" | "or") => {
                 self.i += 1;
                 if self.op("(") {
                     return Ok(Expr::Call(x, self.args()?));
@@ -355,7 +347,6 @@ enum Kind {
     /// A line copied as is: a statement, comment, or blank.
     Plain,
     Text(Vec<Piece>),
-    Let(String, Expr),
     /// `for x in ...` or `for i, x in ...`; the last name takes the items, the first counts from 1.
     For(Vec<String>, Iter, Vec<Item>),
     /// Arms in order; a `None` condition is `else`.
@@ -391,7 +382,7 @@ enum Line {
 
 fn is_kw_line(t: &str) -> Option<(&str, &str)> {
     let w = t.split(|c: char| !(c.is_alphanumeric() || c == '_')).next().unwrap_or("");
-    if !matches!(w, "let" | "for" | "if" | "else" | "end" | "def" | "use") {
+    if !matches!(w, "for" | "if" | "else" | "end" | "def" | "use") {
         return None;
     }
     let rest = &t[w.len()..];
@@ -437,13 +428,6 @@ fn classify(line: &str) -> Result<Line, String> {
             let e = p.expr()?;
             p.done()?;
             Line::If(e)
-        }
-        "let" => {
-            let name = p.name("a variable name: `let NAME = EXPR`")?;
-            p.expect("=").map_err(|_| "expected `=`: `let NAME = EXPR`".to_string())?;
-            let e = p.expr()?;
-            p.done()?;
-            Line::Item(Kind::Let(name, e))
         }
         "def" => {
             let name = p.name("a template name: `def NAME(a, b)`")?;
@@ -724,17 +708,6 @@ impl Expander<'_> {
                     return Err(());
                 }
             },
-            Expr::Neg(a) => {
-                let v = self.eval(line, a)?;
-                match int(self, v, "`-`")?.checked_neg() {
-                    Some(n) => Val::Int(n),
-                    None => {
-                        self.fail(line, "`-` overflows");
-                        return Err(());
-                    }
-                }
-            }
-            Expr::Not(a) => Val::Int(!self.eval(line, a)?.truthy() as i64),
             Expr::Bin("and", a, b) => {
                 let x = self.eval(line, a)?;
                 if x.truthy() { self.eval(line, b)? } else { x }
@@ -749,10 +722,6 @@ impl Expander<'_> {
                     "==" => Val::Int((x == y) as i64),
                     "!=" => Val::Int((x != y) as i64),
                     "+" if matches!((&x, &y), (Val::Str(_), _) | (_, Val::Str(_))) => Val::Str(format!("{x}{y}")),
-                    "<" | "<=" | ">" | ">=" if matches!((&x, &y), (Val::Str(_), Val::Str(_))) => {
-                        let o = x.to_string().cmp(&y.to_string());
-                        Val::Int(cmp(op, o) as i64)
-                    }
                     _ => {
                         let (m, n) = (int(self, x, &format!("`{op}`"))?, int(self, y, &format!("`{op}`"))?);
                         let r = match *op {
@@ -789,8 +758,6 @@ impl Expander<'_> {
 
     fn call(&mut self, line: usize, f: &str, vs: Vec<Val>) -> Run<Val> {
         let arity = match f {
-            "min" | "max" => 2,
-            "abs" | "len" => 1,
             "names" => 3,
             _ => {
                 let hint = if self.defs.contains_key(f) { format!("; `{f}` is a template, so write `use {f}(...)` on its own line") } else { String::new() };
@@ -799,7 +766,7 @@ impl Expander<'_> {
             }
         };
         if vs.len() != arity {
-            self.fail(line, format!("`{f}` takes {arity} argument{}, found {}", if arity == 1 { "" } else { "s" }, vs.len()));
+            self.fail(line, format!("`{f}` takes {arity} arguments, found {}", vs.len()));
             return Err(());
         }
         let num = |me: &mut Self, v: &Val| match v {
@@ -809,24 +776,16 @@ impl Expander<'_> {
                 Err(())
             }
         };
-        Ok(match f {
-            "min" => Val::Int(num(self, &vs[0])?.min(num(self, &vs[1])?)),
-            "max" => Val::Int(num(self, &vs[0])?.max(num(self, &vs[1])?)),
-            "abs" => Val::Int(num(self, &vs[0])?.saturating_abs()),
-            "len" => Val::Int(vs[0].to_string().chars().count() as i64),
-            _ => {
-                let (lo, hi) = (num(self, &vs[1])?, num(self, &vs[2])?);
-                let mut s = String::new();
-                for k in lo..=hi {
-                    self.tick(line)?;
-                    if k > lo {
-                        s += ", ";
-                    }
-                    s += &format!("{}{k}", vs[0]);
-                }
-                Val::Str(s)
+        let (lo, hi) = (num(self, &vs[1])?, num(self, &vs[2])?);
+        let mut s = String::new();
+        for k in lo..=hi {
+            self.tick(line)?;
+            if k > lo {
+                s += ", ";
             }
-        })
+            s += &format!("{}{k}", vs[0]);
+        }
+        Ok(Val::Str(s))
     }
 
     fn run(&mut self, items: &[Item], top: bool) -> Run<()> {
@@ -867,10 +826,6 @@ impl Expander<'_> {
                     return Err(());
                 }
                 self.emit(at, &s, false);
-            }
-            Kind::Let(name, e) => {
-                let v = self.eval(at, e)?;
-                self.frames.last_mut().unwrap().insert(name.clone(), v);
             }
             Kind::For(var, it, body) => {
                 let vals: Box<dyn Iterator<Item = Val>> = match it {
@@ -1066,20 +1021,20 @@ mod tests {
     }
 
     #[test]
-    fn loops_lets_and_interpolation() {
-        let l = run("let n = 3\nfor i in 1..n\n  node s${i} \"Step ${i * 10}\"\n  if i < n\n    s${i} -> s${i + 1}\n  end\nend\ngroup ${names(\"s\", 1, n)}\n");
+    fn loops_and_interpolation() {
+        let l = run("for i in 1..3\n  node s${i} \"Step ${i * 10}\"\n  if i < 3\n    s${i} -> s${i + 1}\n  end\nend\ngroup ${names(\"s\", 1, 3)}\n");
         assert!(l.diags.is_empty(), "{:?}", l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>());
         assert_eq!(visible(&l), ["node s1 \"Step 10\"", "s1 -> s2", "node s2 \"Step 20\"", "s2 -> s3", "node s3 \"Step 30\"", "group s1, s2, s3"]);
         // Generated lines map back to the template line they came from.
         let k = l.src.text.lines().position(|t| t.trim() == "s2 -> s3").unwrap();
-        assert_eq!(l.src.file_line(k + 1), ("t.fitd", 5));
+        assert_eq!(l.src.file_line(k + 1), ("t.fitd", 4));
     }
 
     #[test]
     fn list_loops_and_else() {
         let l = run("for i, s in a, b\n  node ${s}${i}\nend\n");
         assert_eq!(visible(&l), ["node a1", "node b2"]);
-        let l = run("for s in auth, front-end, \"Big DB\"\n  if s == \"auth\"\n    node a\n  else if len(s) > 6\n    node c\n  else\n    node b\n  end\nend\n");
+        let l = run("for s in auth, front-end, \"Big DB\"\n  if s == \"auth\"\n    node a\n  else if s == \"front-end\"\n    node c\n  else\n    node b\n  end\nend\n");
         assert!(l.diags.is_empty());
         assert_eq!(visible(&l), ["node a", "node c", "node b"]);
     }
@@ -1094,7 +1049,7 @@ mod tests {
 
     #[test]
     fn collatz_runs_and_budget_stops_runaway() {
-        let collatz = "def c(k)\n  node n${k}\n  if k != 1\n    if k % 2 == 0\n      let next = k / 2\n    else\n      let next = 3 * k + 1\n    end\n    n${k} -> n${next}\n    use c(next)\n  end\nend\nuse c(27)\n";
+        let collatz = "def c(k)\n  node n${k}\n  if k > 1 and k % 2 == 0\n    n${k} -> n${k / 2}\n    use c(k / 2)\n  else if k > 1\n    n${k} -> n${3 * k + 1}\n    use c(3 * k + 1)\n  end\nend\nuse c(27)\n";
         let l = run(collatz);
         assert!(l.diags.is_empty(), "{:?}", l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>());
         assert_eq!(visible(&l).iter().filter(|s| s.starts_with("node")).count(), 112);

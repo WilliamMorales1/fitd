@@ -27,8 +27,8 @@ const WORDS: &[&str] = &[
     "center", "gap=", "weight=", "within=", "shape=", "circle", "color=", "fill=", "->", "--", "..>", "..", "|", "\"", "(", ")", ",", ".", "=", "#",
     "#FFF", "#12345G", "\n", " ", "\t", "\r\n", "2em", "12pt", "0pt", "-3pt", "1e9pt", "99999999999999999999pt", "594x420mm", "0x0pt", "a3", "a9",
     "x", "é", "\u{0}", "\u{200b}", "^{", "_{", "}", "{", "..40pt", "7pt..", "a", "b", "a b", "weight=0", "weight=-1", "within=0em",
-    "let n = 2\n", "for i in 1..3\n", "for s in a, b\n", "end\n", "if i > 1\n", "else\n", "else if n\n", "def t(a)\n", "use t(1)\n", "use t(\"x\")\n",
-    "${", "${i}", "${n + 1}", "$${", "${names(\"s\", 1, 3)}", "${1 / 0}",
+    "for i in 1..3\n", "for s in a, b\n", "end\n", "if i > 1\n", "else\n", "else if i\n", "def t(a)\n", "use t(1)\n", "use t(\"x\")\n",
+    "${", "${i}", "${i + 1}", "$${", "${names(\"s\", 1, 3)}", "${1 / 0}",
 ];
 
 fn front_end(text: &str) {

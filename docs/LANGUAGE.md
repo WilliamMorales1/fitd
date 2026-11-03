@@ -64,14 +64,13 @@ A statement that fails to parse is reported and skipped to the end of its line, 
 Macros write repetitive or recursive structure. They expand after `include` and before parsing, so the rest of the language never sees them. A file with no macro lines is passed through unchanged.
 
 ```
-let n = 4                        # integer or "string" variables
-for i in 1..n                    # inclusive range; also `for s in a, b, "two words"`
+for i in 1..4                    # inclusive range; also `for s in a, b, "two words"`
   node s${i} "Step ${i}"         # ${expr} interpolates into any line
-  if i < n                       # also `else if COND` and `else`
+  if i < 4                       # also `else if COND` and `else`
     s${i} -> s${i + 1}
   end
 end
-group "All" ${names("s", 1, n)}  # s1, s2, s3, s4
+group "All" ${names("s", 1, 4)}  # s1, s2, s3, s4
 
 def fib(id, k)                   # a template; may call itself
   node ${id} "fib(${k})"
@@ -86,8 +85,7 @@ use fib("f", 5)
 
 | Line | Meaning |
 |---|---|
-| `let NAME = EXPR` | Sets a variable. Inside a template it is local to that call; elsewhere it is global. |
-| `for NAME in LO..HI` | Runs the body once per integer from LO to HI inclusive (none when LO > HI). |
+| `for NAME in LO..HI` | Runs the body once per integer from LO to HI inclusive (none when LO > HI). The loop variable is local to the template call it runs in. |
 | `for NAME in a, b, c` | Runs the body once per item: words (hyphens allowed), numbers, or quoted strings. |
 | `for I, NAME in ...` | Same, with `I` counting from 1. |
 | `if EXPR` / `else if EXPR` / `else` / `end` | Runs the first arm whose condition is true. |
@@ -95,7 +93,7 @@ use fib("f", 5)
 | `use NAME(EXPR, ...)` | Expands a template with its parameters bound. |
 | `${EXPR}` | Replaced by the value, anywhere in a line, including strings and `\|` bodies. `$${` is a literal `${`. |
 
-Expressions have integers and strings: `+ - * / %` (floor division and a non-negative remainder), `== != < <= > >=`, `and or not`, parentheses, and the functions `min(a, b)`, `max(a, b)`, `abs(n)`, `len(s)`, and `names(prefix, lo, hi)`, which gives `prefix1, prefix2, ...` for node lists. `+` joins strings when either side is one. Zero and the empty string are false.
+Expressions have integers and strings: `+ - * / %` (floor division and a non-negative remainder), `== != < <= > >=` (ordering on numbers only), `and or`, parentheses, and `names(prefix, lo, hi)`, which gives `prefix1, prefix2, ...` for node lists. `+` joins strings when either side is one. Zero and the empty string are false. Values come from `for` variables and template parameters; there is no assignment.
 
 Macro keywords are recognized only at the start of a line and never before an edge operator, so a node named `end` or `for` still works in `end -> start`.
 

@@ -141,7 +141,6 @@ node b "x"
 Macro lines
 ================================================================================
 
-let n = 3
 for i, s in a, b
 node s${i} "Step ${i}"
 if i < n
@@ -157,9 +156,6 @@ end -> in
 --------------------------------------------------------------------------------
 
 (source_file
-  (let_statement
-    name: (name)
-    value: (expression))
   (for_statement
     var: (name)
     var: (name)
