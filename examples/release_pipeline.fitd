@@ -2,7 +2,7 @@
 title "Shipping a release"
 include "shared/build_styles.fitd"
 layout layered dir=right bands=2
-page a4 portrait margin=8mm
+page 300x180mm margin=8mm
 font 6pt..30pt wrap=10em
 theme light background=#FAFAF7 text=#212121 edge=#37474F link=#8E24AA label=#4E342E
 

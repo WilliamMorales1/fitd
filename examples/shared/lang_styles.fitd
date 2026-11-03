@@ -1,0 +1,7 @@
+# Styles for the self-describing example; an included style is never reported unused.
+style io color=#00838F shape=circle
+style stage color=#1565C0
+style macro color=#8E24AA fill=#F3E5F5
+style rule color=#C62828
+style setting color=#2E7D32
+style note color=#546E7A fill=#ECEFF1 text=#263238 shape=box

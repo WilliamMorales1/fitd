@@ -1,7 +1,7 @@
 # The fitd pipeline itself, as a layered flowchart with layout constraints.
 title "How fitd compiles a diagram"
 layout layered dir=down
-page a4 portrait margin=1cm
+page 240x360mm margin=1cm
 font 7pt..40pt wrap=16em
 theme dark link=#FFD54F
 

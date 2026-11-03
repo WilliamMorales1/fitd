@@ -1,7 +1,7 @@
 # A decision flow for a failing test, in grayscale for print at one fixed font size.
 title "A test fails"
 layout layered dir=down bands=1
-page a4 portrait margin=12mm
+page 170x240mm margin=10mm
 font 11pt wrap=12em
 theme mono
 

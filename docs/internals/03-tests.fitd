@@ -48,10 +48,10 @@ def row(id, file, wall, cpu, checks, font)
   | ${checks} checks, font ${font}
   bench -> ${id}
 end
-use row("b1", "cell_biology", "0.38", "0.96", "2,143,098", "16.9pt")
+use row("b1", "fixtures/cell_biology", "0.38", "0.96", "2,143,098", "16.9pt")
 use row("b2", "compiler", "1.90", "4.70", "4,028,513", "9.1pt; mostly the turned-page retry")
-use row("b3", "earth_science", "3.60", "14.27", "80,934,070", "14.5pt")
-use row("b4", "french_history", "0.42", "0.42", "2,317,945", "11.7pt")
+use row("b3", "fixtures/earth_science", "3.60", "14.27", "80,934,070", "14.5pt")
+use row("b4", "fixtures/french_history", "0.42", "0.42", "2,317,945", "11.7pt")
 use row("b5", "group_theory", "1.62", "4.26", "44,886,959", "17.3pt")
 use row("b6", "fixtures/complex_constraints", "0.09", "0.22", "388,135", "30.1pt")
 use row("b7", "fixtures/missing_glyph", "0.07", "0.18", "0", "48.0pt")

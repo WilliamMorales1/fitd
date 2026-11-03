@@ -1,6 +1,6 @@
 # Introductory group theory: cyclic and permutation groups, cosets and Lagrange, isomorphisms and products.
 title "Group theory"
-page a4 portrait margin=1cm
+page 340x240mm margin=1cm
 font 6pt..30pt
 root core
 

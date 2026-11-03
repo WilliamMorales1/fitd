@@ -8,10 +8,10 @@ use crate::{diag, parse, sema, tree};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 const SEEDS: [&str; 10] = [
-    include_str!("../examples/cell_biology.fitd"),
+    include_str!("../tests/fixtures/cell_biology.fitd"),
     include_str!("../examples/compiler.fitd"),
-    include_str!("../examples/earth_science.fitd"),
-    include_str!("../examples/french_history.fitd"),
+    include_str!("../tests/fixtures/earth_science.fitd"),
+    include_str!("../tests/fixtures/french_history.fitd"),
     include_str!("../examples/group_theory.fitd"),
     include_str!("../examples/fib_calls.fitd"),
     include_str!("../examples/semester.fitd"),

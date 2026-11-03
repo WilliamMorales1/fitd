@@ -156,7 +156,7 @@ fn unsat_constraints_report_minimal_core() {
 fn chained_orderings_fit_and_overlong_chains_fail_fast() {
     // Forward checking sees one link of a chain at a time, so without arc consistency a
     // satisfiable two-link chain ran out of budget and was reported as an unsat core.
-    let base = std::fs::read_to_string("examples/cell_biology.fitd").unwrap();
+    let base = std::fs::read_to_string("tests/fixtures/cell_biology.fitd").unwrap();
     let chain = |gaps: &[(&str, &str)], gap: u32| gaps.iter().map(|(a, b)| format!("require {a} above {b} gap={gap}em\n")).collect::<String>();
     let links = [("anaerobic", "regulation"), ("regulation", "yield"), ("yield", "water"), ("water", "oxygen")];
     let fits = tmp("chain-fits.fitd");
@@ -213,22 +213,18 @@ fn theme_colors_reach_svg_and_tikz() {
 /// busy core run slower per CPU second, so a CPU budget failed under load with identical
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
-const EXAMPLES: [(&str, usize, u64); 14] = [
-    ("cell_biology", 0, 17_700_000),
+const EXAMPLES: [(&str, usize, u64); 10] = [
     ("coffee", 2, 155_000_000),
-    ("compiler", 2, 1_450_000),
+    ("compiler", 2, 4_200_000),
     ("debugging", 0, 33_000),
-    ("deepseek_v4_1_flash", 0, 20_000_000),
-    ("earth_science", 4, 101_000_000),
     ("fib_calls", 0, 8_000_000),
-    ("french_history", 2, 5_300_000),
+    ("fitd_language", 1, 1_700_000),
     ("group_theory", 0, 164_000_000),
     // Dense layers cross by nature: every W0206 here is an unavoidable crossing.
     ("neural_net", 60, 8_200_000),
     ("pipeline", 0, 94_000),
-    ("release_pipeline", 0, 87_000),
+    ("release_pipeline", 0, 11_700_000),
     ("semester", 0, 34_000),
-    ("services", 0, 6_200_000),
 ];
 
 const HANG_SECS: f64 = 60.0;
@@ -273,7 +269,7 @@ fn fitd_cpu(args: &[&str]) -> (bool, String, f64) {
 #[test]
 fn every_example_builds_within_baseline() {
     for (name, warnings, budget) in EXAMPLES {
-        let src = format!("examples/{name}.fitd");
+        let src = if name == "pipeline" { "docs/pipeline.fitd".to_string() } else { format!("examples/{name}.fitd") };
         let outs = [tmp(&format!("{name}-a.svg")), tmp(&format!("{name}-b.svg"))];
         // A second build runs alongside to catch HashMap order or thread timing leaking into
         // the layout.
@@ -312,14 +308,14 @@ fn centers(lock: &std::path::Path) -> std::collections::HashMap<String, (f64, f6
 #[test]
 fn stable_lock_keeps_nodes_in_place_after_adding_a_leaf() {
     // No font pinned: an edit must not grow the font at the cost of moving most nodes.
-    for (name, last) in [("compiler", "failure"), ("cell_biology", "regulation"), ("group_theory", "disprove")] {
+    for (dir, name, last) in [("examples", "compiler", "failure"), ("tests/fixtures", "cell_biology", "regulation"), ("examples", "group_theory", "disprove")] {
         let lock = tmp(&format!("{name}.lock"));
         let _ = std::fs::remove_file(&lock);
-        let (ok, log) = fitd(&[&format!("examples/{name}.fitd"), "-o", tmp(&format!("{name}-s0.svg")).to_str().unwrap(), "--stable", lock.to_str().unwrap()]);
+        let (ok, log) = fitd(&[&format!("{dir}/{name}.fitd"), "-o", tmp(&format!("{name}-s0.svg")).to_str().unwrap(), "--stable", lock.to_str().unwrap()]);
         assert!(ok, "{log}");
         let before = centers(&lock);
         let src = tmp(&format!("{name}-leaf.fitd"));
-        let text = std::fs::read_to_string(format!("examples/{name}.fitd")).unwrap();
+        let text = std::fs::read_to_string(format!("{dir}/{name}.fitd")).unwrap();
         assert!(text.contains(&format!("node {last} ")), "{name} has no node {last}");
         std::fs::write(&src, text + &format!("\nnode extra \"Extra leaf\"\n{last} -> extra\n")).unwrap();
         let args = [src.to_str().unwrap().to_string(), "-o".into(), tmp(&format!("{name}-s1.svg")).to_str().unwrap().into(), "--stable".into(), lock.to_str().unwrap().into()];
@@ -347,7 +343,7 @@ fn layout_needs_no_fontconfig() {
 fn open_orientation_turns_and_flags_fix_it() {
     // `compiler` keeps warnings on landscape a3 and has none on portrait.
     let src = tmp("turn.fitd");
-    std::fs::write(&src, std::fs::read_to_string("examples/compiler.fitd").unwrap().replace("page a4 portrait margin=1cm", "page a3 margin=1cm")).unwrap();
+    std::fs::write(&src, std::fs::read_to_string("examples/compiler.fitd").unwrap().replace("page 240x360mm margin=1cm", "page a3 margin=1cm")).unwrap();
     let src = src.to_str().unwrap();
     let (ok, log) = fitd(&[src, "-o", tmp("turn.svg").to_str().unwrap()]);
     assert!(ok && log.contains("turned the page to portrait") && log.contains("on 842x1191pt"), "{log}");
@@ -484,7 +480,7 @@ fn watch_rebuilds_on_change() {
 fn watch_cancels_a_slow_build_on_change() {
     use std::io::Read;
     let (src, svg) = (tmp("watch-slow.fitd"), tmp("watch-slow.svg"));
-    std::fs::copy("examples/earth_science.fitd", &src).unwrap();
+    std::fs::copy("tests/fixtures/earth_science.fitd", &src).unwrap();
     let _ = std::fs::remove_file(&svg);
     let mut child = Command::new(env!("CARGO_BIN_EXE_fitd")).args([src.to_str().unwrap(), "-o", svg.to_str().unwrap(), "--watch"]).stderr(std::process::Stdio::piped()).spawn().unwrap();
     let mut err = child.stderr.take().unwrap();
@@ -702,8 +698,8 @@ fn split_pages_each_build_alone() {
 #[test]
 fn readme_shows_pipeline_example_whole() {
     let readme = std::fs::read_to_string("README.md").unwrap();
-    let src = std::fs::read_to_string("examples/pipeline.fitd").unwrap();
-    assert!(readme.contains(&format!("```\n{src}```")), "README code block differs from examples/pipeline.fitd");
+    let src = std::fs::read_to_string("docs/pipeline.fitd").unwrap();
+    assert!(readme.contains(&format!("```\n{src}```")), "README code block differs from docs/pipeline.fitd");
 }
 
 /// glob expands one `dir/prefix*suffix` pattern, sorted as a shell would.
@@ -734,7 +730,7 @@ fn committed_docs_match_a_fresh_build() {
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         let (ok, log) = fitd(&refs);
         assert!(ok, "{line}\n{log}");
-        // Every page of the docs builds clean; only the gallery's examples keep their warnings.
+        // Every page of the docs builds clean; only the examples keep their warnings.
         if !committed.starts_with("examples/") {
             assert!(!log.contains("warning["), "{line}\n{log}");
         }
@@ -751,17 +747,17 @@ fn committed_docs_match_a_fresh_build() {
 #[test]
 fn several_inputs_make_one_pdf() {
     let pdf = tmp("book.pdf");
-    let (ok, log) = fitd(&["examples/pipeline.fitd", "examples/coffee.fitd", "examples/semester.fitd", "-o", pdf.to_str().unwrap()]);
+    let (ok, log) = fitd(&["docs/pipeline.fitd", "examples/coffee.fitd", "examples/semester.fitd", "-o", pdf.to_str().unwrap()]);
     assert!(ok && log.contains("(3 diagrams on 3 pages)"), "{log}");
-    let (ok, log) = fitd(&["examples/pipeline.fitd", "examples/coffee.fitd", "examples/semester.fitd", "--grid", "2x1", "--page", "a3", "-o", pdf.to_str().unwrap()]);
+    let (ok, log) = fitd(&["docs/pipeline.fitd", "examples/coffee.fitd", "examples/semester.fitd", "--grid", "2x1", "--page", "a3", "-o", pdf.to_str().unwrap()]);
     assert!(ok && log.contains("(3 diagrams on 2 pages)") && log.matches("on 595x842pt").count() == 3, "{log}");
-    let (ok, log) = fitd(&["examples/pipeline.fitd", "examples/coffee.fitd", "-o", tmp("book.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&["docs/pipeline.fitd", "examples/coffee.fitd", "-o", tmp("book.svg").to_str().unwrap()]);
     assert!(!ok && log.contains("need -o FILE.pdf"), "{log}");
-    let (ok, log) = fitd(&["examples/pipeline.fitd", "examples/coffee.fitd", "--tikz", "x.tex", "-o", pdf.to_str().unwrap()]);
+    let (ok, log) = fitd(&["docs/pipeline.fitd", "examples/coffee.fitd", "--tikz", "x.tex", "-o", pdf.to_str().unwrap()]);
     assert!(!ok && log.contains("takes one input"), "{log}");
-    let (ok, log) = fitd(&["examples/pipeline.fitd", "tests/fixtures/stress_test.fitd", "-o", tmp("bad.pdf").to_str().unwrap()]);
+    let (ok, log) = fitd(&["docs/pipeline.fitd", "tests/fixtures/stress_test.fitd", "-o", tmp("bad.pdf").to_str().unwrap()]);
     assert!(!ok && log.contains("1 of 2 diagrams failed") && !tmp("bad.pdf").exists(), "{log}");
-    let (ok, log) = fitd(&["examples/pipeline.fitd", "--grid", "2", "-o", pdf.to_str().unwrap()]);
+    let (ok, log) = fitd(&["docs/pipeline.fitd", "--grid", "2", "-o", pdf.to_str().unwrap()]);
     assert!(!ok && log.contains("COLSxROWS"), "{log}");
 }
 

@@ -1,0 +1,70 @@
+# fitd described in fitd: one of each kind of statement, in a small diagram.
+title "fitd, in fitd"
+include "shared/lang_styles.fitd"
+layout layered dir=right
+page 300x160mm landscape margin=6mm
+font 6pt..28pt wrap=12em family="DejaVu Serif"
+theme light palette="#1565C0 #2E7D32 #EF6C00" edge=#455A64 link=#8E24AA label=#37474F background=#FAFAFA text=#212121
+
+node src "Source\n.fitd" .io
+| one statement per line
+node expand "Macros" .macro
+| for, if, def, use, $${names}
+| write $${expr} to show it literally
+node parse "Parser" .stage
+node sema "Analysis" .stage
+node lay "Layout" .stage
+| radial or layered
+node solve "Solver" .stage
+| largest font that fits
+node emit "Output" .io
+| svg, png, pdf, tikz
+src -> expand -> parse -> sema -> lay -> solve -> emit "one format per -o"
+expand ..> sema "errors point at the template line" color=#C62828
+
+# Statements: a loop over a list with an index and a branch per kind.
+for i, s in "node", "edge", "setting"
+  if s == "node"
+    node st${i} "node and | body" .stage
+  else if s == "edge"
+    node st${i} "-> -- ..> .." .stage
+  else
+    node st${i} "title, page, font, theme" .setting
+  end
+  parse -> st${i}
+end
+lay .. al "reads"
+
+# Relations: one template call per family.
+def rel(id, text, note)
+  node ${id} "${text}" .rule
+  | ${note}
+  sema -> ${id}
+end
+use rel("ord", "left-of, above, near, at", "gap=, within=")
+use rel("al", "align", "row, column, top, left")
+node req "require" .rule
+node prf "prefer" .rule
+| weight=2
+sema -- req, prf
+
+# The solver probes fonts from the top; a recursive template writes the probes.
+def probe(n)
+  node probe${n} "font probe ${n}" .note
+  if n > 1
+    use probe(n - 1)
+    probe${n} -> probe${n - 1}
+  end
+end
+use probe(2)
+solve -> probe2
+
+group "Constraints" ord, al, req, prf color=#C62828
+group "Hard and soft" req, prf
+group "Probes" ${names("probe", 1, 2)}
+
+require src at left
+require ord above al
+require align top(expand, parse)
+prefer probe1 near solve within=20em weight=2
+prefer prf below req

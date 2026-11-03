@@ -2,7 +2,7 @@
 # the break, and project deadlines, and links each week to the next.
 title "Compilers, fall term"
 layout layered dir=right bands=3
-page a4 portrait margin=1cm
+page 250x120mm margin=1cm
 font 8pt..24pt wrap=9em
 
 style week color=#78909C
