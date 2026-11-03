@@ -45,7 +45,7 @@ error[E0110]: these 2 constraints cannot all hold at 7pt on this page
 
 ## Tests
 
-`cargo test --release`: unit tests for the lexer, parser, semantic checks, geometry, the solver (queens, pigeonhole, branch and bound, spatial index equivalence), layering, and QuickXplain; end-to-end runs of every example (zero errors, a warning baseline, a CPU-time budget, and two concurrent builds that must match byte for byte), unsat cores, static contradictions, and parse errors. A fuzzer feeds mutated sources to the front end for 2 seconds; `FITD_FUZZ_SECS=1800 cargo test --release fuzz` runs it longer. `tests/fixtures/` holds inputs that fail or strain the solver on purpose.
+`cargo test --release`: unit tests for macro expansion (loops, templates, recursion, the budget, line mapping), the lexer, parser, semantic checks, geometry, the solver (queens, pigeonhole, branch and bound, spatial index equivalence), layering, and QuickXplain; end-to-end runs of every example (zero errors, a warning baseline, a CPU-time budget, and two concurrent builds that must match byte for byte), unsat cores, static contradictions, parse errors, and macro diagnostics across includes. A fuzzer feeds mutated sources, macro lines among them, to the front end for 2 seconds; `FITD_FUZZ_SECS=1800 cargo test --release fuzz` runs it longer. `tests/fixtures/` holds inputs that fail or strain the solver on purpose, and `collatz.fitd`, a template with no fixed bound.
 
 ## Performance
 

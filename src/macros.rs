@@ -336,6 +336,30 @@ fn pieces(line: &str) -> Result<Option<Vec<Piece>>, String> {
     Ok(Some(out))
 }
 
+/// comment_start finds where a statement line's comment begins, as the lexer does: `#` outside
+/// strings and `${...}`, and not right after `=`, where it starts a color.
+fn comment_start(line: &str) -> usize {
+    let (mut in_str, mut depth, mut prev) = (false, 0, ' ');
+    let mut it = line.char_indices().peekable();
+    while let Some((i, c)) = it.next() {
+        match c {
+            '\\' if in_str => {
+                it.next();
+            }
+            '"' => in_str = !in_str,
+            '$' if !in_str && it.peek().is_some_and(|&(_, n)| n == '{') => {
+                it.next();
+                depth += 1;
+            }
+            '}' if depth > 0 && !in_str => depth -= 1,
+            '#' if !in_str && depth == 0 && prev != '=' => return i,
+            _ => {}
+        }
+        prev = c;
+    }
+    line.len()
+}
+
 #[derive(Clone, Debug)]
 enum Iter {
     Range(Expr, Expr),
@@ -400,8 +424,13 @@ fn classify(line: &str) -> Result<Line, String> {
         return Ok(Line::Item(Kind::Plain));
     }
     let Some((w, rest)) = is_kw_line(t) else {
-        return Ok(Line::Item(match pieces(line)? {
-            Some(p) => Kind::Text(p),
+        // A trailing comment is copied as is, so `${` in it is just text.
+        let cut = if t.starts_with('|') { line.len() } else { comment_start(line) };
+        return Ok(Line::Item(match pieces(&line[..cut])? {
+            Some(mut p) => {
+                p.push(Piece::Lit(line[cut..].to_string()));
+                Kind::Text(p)
+            }
             None => Kind::Plain,
         }));
     };
@@ -1028,6 +1057,13 @@ mod tests {
         // Generated lines map back to the template line they came from.
         let k = l.src.text.lines().position(|t| t.trim() == "s2 -> s3").unwrap();
         assert_eq!(l.src.file_line(k + 1), ("t.fitd", 4));
+    }
+
+    #[test]
+    fn comments_are_not_interpolated() {
+        let l = run("for i in 1..1\n  node a${i} \"#${i}\" color=#123  # ${nope}\nend\n");
+        assert!(l.diags.is_empty(), "{:?}", l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        assert_eq!(visible(&l), ["node a1 \"#1\" color=#123  # ${nope}"]);
     }
 
     #[test]

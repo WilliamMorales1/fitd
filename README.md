@@ -57,9 +57,10 @@ cargo build --release
 ./target/release/fitd explain E0110  # explain an error code
 ./target/release/fitd examples/compiler.fitd --watch   # rebuild on save: draft, then full
 ./target/release/fitd split examples/group_theory.fitd  # overview plus one page per branch
+./target/release/fitd examples/fib_calls.fitd -o fib.png  # macros: a recursive template
 ```
 
-Editors: `fitd lsp` is a language server (front-end diagnostics as you type, full layout on save, cancelled by a newer save, go-to-definition and completion for node and style names, including those from included files, whose diagnostics are published under their own names). `editors/vscode/` holds a TextMate grammar packaged as a VS Code extension; copy or symlink it into `~/.vscode/extensions/fitd` for highlighting. `editors/tree-sitter-fitd/` is a tree-sitter grammar with setup for Neovim and Helix.
+Editors: `fitd lsp` is a language server (front-end diagnostics as you type, full layout on save, cancelled by a newer save, go-to-definition and completion for node and style names, including those from included files, whose diagnostics are published under their own names; names built by macros, such as `s${i}`, have no definition to jump to). `editors/vscode/` holds a TextMate grammar packaged as a VS Code extension; copy or symlink it into `~/.vscode/extensions/fitd` for highlighting. `editors/tree-sitter-fitd/` is a tree-sitter grammar with setup for Neovim and Helix.
 
 Tests: `cargo test --release`.
 
@@ -78,7 +79,7 @@ Why not a layout plugin for one of them instead? D2, Mermaid (v11 layouts), and 
 
 ## Docs
 
-- [Language](docs/LANGUAGE.md): grammar, semantics, relations, diagnostics.
+- [Language](docs/LANGUAGE.md): grammar, macros, semantics, relations, diagnostics.
 - [Options and theming](docs/OPTIONS.md): command-line flags, colors, fonts.
 - [Agent skill](skills/fitd/SKILL.md): drawing diagrams with fitd from an AI agent.
 - [Examples](docs/EXAMPLES.md): every example with its rendered output.

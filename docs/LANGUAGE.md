@@ -53,6 +53,23 @@ attr      = NAME "=" value .
 value     = NAME | STRING | NUMBER | COLOR .
 ```
 
+This grammar describes the text after macro expansion. Macro lines have their own, one per line:
+
+```ebnf
+macro     = "for" VAR [ "," VAR ] "in" ( expr ".." expr | item { [ "," ] item } )
+          | "if" expr | "else" [ "if" expr ] | "end"
+          | "def" NAME "(" [ VAR { "," VAR } ] ")"
+          | "use" NAME "(" [ expr { "," expr } ] ")" .
+item      = WORD | STRING | INTEGER .
+expr      = cmp { ( "and" | "or" ) cmp } .
+cmp       = sum [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) sum ] .
+sum       = product { ( "+" | "-" ) product } .
+product   = atom { ( "*" | "/" | "%" ) atom } .
+atom      = INTEGER | STRING | VAR | "names" "(" expr "," expr "," expr ")" | "(" expr ")" .
+```
+
+`${expr}` may appear inside any other line.
+
 `NUMBER` is a digit run with an attached unit or size suffix (`12pt`, `2em`, `594x420mm`); semantic analysis gives it a type.
 
 A statement that fails to parse is reported and skipped to the end of its line, so one typo never hides the errors after it.
@@ -85,21 +102,21 @@ use fib("f", 5)
 
 | Line | Meaning |
 |---|---|
-| `for NAME in LO..HI` | Runs the body once per integer from LO to HI inclusive (none when LO > HI). The loop variable is local to the template call it runs in. |
+| `for NAME in LO..HI` | Runs the body once per integer from LO to HI inclusive (none when LO > HI). |
 | `for NAME in a, b, c` | Runs the body once per item: words (hyphens allowed), numbers, or quoted strings. |
 | `for I, NAME in ...` | Same, with `I` counting from 1. |
 | `if EXPR` / `else if EXPR` / `else` / `end` | Runs the first arm whose condition is true. |
 | `def NAME(a, b)` ... `end` | Defines a template, at the top level only. A template may be used before its `def`, and from included files. |
 | `use NAME(EXPR, ...)` | Expands a template with its parameters bound. |
-| `${EXPR}` | Replaced by the value, anywhere in a line, including strings and `\|` bodies. `$${` is a literal `${`. |
+| `${EXPR}` | Replaced by the value, anywhere in a line, including strings and `\|` bodies but not `#` comments. `$${` is a literal `${`. |
 
-Expressions have integers and strings: `+ - * / %` (floor division and a non-negative remainder), `== != < <= > >=` (ordering on numbers only), `and or`, parentheses, and `names(prefix, lo, hi)`, which gives `prefix1, prefix2, ...` for node lists. `+` joins strings when either side is one. Zero and the empty string are false. Values come from `for` variables and template parameters; there is no assignment.
+Expressions have integers and strings: `+ - * / %` (floor division and a non-negative remainder), `== != < <= > >=` (ordering on numbers only), `and or`, parentheses, and `names(prefix, lo, hi)`, which gives `prefix1, prefix2, ...` for node lists. `+` joins strings when either side is one. Zero and the empty string are false. Values come from `for` variables and template parameters; there is no assignment. A template body sees its own parameters and loop variables plus those set at the top level; a loop variable keeps its last value after the loop.
 
 Macro keywords are recognized only at the start of a line and never before an edge operator, so a node named `end` or `for` still works in `end -> start`.
 
 Templates and `if` make the macro language Turing complete, so expansion may not stop on its own (`tests/fixtures/collatz.fitd` iterates the Collatz map, whose termination for every start is an open problem). Expansion therefore stops after `--expand-budget` steps (default 100000; each directive run and line written is one step) with E0013, and templates may nest at most 200 deep (E0012).
 
-Diagnostics on generated lines show the expanded text at the template line that wrote it. Macro errors point at the macro line and name the `use` sites that led there.
+Diagnostics on generated lines show the expanded text at the template line that wrote it, so their columns count in the expanded text. Macro errors point at the macro line and name the `use` sites that led there; an error repeated by every call of a template is reported once. A line that fails to expand writes nothing, so a following `|` body may also report E0002.
 
 ## Semantics
 
