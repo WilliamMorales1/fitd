@@ -1,5 +1,5 @@
 # file	checks	cpu_seconds
-examples/00-index.fitd	9496463	0.707
+examples/00-index.fitd	18525265	0.707
 examples/coffee.fitd	148100382	4.513
 examples/compiler.fitd	3827207	2.872
 examples/debugging.fitd	17372	0.214
