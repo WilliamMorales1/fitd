@@ -718,29 +718,30 @@ fn glob(pattern: &str) -> Vec<String> {
 
 #[test]
 fn committed_docs_match_a_fresh_build() {
-    let readme = std::fs::read_to_string("README.md").unwrap();
-    let block = readme.split("Rebuild the PDFs").nth(1).unwrap().split("```\n").nth(1).unwrap();
-    let mut built = Vec::new();
-    for line in block.lines() {
-        let mut args: Vec<String> = line.strip_prefix("fitd ").unwrap().split(' ').flat_map(glob).collect();
-        let o = args.iter().position(|a| a == "-o").unwrap() + 1;
-        let committed = std::mem::replace(&mut args[o], String::new());
-        let fresh = tmp(&committed.replace('/', "-"));
-        args[o] = fresh.to_str().unwrap().to_string();
-        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        let (ok, log) = fitd(&refs);
-        assert!(ok, "{line}\n{log}");
-        // Every page of the docs builds clean; only the examples keep their warnings.
-        if !committed.starts_with("examples/") {
-            assert!(!log.contains("warning["), "{line}\n{log}");
-        }
-        assert!(std::fs::read(&committed).ok() == std::fs::read(&fresh).ok(), "{committed} is stale; rebuild it with: {line}");
-        built.extend(args.into_iter().filter(|a| a.ends_with(".fitd")));
-    }
-    for dir in ["docs/language", "docs/options", "docs/internals", "examples"] {
+    // Doc pages render beside their source; examples pick the format that suits each.
+    let mut jobs: Vec<(String, String)> = Vec::new();
+    for dir in ["docs/language", "docs/options", "docs/internals"] {
         for f in glob(&format!("{dir}/*.fitd")) {
-            assert!(built.contains(&f), "{f} is in no PDF");
+            jobs.push((f.clone(), f.replace(".fitd", ".png")));
         }
+    }
+    jobs.push(("docs/pipeline.fitd".into(), "docs/pipeline.png".into()));
+    for (name, ext) in [("00-index", "png"), ("coffee", "svg"), ("compiler", "png"), ("debugging", "pdf"), ("fib_calls", "svg"), ("fitd_language", "pdf"), ("group_theory", "png"), ("neural_net", "svg"), ("release_pipeline", "png"), ("semester", "png")] {
+        let out = if name == "00-index" { "index" } else { name };
+        jobs.push((format!("examples/{name}.fitd"), format!("examples/out/{out}.{ext}")));
+    }
+    for (src, committed) in &jobs {
+        let fresh = tmp(&committed.replace('/', "-"));
+        let (ok, log) = fitd(&[src, "-o", fresh.to_str().unwrap()]);
+        assert!(ok, "{src}\n{log}");
+        // Every page of the docs builds clean; only the examples keep their warnings.
+        if !src.starts_with("examples/") {
+            assert!(!log.contains("warning["), "{src}\n{log}");
+        }
+        assert!(std::fs::read(committed).ok() == std::fs::read(&fresh).ok(), "{committed} is stale; rebuild it from {src}");
+    }
+    for f in glob("examples/*.fitd") {
+        assert!(jobs.iter().any(|(s, _)| *s == f), "{f} is in no render");
     }
 }
 

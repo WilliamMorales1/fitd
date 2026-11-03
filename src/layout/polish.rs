@@ -67,6 +67,21 @@ pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize, 
     if movable.is_empty() {
         return soft_cost;
     }
+    // Tree neighbors of each node's index, so a move can snap onto a neighbor's center line.
+    let mut idx = vec![usize::MAX; ctx.tree.iter().flat_map(|&(a, b)| [a, b]).chain(sc.node.iter().copied()).max().map_or(0, |m| m + 1)];
+    for (i, &u) in sc.node.iter().enumerate() {
+        idx[u] = i;
+    }
+    let mut nbr: Vec<Vec<usize>> = vec![Vec::new(); nv];
+    if let Some(down) = ctx.flow {
+        let _ = down;
+        for &(a, b) in &ctx.tree {
+            if idx[a] != usize::MAX && idx[b] != usize::MAX {
+                nbr[idx[a]].push(idx[b]);
+                nbr[idx[b]].push(idx[a]);
+            }
+        }
+    }
     let mut rng: u64 = 0x9E37_79B9_7F4A_7C15;
     let mut next = |k: usize| {
         rng ^= rng << 13;
@@ -94,7 +109,19 @@ pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize, 
         if near[i].1.is_empty() {
             continue;
         }
-        let a = near[i].1[next(near[i].1.len())];
+        let mut a = near[i].1[next(near[i].1.len())];
+        if let (Some(down), false) = (ctx.flow, nbr[i].is_empty())
+            && next(3) == 0
+        {
+            // Snap onto the center line of a random tree neighbor: random picks rarely land exactly.
+            let w = nbr[i][next(nbr[i].len())];
+            let c = sc.at[w][val[w] as usize];
+            let off = |a: u32| {
+                let p = sc.at[i][a as usize];
+                if down { (p.0 - c.0).abs() } else { (p.1 - c.1).abs() }
+            };
+            a = near[i].1.iter().copied().min_by(|&x, &y| off(x).total_cmp(&off(y)).then(x.cmp(&y))).unwrap_or(a);
+        }
         if a == old {
             continue;
         }
@@ -122,5 +149,9 @@ pub(super) fn polish(sc: &Scene, ctx: &Readable, val: &mut [u32], moves: usize, 
         }
     }
     val.copy_from_slice(&best_val);
+    if std::env::var("FITD_DBG").is_ok() {
+        let r: Vec<Rect> = (0..nv).map(|v| sc.node_rect(v, val)).collect();
+        eprintln!("{:?} hits {:?}", ctx.score(&r), ctx.incremental(&r).debug_hits());
+    }
     best_soft
 }

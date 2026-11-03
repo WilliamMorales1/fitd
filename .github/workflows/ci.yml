@@ -37,4 +37,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
       # Solver checks are deterministic, so they gate on any machine; time is only reported.
-      - run: python3 scripts/bench.py --runs 1 --check bench/baseline.tsv
+      - run: python3 bench/bench.py --runs 1 --check bench/baseline.tsv

@@ -9,7 +9,6 @@ style right color=#6A1B9A
 
 node ex "examples/*.fitd"
 | each builds alone with no flags; each has its own page size
-| gallery.pdf holds them all, one page each after this one
 | every one: -> and ..> edges, edge labels, node bodies, style
 | fonts: all give a range, debugging fixes one size
 

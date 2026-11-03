@@ -48,7 +48,7 @@ const W_PROX: f64 = 1.0;
 const W_LINK: f64 = 0.3;
 const W_GROUP: f64 = 2.0;
 const W_ANGLE: f64 = 20.0;
-const W_ALIGN: f64 = 2.0;
+const W_ALIGN: f64 = 300.0;
 const W_SPREAD: f64 = 4000.0;
 
 /// Cells across the page's long side for the spread term.
@@ -440,6 +440,10 @@ impl<'a> Incremental<'a> {
         let s = self.score();
         std::mem::swap(&mut self.cur, &mut self.trial);
         s
+    }
+
+    pub fn debug_hits(&self) -> Vec<usize> {
+        self.cur.link_hits.clone()
     }
 
     pub fn accept(&mut self) {

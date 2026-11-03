@@ -1,6 +1,6 @@
 # fitd
 
-A small diagram language with a constraint solver for layout. Write nodes, edges, and layout constraints in a plain text file; fitd finds the largest font that fits a fixed page, satisfies every `require`, trades off every `prefer`, then verifies the result before writing SVG, PNG, or TikZ.
+A small diagram language with a constraint solver for layout. Write nodes, edges, and layout constraints in a plain text file; fitd finds the largest font that fits a fixed page, satisfies every `require`, trades off every `prefer`, then verifies the result before writing SVG, PNG, PDF, or TikZ.
 
 ```
 title "How fitd compiles a diagram"
@@ -32,7 +32,7 @@ prefer out at right weight=2
 
 ![docs/pipeline.fitd rendered to PNG](docs/pipeline.png)
 
-That is the whole file. [examples/](examples/) holds larger ones, each rendered in the format that suits it (PNG, SVG, or PDF in [examples/out/](examples/out/)), including [the full pipeline](examples/compiler.fitd). The [cheat sheet](docs/cheatsheet.pdf) covers the language, and [Docs](#docs) lists the rest.
+That is the whole file. [examples/](examples/) holds larger ones, each rendered in the format that suits it (PNG, SVG, or PDF in [examples/out/](examples/out/)), including [the full pipeline](examples/compiler.fitd). Longer docs: [language](docs/language.md), [options](docs/options.md), [internals](docs/internals.md).
 
 ## Dependencies
 
@@ -70,36 +70,3 @@ Those languages have far wider adoption and tooling; `fitd import` translates Gr
 - Unsat cores at source lines: when `require`s conflict, a minimal conflicting set is reported, rustc style, at the lines that wrote them.
 
 Why not a layout plugin for one of them instead? D2, Mermaid (v11 layouts), and Graphviz all accept external layout engines, but each measures text before layout and renders after it. A plugin receives boxes already sized, so it cannot search for the largest font that fits the page, and the checker would verify a drawing other than the one written. D2 also rejects unknown keywords and Mermaid has no attribute syntax, so `require` and `prefer` would live in comments. The language front end is about a quarter of the code; the solver and checker, which a plugin would cripple, are the rest.
-
-## Docs
-
-The docs are fitd diagrams, collected into PDFs by fitd itself, every page A4. Text in them is selectable and searchable.
-
-| PDF                                     | What is in it                                                                                                            |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| [Cheat sheet](docs/cheatsheet.pdf)      | 4 pages: statements, relations, macros, and flags. Start here.                                                           |
-| [Language](docs/language.pdf)           | 8 pages: statements, lexing, relations, groups, macros, a macro example, how layouts are refused, every diagnostic code. |
-| [Options](docs/options.pdf)             | 5 pages: flags and subcommands, theming, `--stable`, `--watch`, `fitd split`.                                            |
-| [Internals](docs/internals.pdf)         | 3 pages: the pipeline file by file, how the solver picks a font, tests and benchmarks.                                   |
-| [Examples](examples/out/)               | 10 renders: an index of features, then every file in [examples/](examples/), each in its own format and page size.        |
-
-Each page's source sits in [docs/language/](docs/language/), [docs/options/](docs/options/), or [docs/internals/](docs/internals/), numbered in reading order. `fitd guide` prints the language as text on one page, and `fitd explain CODE` prints the long form of any diagnostic. [skills/fitd/SKILL.md](skills/fitd/SKILL.md) covers drawing diagrams from an AI agent.
-
-Rebuild the PDFs after changing a source or fitd itself. `cargo test --release` fails if a committed PDF differs from a fresh build of these commands:
-
-```
-fitd docs/language/*.fitd -o docs/language.pdf
-fitd docs/options/*.fitd -o docs/options.pdf
-fitd docs/internals/*.fitd -o docs/internals.pdf
-fitd examples/00-index.fitd -o examples/out/index.png
-fitd examples/coffee.fitd -o examples/out/coffee.svg
-fitd examples/compiler.fitd -o examples/out/compiler.png
-fitd examples/debugging.fitd -o examples/out/debugging.pdf
-fitd examples/fib_calls.fitd -o examples/out/fib_calls.svg
-fitd examples/fitd_language.fitd -o examples/out/fitd_language.pdf
-fitd examples/group_theory.fitd -o examples/out/group_theory.png
-fitd examples/neural_net.fitd -o examples/out/neural_net.svg
-fitd examples/release_pipeline.fitd -o examples/out/release_pipeline.png
-fitd examples/semester.fitd -o examples/out/semester.png
-fitd docs/pipeline.fitd -o docs/pipeline.png
-```

@@ -54,7 +54,7 @@ node font "font LO..HI wrap=EM family=\"NAME\"" .setting
 | the solver maximizes the body font in the range; one size fixes it
 | default DejaVu Serif, built in; family needs fc-match
 node theme "theme light|dark|mono key=#hex" .setting
-| see options.pdf, page 2
+| see options.md, theming
 node style "style NAME key=value" .setting
 | node attributes win over styles, applied in order
 settings -> titlestmt, rootstmt, layout, layered, page, font, theme, style
