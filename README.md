@@ -75,13 +75,13 @@ Why not a layout plugin for one of them instead? D2, Mermaid (v11 layouts), and 
 
 The docs are fitd diagrams, collected into PDFs by fitd itself, every page A4. Text in them is selectable and searchable.
 
-| PDF | What is in it |
-| --- | --- |
-| [Cheat sheet](docs/cheatsheet.pdf) | 4 pages: statements, relations, macros, and flags. Start here. |
-| [Language](docs/language.pdf) | 8 pages: statements, lexing, relations, groups, macros, a macro example, how layouts are refused, every diagnostic code. |
-| [Options](docs/options.pdf) | 5 pages: flags and subcommands, theming, `--stable`, `--watch`, `fitd split`. |
-| [Internals](docs/internals.pdf) | 3 pages: the pipeline file by file, how the solver picks a font, tests and benchmarks. |
-| [Example gallery](examples/gallery.pdf) | 14 pages: an index of features, then every file in [examples/](examples/) but the README's `pipeline.fitd`. |
+| PDF                                     | What is in it                                                                                                            |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [Cheat sheet](docs/cheatsheet.pdf)      | 4 pages: statements, relations, macros, and flags. Start here.                                                           |
+| [Language](docs/language.pdf)           | 8 pages: statements, lexing, relations, groups, macros, a macro example, how layouts are refused, every diagnostic code. |
+| [Options](docs/options.pdf)             | 5 pages: flags and subcommands, theming, `--stable`, `--watch`, `fitd split`.                                            |
+| [Internals](docs/internals.pdf)         | 3 pages: the pipeline file by file, how the solver picks a font, tests and benchmarks.                                   |
+| [Example gallery](examples/gallery.pdf) | 14 pages: an index of features, then every file in [examples/](examples/) but the README's `pipeline.fitd`.              |
 
 Each page's source sits in [docs/language/](docs/language/), [docs/options/](docs/options/), or [docs/internals/](docs/internals/), numbered in reading order. `fitd guide` prints the language as text on one page, and `fitd explain CODE` prints the long form of any diagnostic. [skills/fitd/SKILL.md](skills/fitd/SKILL.md) covers drawing diagrams from an AI agent.
 
@@ -91,7 +91,6 @@ Rebuild the PDFs after changing a source or fitd itself. `cargo test --release` 
 fitd docs/language/*.fitd -o docs/language.pdf
 fitd docs/options/*.fitd -o docs/options.pdf
 fitd docs/internals/*.fitd -o docs/internals.pdf
-fitd docs/language/01-statements.fitd docs/language/03-relations.fitd docs/language/05-macros.fitd docs/options/01-options.fitd -o docs/cheatsheet.pdf
-fitd examples/00-index.fitd examples/cell_biology.fitd examples/coffee.fitd examples/compiler.fitd examples/debugging.fitd examples/deepseek_v4_1_flash.fitd examples/earth_science.fitd examples/fib_calls.fitd examples/french_history.fitd examples/group_theory.fitd examples/neural_net.fitd examples/release_pipeline.fitd examples/semester.fitd examples/services.fitd -o examples/gallery.pdf
-fitd examples/pipeline.fitd -o docs/pipeline.png
+fitd examples/*.fitd -o examples/gallery.pdf
+fitd docs/pipeline.fitd -o docs/pipeline.png
 ```

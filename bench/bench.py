@@ -6,8 +6,9 @@ Markdown table. With --check BASELINE it fails when solver checks, which are det
 grow more than 25% over the baseline; with --time it also gates CPU time, which only makes
 sense on the machine that recorded the baseline. --write BASELINE records a new one.
 
-Usage: scripts/bench.py [--runs N] [--check FILE [--time]] [--write FILE]
+Usage: bench/bench.py [--runs N] [--check FILE [--time]] [--write FILE]
 """
+
 import argparse
 import os
 import re
@@ -25,7 +26,12 @@ LIMIT = 1.25
 
 def run(src: Path, out: Path) -> dict:
     start = time.perf_counter()
-    proc = subprocess.Popen([str(FITD), str(src), "-o", str(out)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    proc = subprocess.Popen(
+        [str(FITD), str(src), "-o", str(out)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
     log = proc.stderr.read()
     _, status, usage = os.wait4(proc.pid, 0)
     wall = time.perf_counter() - start
@@ -48,18 +54,31 @@ def main() -> int:
     ap.add_argument("--write")
     args = ap.parse_args()
     subprocess.run(["cargo", "build", "--release", "--quiet"], cwd=ROOT, check=True)
-    files = sorted((ROOT / "examples").glob("*.fitd")) + sorted((ROOT / "tests" / "fixtures").glob("*.fitd"))
+    files = sorted((ROOT / "examples").glob("*.fitd")) + sorted(
+        (ROOT / "tests" / "fixtures").glob("*.fitd")
+    )
     rows = {}
     with tempfile.TemporaryDirectory() as tmp:
         for f in files:
             runs = [run(f, Path(tmp) / f"{f.stem}.svg") for _ in range(args.runs)]
-            r = runs[0] | {"wall": statistics.median(x["wall"] for x in runs), "cpu": statistics.median(x["cpu"] for x in runs)}
+            r = runs[0] | {
+                "wall": statistics.median(x["wall"] for x in runs),
+                "cpu": statistics.median(x["cpu"] for x in runs),
+            }
             rows[f"{f.parent.name}/{f.name}"] = r
     print("| File | Wall s | CPU s | Checks | Font pt |")
     print("| --- | ---: | ---: | ---: | ---: |")
     for name, r in rows.items():
-        font = f"{r['font']:.1f}" if r["ok"] and r["font"] else "fails (by design)" if not r["ok"] else "-"
-        print(f"| `{name}` | {r['wall']:.2f} | {r['cpu']:.2f} | {r['checks']:,} | {font} |")
+        font = (
+            f"{r['font']:.1f}"
+            if r["ok"] and r["font"]
+            else "fails (by design)"
+            if not r["ok"]
+            else "-"
+        )
+        print(
+            f"| `{name}` | {r['wall']:.2f} | {r['cpu']:.2f} | {r['checks']:,} | {font} |"
+        )
     if args.write:
         lines = [f"{n}\t{r['checks']}\t{r['cpu']:.3f}\n" for n, r in rows.items()]
         Path(args.write).write_text("# file\tchecks\tcpu_seconds\n" + "".join(lines))
