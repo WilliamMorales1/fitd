@@ -17,7 +17,7 @@
 //!   along the flow, so nodes line up on a grid.
 //! - Spread: ink is evenly distributed over the page, without large holes or dense knots.
 
-use crate::geom::{segment_hits_rect, segments_cross, Rect, P};
+use crate::geom::{P, Rect, segment_hits_rect, segments_cross};
 
 pub struct Input<'a> {
     pub rects: &'a [Rect],
@@ -87,17 +87,28 @@ fn curve(c: &[P], a: usize, b: usize, bow: f64) -> [P; 5] {
     std::array::from_fn(|i| {
         let t = i as f64 / 4.0;
         let (u, w) = ((1.0 - t) * (1.0 - t), 2.0 * (1.0 - t) * t);
-        (u * pa.0 + w * k.0 + t * t * pb.0, u * pa.1 + w * k.1 + t * t * pb.1)
+        (
+            u * pa.0 + w * k.0 + t * t * pb.0,
+            u * pa.1 + w * k.1 + t * t * pb.1,
+        )
     })
 }
 
 fn bbox(pts: &[P]) -> Rect {
-    pts.iter().fold(Rect { x0: f64::INFINITY, y0: f64::INFINITY, x1: f64::NEG_INFINITY, y1: f64::NEG_INFINITY }, |r, &(px, py)| Rect {
-        x0: r.x0.min(px),
-        y0: r.y0.min(py),
-        x1: r.x1.max(px),
-        y1: r.y1.max(py),
-    })
+    pts.iter().fold(
+        Rect {
+            x0: f64::INFINITY,
+            y0: f64::INFINITY,
+            x1: f64::NEG_INFINITY,
+            y1: f64::NEG_INFINITY,
+        },
+        |r, &(px, py)| Rect {
+            x0: r.x0.min(px),
+            y0: r.y0.min(py),
+            x1: r.x1.max(px),
+            y1: r.y1.max(py),
+        },
+    )
 }
 
 /// rails are the two routes of a link in a flowchart around every box between its ends, one
@@ -108,8 +119,17 @@ fn rails(x: &Input, c: &[P], a: usize, b: usize, down: bool) -> [[P; 4]; 2] {
     let join = |m: f64, k: f64| if down { (k, m) } else { (m, k) };
     let (ma, mb) = (split(c[a]).0, split(c[b]).0);
     let (lo, hi) = (ma.min(mb), ma.max(mb));
-    let (mut k0, mut k1) = (split(c[a]).1.min(split(c[b]).1), split(c[a]).1.max(split(c[b]).1));
-    for r in x.rects.iter().enumerate().filter(|&(u, _)| u != a && u != b).map(|(_, r)| r) {
+    let (mut k0, mut k1) = (
+        split(c[a]).1.min(split(c[b]).1),
+        split(c[a]).1.max(split(c[b]).1),
+    );
+    for r in x
+        .rects
+        .iter()
+        .enumerate()
+        .filter(|&(u, _)| u != a && u != b)
+        .map(|(_, r)| r)
+    {
         let ((m0, n0), (m1, n1)) = (split((r.x0, r.y0)), split((r.x1, r.y1)));
         if m1 > lo && m0 < hi {
             (k0, k1) = (k0.min(n0), k1.max(n1));
@@ -131,13 +151,25 @@ fn path_hits(x: &Input, c: &[P], a: usize, b: usize, pts: &[P]) -> usize {
     let mut hits = 0;
     for &(p, q) in x.tree.iter().chain(x.links) {
         let (cp, cq) = (c[p], c[q]);
-        let seg = Rect { x0: cp.0.min(cq.0), y0: cp.1.min(cq.1), x1: cp.0.max(cq.0), y1: cp.1.max(cq.1) };
-        if (p, q) != (a, b) && seg.intersects(&bb) && pts.windows(2).any(|s| segments_cross(s[0], s[1], cp, cq)) {
+        let seg = Rect {
+            x0: cp.0.min(cq.0),
+            y0: cp.1.min(cq.1),
+            x1: cp.0.max(cq.0),
+            y1: cp.1.max(cq.1),
+        };
+        if (p, q) != (a, b)
+            && seg.intersects(&bb)
+            && pts.windows(2).any(|s| segments_cross(s[0], s[1], cp, cq))
+        {
             hits += 1;
         }
     }
     for u in (0..x.rects.len()).filter(|&u| u != a && u != b) {
-        if x.rects[u].intersects(&bb) && pts.windows(2).any(|s| segment_hits_rect(s[0], s[1], &x.rects[u])) {
+        if x.rects[u].intersects(&bb)
+            && pts
+                .windows(2)
+                .any(|s| segment_hits_rect(s[0], s[1], &x.rects[u]))
+        {
             hits += 1;
         }
     }
@@ -208,7 +240,11 @@ pub struct Incremental<'a> {
 impl<'a> Incremental<'a> {
     pub fn new(x: &Input<'a>) -> Incremental<'a> {
         let n = x.rects.len();
-        let (mut edges_at, mut links_at, mut nbrs) = (vec![Vec::new(); n], vec![Vec::new(); n], vec![Vec::new(); n]);
+        let (mut edges_at, mut links_at, mut nbrs) = (
+            vec![Vec::new(); n],
+            vec![Vec::new(); n],
+            vec![Vec::new(); n],
+        );
         for (k, &(a, b)) in x.tree.iter().enumerate() {
             edges_at[a].push(k);
             edges_at[b].push(k);
@@ -219,7 +255,19 @@ impl<'a> Incremental<'a> {
             links_at[a].push(j);
             links_at[b].push(j);
         }
-        let mut inc = Incremental { tree: x.tree, links: x.links, branch: x.branch, flow: x.flow, page: x.page, unit: x.unit, edges_at, links_at, nbrs, cur: Terms::default(), trial: Terms::default() };
+        let mut inc = Incremental {
+            tree: x.tree,
+            links: x.links,
+            branch: x.branch,
+            flow: x.flow,
+            page: x.page,
+            unit: x.unit,
+            edges_at,
+            links_at,
+            nbrs,
+            cur: Terms::default(),
+            trial: Terms::default(),
+        };
         inc.init(x.rects);
         inc
     }
@@ -230,7 +278,12 @@ impl<'a> Incremental<'a> {
 
     fn init(&mut self, rects: &[Rect]) {
         let (n, e) = (rects.len(), self.tree.len());
-        let mut t = Terms { rects: rects.to_vec(), c: rects.iter().map(center).collect(), cross: vec![false; e * e], ..Terms::default() };
+        let mut t = Terms {
+            rects: rects.to_vec(),
+            c: rects.iter().map(center).collect(),
+            cross: vec![false; e * e],
+            ..Terms::default()
+        };
         for k in 0..e {
             for l in k + 1..e {
                 t.cross[k * e + l] = self.crosses(&t.c, k, l);
@@ -238,13 +291,23 @@ impl<'a> Incremental<'a> {
             }
         }
         t.prox = (0..e).map(|k| self.prox(&t.rects, k)).collect();
-        t.link_prox = (0..self.links.len()).map(|j| self.link_prox(&t.rects, j)).collect();
+        t.link_prox = (0..self.links.len())
+            .map(|j| self.link_prox(&t.rects, j))
+            .collect();
         t.own = (0..e).map(|k| self.own(&t.rects, k)).collect();
         t.other = (0..e).map(|k| self.other(&t.rects, k)).collect();
         t.angles = (0..n).map(|v| self.angle(&t.c, v)).collect();
         t.align = (0..e).map(|k| self.align(&t.c, k)).collect();
         t.link_hits = vec![0; self.links.len()];
-        t.link_bb = vec![Rect { x0: 0.0, y0: 0.0, x1: 0.0, y1: 0.0 }; self.links.len()];
+        t.link_bb = vec![
+            Rect {
+                x0: 0.0,
+                y0: 0.0,
+                x1: 0.0,
+                y1: 0.0
+            };
+            self.links.len()
+        ];
         for j in 0..self.links.len() {
             self.refresh_link(&mut t, j);
         }
@@ -280,7 +343,9 @@ impl<'a> Incremental<'a> {
 
     fn other(&self, r: &[Rect], k: usize) -> (f64, usize) {
         let v = self.tree[k].1;
-        let Some(bv) = self.branch[v] else { return (f64::MAX, usize::MAX) };
+        let Some(bv) = self.branch[v] else {
+            return (f64::MAX, usize::MAX);
+        };
         let mut best = (f64::MAX, usize::MAX);
         for u in (0..r.len()).filter(|&u| self.branch[u].is_some_and(|bu| bu != bv)) {
             let g = gap(&r[v], &r[u]);
@@ -295,7 +360,10 @@ impl<'a> Incremental<'a> {
         if self.nbrs[v].len() < 2 {
             return 0.0;
         }
-        let mut d: Vec<f64> = self.nbrs[v].iter().map(|&u| (c[u].1 - c[v].1).atan2(c[u].0 - c[v].0)).collect();
+        let mut d: Vec<f64> = self.nbrs[v]
+            .iter()
+            .map(|&u| (c[u].1 - c[v].1).atan2(c[u].0 - c[v].0))
+            .collect();
         d.sort_by(f64::total_cmp);
         let target = (std::f64::consts::TAU / d.len() as f64).min(std::f64::consts::FRAC_PI_4);
         let mut prev = d[d.len() - 1] - std::f64::consts::TAU;
@@ -310,16 +378,35 @@ impl<'a> Incremental<'a> {
     fn align(&self, c: &[P], k: usize) -> f64 {
         let Some(down) = self.flow else { return 0.0 };
         let (a, b) = self.tree[k];
-        let off = if down { c[a].0 - c[b].0 } else { c[a].1 - c[b].1 };
+        let off = if down {
+            c[a].0 - c[b].0
+        } else {
+            c[a].1 - c[b].1
+        };
         W_ALIGN * self.em(off.abs())
     }
 
     fn refresh_link(&self, t: &mut Terms, j: usize) {
         let (a, b) = self.links[j];
-        let x = Input { rects: &t.rects, tree: self.tree, links: self.links, branch: self.branch, flow: self.flow, page: self.page, unit: self.unit };
+        let x = Input {
+            rects: &t.rects,
+            tree: self.tree,
+            links: self.links,
+            branch: self.branch,
+            flow: self.flow,
+            page: self.page,
+            unit: self.unit,
+        };
         // The router later picks a bend, or in a flowchart a detour; charge the link its best.
-        t.link_hits[j] = BENDS.iter().map(|&bow| link_hits(&x, &t.c, a, b, bow)).min().unwrap_or(0);
-        let mut all: Vec<P> = BENDS.iter().flat_map(|&bow| curve(&t.c, a, b, bow)).collect();
+        t.link_hits[j] = BENDS
+            .iter()
+            .map(|&bow| link_hits(&x, &t.c, a, b, bow))
+            .min()
+            .unwrap_or(0);
+        let mut all: Vec<P> = BENDS
+            .iter()
+            .flat_map(|&bow| curve(&t.c, a, b, bow))
+            .collect();
         if let Some(down) = self.flow {
             for rail in rails(&x, &t.c, a, b, down) {
                 t.link_hits[j] = t.link_hits[j].min(path_hits(&x, &t.c, a, b, &rail));
@@ -333,14 +420,24 @@ impl<'a> Incremental<'a> {
     fn cells(&self) -> (usize, usize, f64) {
         let (pw, ph) = (self.page.x1 - self.page.x0, self.page.y1 - self.page.y0);
         let cell = pw.max(ph) / CELLS as f64;
-        ((pw / cell).ceil() as usize, (ph / cell).ceil() as usize, cell)
+        (
+            (pw / cell).ceil() as usize,
+            (ph / cell).ceil() as usize,
+            cell,
+        )
     }
 
     fn add_cover(&self, cover: &mut [f64], r: &Rect, sign: f64) {
         let (nx, ny, cell) = self.cells();
         let pg = &self.page;
-        let (i0, i1) = (((r.x0 - pg.x0) / cell).floor().max(0.0) as usize, (((r.x1 - pg.x0) / cell).ceil() as usize).min(nx));
-        let (j0, j1) = (((r.y0 - pg.y0) / cell).floor().max(0.0) as usize, (((r.y1 - pg.y0) / cell).ceil() as usize).min(ny));
+        let (i0, i1) = (
+            ((r.x0 - pg.x0) / cell).floor().max(0.0) as usize,
+            (((r.x1 - pg.x0) / cell).ceil() as usize).min(nx),
+        );
+        let (j0, j1) = (
+            ((r.y0 - pg.y0) / cell).floor().max(0.0) as usize,
+            (((r.y1 - pg.y0) / cell).ceil() as usize).min(ny),
+        );
         for i in i0..i1 {
             for j in j0..j1 {
                 let cx = pg.x0 + i as f64 * cell;
@@ -358,7 +455,12 @@ impl<'a> Incremental<'a> {
         let hits: usize = t.ncross + t.link_hits.iter().sum::<usize>();
         s.crossings = W_CROSS * hits as f64;
         s.proximity = t.prox.iter().sum::<f64>() + t.link_prox.iter().sum::<f64>();
-        s.grouping = t.own.iter().zip(&t.other).map(|(&own, &(other, _))| W_GROUP * self.em((own - other).max(0.0))).sum();
+        s.grouping = t
+            .own
+            .iter()
+            .zip(&t.other)
+            .map(|(&own, &(other, _))| W_GROUP * self.em((own - other).max(0.0)))
+            .sum();
         s.angles = t.angles.iter().sum();
         if self.flow.is_some() {
             // A flowchart's shape follows its flow, so even coverage is not a goal there.
@@ -367,7 +469,8 @@ impl<'a> Incremental<'a> {
         }
         // Coverage per cell; the penalty is the variance across cells.
         let mean = t.cover.iter().sum::<f64>() / t.cover.len() as f64;
-        s.spread = W_SPREAD * t.cover.iter().map(|k| (k - mean).powi(2)).sum::<f64>() / t.cover.len() as f64;
+        s.spread = W_SPREAD * t.cover.iter().map(|k| (k - mean).powi(2)).sum::<f64>()
+            / t.cover.len() as f64;
         s
     }
 
@@ -401,7 +504,9 @@ impl<'a> Incremental<'a> {
                 t.other[k] = self.other(&t.rects, k);
                 continue;
             }
-            let (Some(bv), Some(bu)) = (self.branch[v], self.branch[u]) else { continue };
+            let (Some(bv), Some(bu)) = (self.branch[v], self.branch[u]) else {
+                continue;
+            };
             if bu == bv {
                 continue;
             }
@@ -419,7 +524,12 @@ impl<'a> Incremental<'a> {
         // A link's count changes only if it ends at `u`, or `u`'s box or an edge at `u` came
         // near the link, before or after the move.
         let (was, now) = (center(&old), t.c[u]);
-        let seg = |p: P, q: P| Rect { x0: p.0.min(q.0), y0: p.1.min(q.1), x1: p.0.max(q.0), y1: p.1.max(q.1) };
+        let seg = |p: P, q: P| Rect {
+            x0: p.0.min(q.0),
+            y0: p.1.min(q.1),
+            x1: p.0.max(q.0),
+            y1: p.1.max(q.1),
+        };
         for j in 0..self.links.len() {
             let (a, b) = self.links[j];
             let bb = t.link_bb[j];
@@ -427,7 +537,16 @@ impl<'a> Incremental<'a> {
                 || b == u
                 || old.intersects(&bb)
                 || r.intersects(&bb)
-                || self.nbrs[u].iter().chain(self.links_at[u].iter().map(|&i| if self.links[i].0 == u { &self.links[i].1 } else { &self.links[i].0 })).any(|&v| seg(was, t.c[v]).intersects(&bb) || seg(now, t.c[v]).intersects(&bb));
+                || self.nbrs[u]
+                    .iter()
+                    .chain(self.links_at[u].iter().map(|&i| {
+                        if self.links[i].0 == u {
+                            &self.links[i].1
+                        } else {
+                            &self.links[i].0
+                        }
+                    }))
+                    .any(|&v| seg(was, t.c[v]).intersects(&bb) || seg(now, t.c[v]).intersects(&bb));
             if near {
                 self.refresh_link(&mut t, j);
             }
@@ -457,40 +576,94 @@ mod tests {
 
     #[test]
     fn incremental_matches_full_score() {
-        let mut rects: Vec<Rect> = (0..8).map(|i| Rect::centered(((i * 7 % 5) as f64 * 9.0 - 20.0, (i * 3 % 4) as f64 * 11.0 - 15.0), 6.0, 4.0)).collect();
+        let mut rects: Vec<Rect> = (0..8)
+            .map(|i| {
+                Rect::centered(
+                    (
+                        (i * 7 % 5) as f64 * 9.0 - 20.0,
+                        (i * 3 % 4) as f64 * 11.0 - 15.0,
+                    ),
+                    6.0,
+                    4.0,
+                )
+            })
+            .collect();
         let tree = [(0, 1), (0, 2), (1, 3), (1, 4), (2, 5), (2, 6), (0, 7)];
         let links = [(3, 6), (4, 5)];
-        let branch = [None, Some(1), Some(2), Some(1), Some(1), Some(2), Some(2), Some(7)];
+        let branch = [
+            None,
+            Some(1),
+            Some(2),
+            Some(1),
+            Some(1),
+            Some(2),
+            Some(2),
+            Some(7),
+        ];
         for flow in [None, Some(true)] {
-            let x = Input { rects: &rects.clone(), tree: &tree, links: &links, branch: &branch, flow, page: Rect::centered((0.0, 0.0), 100.0, 80.0), unit: 1.0 };
+            let x = Input {
+                rects: &rects.clone(),
+                tree: &tree,
+                links: &links,
+                branch: &branch,
+                flow,
+                page: Rect::centered((0.0, 0.0), 100.0, 80.0),
+                unit: 1.0,
+            };
             let mut inc = Incremental::new(&x);
             let mut rng: u64 = 12345;
             for step in 0..300 {
-                rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                rng = rng
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 let u = (rng >> 33) as usize % rects.len();
-                let at = (((rng >> 13) % 80) as f64 - 40.0, ((rng >> 23) % 60) as f64 - 30.0);
+                let at = (
+                    ((rng >> 13) % 80) as f64 - 40.0,
+                    ((rng >> 23) % 60) as f64 - 30.0,
+                );
                 let r = Rect::centered(at, 6.0, 4.0);
                 let got = inc.try_move(u, r);
                 if step % 3 != 0 {
                     inc.accept();
                     rects[u] = r;
                     let want = score(&Input { rects: &rects, ..x });
-                    assert!((got.total() - want.total()).abs() < 1e-6, "{got:?} vs {want:?}");
+                    assert!(
+                        (got.total() - want.total()).abs() < 1e-6,
+                        "{got:?} vs {want:?}"
+                    );
                 }
             }
         }
     }
 
-    fn input<'a>(rects: &'a [Rect], tree: &'a [(usize, usize)], branch: &'a [Option<usize>]) -> Input<'a> {
-        Input { rects, tree, links: &[], branch, flow: None, page: Rect::centered((0.0, 0.0), 100.0, 100.0), unit: 1.0 }
+    fn input<'a>(
+        rects: &'a [Rect],
+        tree: &'a [(usize, usize)],
+        branch: &'a [Option<usize>],
+    ) -> Input<'a> {
+        Input {
+            rects,
+            tree,
+            links: &[],
+            branch,
+            flow: None,
+            page: Rect::centered((0.0, 0.0), 100.0, 100.0),
+            unit: 1.0,
+        }
     }
 
     #[test]
     fn nearer_child_scores_better() {
-        let near = [Rect::centered((0.0, 0.0), 4.0, 4.0), Rect::centered((6.0, 0.0), 4.0, 4.0)];
+        let near = [
+            Rect::centered((0.0, 0.0), 4.0, 4.0),
+            Rect::centered((6.0, 0.0), 4.0, 4.0),
+        ];
         let far = [near[0], Rect::centered((30.0, 0.0), 4.0, 4.0)];
         let b = [None, Some(1)];
-        assert!(score(&input(&near, &[(0, 1)], &b)).proximity < score(&input(&far, &[(0, 1)], &b)).proximity);
+        assert!(
+            score(&input(&near, &[(0, 1)], &b)).proximity
+                < score(&input(&far, &[(0, 1)], &b)).proximity
+        );
     }
 
     #[test]

@@ -7,11 +7,11 @@ fitd - -o out.svg < map.fitd
 fitd split map.fitd
 ```
 
-Flags override settings written in the file. Set `FITD_DEBUG=1` to trace each solver probe. Exit code 0 means output was written; diagnostics go to stderr, one line each with `--short`.
+Command-line flags override settings in the file. Set `FITD_DEBUG=1` to print solver probes. Exit code 0 means output was written. Diagnostics go to stderr; use `--short` for one line per diagnostic.
 
 ## Flags and subcommands
 
-Output: `-o` picks the format by extension (SVG is page-sized, PNG is cropped to the drawing, PDF keeps text selectable). Several inputs with a PDF output make one page per input. `--tikz` also writes standalone LaTeX. `--force` writes output despite checker errors.
+`-o` selects the format by extension. SVG keeps the page size, PNG is cropped to the drawing, and PDF keeps text selectable. Multiple inputs with a PDF output create one page per input. `--tikz` also writes standalone LaTeX. `--force` writes output despite checker errors.
 
 ![fitd FILE [flags]](options/01-options.png)
 

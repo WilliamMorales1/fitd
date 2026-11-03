@@ -64,7 +64,12 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
     let mut i = 0;
     while let Some(c) = at(i) {
         let start = i;
-        let push = |toks: &mut Vec<Token>, tok, end: usize| toks.push(Token { tok, span: Span::new(off(start), off(end)) });
+        let push = |toks: &mut Vec<Token>, tok, end: usize| {
+            toks.push(Token {
+                tok,
+                span: Span::new(off(start), off(end)),
+            })
+        };
         if c == '\n' {
             push(&mut toks, Tok::Newline, i + 1);
             line_start = true;
@@ -96,14 +101,21 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             while at(i).is_some_and(|c| c != '\n') {
                 i += 1;
             }
-            push(&mut toks, Tok::Body(text[off(lo)..off(i)].trim_end().to_string()), i);
+            push(
+                &mut toks,
+                Tok::Body(text[off(lo)..off(i)].trim_end().to_string()),
+                i,
+            );
         } else if c == '"' {
             i += 1;
             let mut s = String::new();
             loop {
                 match at(i) {
                     None | Some('\n') => {
-                        errs.push(Diag::error("E0002", "unterminated string").primary(Span::new(off(start), off(i)), "string starts here"));
+                        errs.push(
+                            Diag::error("E0002", "unterminated string")
+                                .primary(Span::new(off(start), off(i)), "string starts here"),
+                        );
                         break;
                     }
                     Some('"') => {
@@ -126,13 +138,17 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             }
             push(&mut toks, Tok::Str(s), i);
         } else if c.is_ascii_digit() {
-            while at(i).is_some_and(|c| c.is_alphanumeric()) || (at(i) == Some('.') && at(i + 1).is_some_and(|c| c.is_ascii_digit())) {
+            while at(i).is_some_and(|c| c.is_alphanumeric())
+                || (at(i) == Some('.') && at(i + 1).is_some_and(|c| c.is_ascii_digit()))
+            {
                 i += 1;
             }
             push(&mut toks, Tok::Num, i);
         } else if ident_char(c) {
             // A hyphen joins words (`left-of`) but never eats an arrow (`a->b`, `a--b`).
-            while at(i).is_some_and(ident_char) || (at(i) == Some('-') && at(i + 1).is_some_and(ident_char)) {
+            while at(i).is_some_and(ident_char)
+                || (at(i) == Some('-') && at(i + 1).is_some_and(ident_char))
+            {
                 i += 1;
             }
             push(&mut toks, Tok::Ident, i);
@@ -153,12 +169,21 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             i += len;
             match tok {
                 Some(t) => push(&mut toks, t, i),
-                None => errs.push(Diag::error("E0002", format!("unexpected character `{c}`")).primary(Span::new(off(start), off(i)), "not valid here")),
+                None => errs.push(
+                    Diag::error("E0002", format!("unexpected character `{c}`"))
+                        .primary(Span::new(off(start), off(i)), "not valid here"),
+                ),
             }
         }
     }
-    toks.push(Token { tok: Tok::Newline, span: Span::new(text.len(), text.len()) });
-    toks.push(Token { tok: Tok::Eof, span: Span::new(text.len(), text.len()) });
+    toks.push(Token {
+        tok: Tok::Newline,
+        span: Span::new(text.len(), text.len()),
+    });
+    toks.push(Token {
+        tok: Tok::Eof,
+        span: Span::new(text.len(), text.len()),
+    });
     (toks, errs)
 }
 
@@ -173,16 +198,33 @@ mod tests {
     #[test]
     fn hyphenated_names_and_arrows() {
         use Tok::*;
-        assert_eq!(kinds("a left-of b\n"), vec![Ident, Ident, Ident, Newline, Newline, Eof]);
-        assert_eq!(kinds("a->b--c..>d..e"), vec![Ident, Arrow, Ident, DashDash, Ident, DotArrow, Ident, DotDot, Ident, Newline, Eof]);
+        assert_eq!(
+            kinds("a left-of b\n"),
+            vec![Ident, Ident, Ident, Newline, Newline, Eof]
+        );
+        assert_eq!(
+            kinds("a->b--c..>d..e"),
+            vec![
+                Ident, Arrow, Ident, DashDash, Ident, DotArrow, Ident, DotDot, Ident, Newline, Eof
+            ]
+        );
     }
 
     #[test]
     fn numbers_colors_comments_bodies() {
         use Tok::*;
-        assert_eq!(kinds("font 7pt..48pt # c"), vec![Ident, Num, DotDot, Num, Newline, Eof]);
-        assert_eq!(kinds("x color=#1565C0"), vec![Ident, Ident, Eq, Color, Newline, Eof]);
-        assert_eq!(kinds("| a = b # not a comment"), vec![Body("a = b # not a comment".into()), Newline, Eof]);
+        assert_eq!(
+            kinds("font 7pt..48pt # c"),
+            vec![Ident, Num, DotDot, Num, Newline, Eof]
+        );
+        assert_eq!(
+            kinds("x color=#1565C0"),
+            vec![Ident, Ident, Eq, Color, Newline, Eof]
+        );
+        assert_eq!(
+            kinds("| a = b # not a comment"),
+            vec![Body("a = b # not a comment".into()), Newline, Eof]
+        );
         assert_eq!(kinds("page 2296x1524pt"), vec![Ident, Num, Newline, Eof]);
     }
 }

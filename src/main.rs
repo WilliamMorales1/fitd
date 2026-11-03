@@ -6,14 +6,14 @@ mod emit;
 #[cfg(test)]
 mod fuzz;
 mod geom;
+mod graph;
 mod import;
 mod include;
-mod graph;
 mod layered;
 mod layout;
 mod lex;
-mod macros;
 mod lsp;
+mod macros;
 mod metrics;
 mod parse;
 mod quality;
@@ -44,17 +44,25 @@ const USAGE: &str = "usage:
 /// GUIDE is the language reference sized for an agent's context: everything needed to write a
 /// diagram, in a few hundred tokens.
 const GUIDE: &str = include_str!("guide.txt");
+type PdfPage = (String, metrics::Fonts, (f64, f64));
 
 fn page(spec: &str, portrait: bool) -> Result<(f64, f64), String> {
     let (w, h) = sema::page_size(&spec.to_ascii_lowercase(), Some("pt"))?;
-    Ok(if portrait { (w.min(h), w.max(h)) } else { (w, h) })
+    Ok(if portrait {
+        (w.min(h), w.max(h))
+    } else {
+        (w, h)
+    })
 }
 
 fn run(args: &[String]) -> Result<ExitCode, String> {
     match args.first().map(String::as_str) {
         Some("explain") => {
             let code = args.get(1).ok_or(USAGE)?.to_uppercase();
-            let (_, text) = check::EXPLAIN.iter().find(|(c, _)| *c == code).ok_or(format!("unknown code {code}"))?;
+            let (_, text) = check::EXPLAIN
+                .iter()
+                .find(|(c, _)| *c == code)
+                .ok_or(format!("unknown code {code}"))?;
             println!("{code}: {text}");
             Ok(ExitCode::SUCCESS)
         }
@@ -64,9 +72,16 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
             let (fitd, dropped) = import::import(path, &text)?;
             if !dropped.is_empty() {
-                eprintln!("warning: no fitd equivalent, dropped: {}", dropped.join("; "));
+                eprintln!(
+                    "warning: no fitd equivalent, dropped: {}",
+                    dropped.join("; ")
+                );
             }
-            match args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1)) {
+            match args
+                .iter()
+                .position(|a| a == "-o")
+                .and_then(|i| args.get(i + 1))
+            {
                 Some(out) => {
                     write(out, fitd.as_bytes())?;
                     eprintln!("wrote {out}");
@@ -78,8 +93,14 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
         Some("split") => {
             let path = args.get(1).filter(|a| !a.starts_with('-')).ok_or(USAGE)?;
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-            let stem = std::path::Path::new(path).file_stem().map_or("map".into(), |s| s.to_string_lossy().into_owned());
-            let dir = match args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1)) {
+            let stem = std::path::Path::new(path)
+                .file_stem()
+                .map_or("map".into(), |s| s.to_string_lossy().into_owned());
+            let dir = match args
+                .iter()
+                .position(|a| a == "-o")
+                .and_then(|i| args.get(i + 1))
+            {
                 Some(d) => std::path::PathBuf::from(d),
                 None => std::path::Path::new(path).with_file_name(format!("{stem}-pages")),
             };
@@ -102,14 +123,36 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             println!("{USAGE}");
             Ok(ExitCode::SUCCESS)
         }
-        Some(_) if args.iter().any(|a| a == "--watch") => watch(&args.iter().filter(|a| *a != "--watch").cloned().collect::<Vec<_>>()),
+        Some(_) if args.iter().any(|a| a == "--watch") => watch(
+            &args
+                .iter()
+                .filter(|a| *a != "--watch")
+                .cloned()
+                .collect::<Vec<_>>(),
+        ),
         Some(_) => build(args),
         None => Err(USAGE.into()),
     }
 }
 
 /// VALUED lists the build flags that take a value, so `watch` can find the input among them.
-const VALUED: &[&str] = &["--grid", "-o", "--tikz", "--page", "--bands", "--margin", "--min-font", "--max-font", "--wrap", "--budget", "--expand-budget", "--scale", "--theme", "--font-family", "--stable"];
+const VALUED: &[&str] = &[
+    "--grid",
+    "-o",
+    "--tikz",
+    "--page",
+    "--bands",
+    "--margin",
+    "--min-font",
+    "--max-font",
+    "--wrap",
+    "--budget",
+    "--expand-budget",
+    "--scale",
+    "--theme",
+    "--font-family",
+    "--stable",
+];
 
 /// How often `watch` looks at the input, and how long the input must stay unchanged before
 /// the full build follows the draft.
@@ -195,9 +238,17 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     let mut it = args.iter().enumerate();
     while let Some((i, a)) = it.next() {
         if a == "--grid" {
-            let v = it.next().map(|(_, v)| v.as_str()).ok_or("--grid needs a value")?;
-            let cr = v.split_once('x').and_then(|(c, r)| Some((c.parse::<usize>().ok()?, r.parse::<usize>().ok()?)));
-            grid = Some(cr.filter(|&(c, r)| c > 0 && r > 0).ok_or(format!("--grid needs COLSxROWS, such as 2x1, not `{v}`"))?);
+            let v = it
+                .next()
+                .map(|(_, v)| v.as_str())
+                .ok_or("--grid needs a value")?;
+            let cr = v
+                .split_once('x')
+                .and_then(|(c, r)| Some((c.parse::<usize>().ok()?, r.parse::<usize>().ok()?)));
+            grid = Some(
+                cr.filter(|&(c, r)| c > 0 && r > 0)
+                    .ok_or(format!("--grid needs COLSxROWS, such as 2x1, not `{v}`"))?,
+            );
         } else if VALUED.contains(&a.as_str()) {
             it.next();
         } else if a == "-" || !a.starts_with('-') {
@@ -207,16 +258,28 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     if inputs.len() < 2 && grid.is_none() {
         return build_one(args, None);
     }
-    let out = args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1));
-    let out = out.filter(|o| o.to_ascii_lowercase().ends_with(".pdf")).ok_or("several inputs, or --grid, need -o FILE.pdf")?;
-    if let Some(a) = args.iter().find(|a| matches!(a.as_str(), "--tikz" | "--stable" | "-")) {
+    let out = args
+        .iter()
+        .position(|a| a == "-o")
+        .and_then(|i| args.get(i + 1));
+    let out = out
+        .filter(|o| o.to_ascii_lowercase().ends_with(".pdf"))
+        .ok_or("several inputs, or --grid, need -o FILE.pdf")?;
+    if let Some(a) = args
+        .iter()
+        .find(|a| matches!(a.as_str(), "--tikz" | "--stable" | "-"))
+    {
         return Err(format!("`{a}` takes one input, not several"));
     }
     // With a grid, --page and the orientation flags size the sheet, and each cell is the page
     // its diagram is laid out on.
     let sheet = match grid {
         Some(_) => {
-            let spec = args.iter().position(|a| a == "--page").and_then(|i| args.get(i + 1)).map_or("a1", String::as_str);
+            let spec = args
+                .iter()
+                .position(|a| a == "--page")
+                .and_then(|i| args.get(i + 1))
+                .map_or("a1", String::as_str);
             let (w, h) = page(spec, false)?;
             Some(if args.iter().any(|a| a == "--portrait") {
                 (w.min(h), w.max(h))
@@ -239,21 +302,32 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             if std::mem::take(&mut skip) || (j != i && inputs.contains(&j)) {
                 continue;
             }
-            if sheet.is_some() && matches!(a.as_str(), "--page" | "--grid" | "--portrait" | "--landscape") {
+            if sheet.is_some()
+                && matches!(
+                    a.as_str(),
+                    "--page" | "--grid" | "--portrait" | "--landscape"
+                )
+            {
                 skip = a == "--page" || a == "--grid";
                 continue;
             }
             one.push(a.clone());
         }
         if let Some((w, h)) = sheet {
-            one.extend(["--page".into(), format!("{:.3}x{:.3}pt", w / cols as f64, h / rows as f64)]);
+            one.extend([
+                "--page".into(),
+                format!("{:.3}x{:.3}pt", w / cols as f64, h / rows as f64),
+            ]);
         }
         if build_one(&one, Some(&mut pages))? != ExitCode::SUCCESS {
             failed += 1;
         }
     }
     if failed > 0 {
-        eprintln!("error: {failed} of {} diagrams failed; no output written", inputs.len());
+        eprintln!(
+            "error: {failed} of {} diagrams failed; no output written",
+            inputs.len()
+        );
         return Ok(ExitCode::FAILURE);
     }
     let per = cols * rows;
@@ -261,21 +335,37 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         .chunks(per)
         .map(|chunk| emit::Sheet {
             size: sheet,
-            cells: chunk.iter().enumerate().map(|(k, (svg, fonts, (w, h)))| (svg.as_str(), fonts, (k % cols) as f64 * w, (k / cols) as f64 * h)).collect(),
+            cells: chunk
+                .iter()
+                .enumerate()
+                .map(|(k, (svg, fonts, (w, h)))| {
+                    (
+                        svg.as_str(),
+                        fonts,
+                        (k % cols) as f64 * w,
+                        (k / cols) as f64 * h,
+                    )
+                })
+                .collect(),
         })
         .collect();
     write(out, &emit::pdf(&sheets)?)?;
     let plural = |n: usize, w: &str| format!("{n} {w}{}", if n == 1 { "" } else { "s" });
-    eprintln!("wrote {out} ({} on {})", plural(pages.len(), "diagram"), plural(sheets.len(), "page"));
+    eprintln!(
+        "wrote {out} ({} on {})",
+        plural(pages.len(), "diagram"),
+        plural(sheets.len(), "page")
+    );
     Ok(ExitCode::SUCCESS)
 }
 
 /// build_one compiles one input. With `pages`, it adds the page to them instead of writing
 /// any file.
-fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f64, f64))>>) -> Result<ExitCode, String> {
+fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCode, String> {
     let mut input = None;
     let (mut svg_out, mut tikz_out) = (None, None);
-    let (mut page_spec, mut portrait, mut landscape, mut force, mut draft, mut short) = (None, false, false, false, false, false);
+    let (mut page_spec, mut portrait, mut landscape, mut force, mut draft, mut short) =
+        (None, false, false, false, false, false);
     let mut bands = None;
     let (mut margin, mut min_font, mut max_font, mut wrap) = (None, None, None, None);
     let mut budget = 20_000_000;
@@ -292,7 +382,15 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
             "--page" => page_spec = Some(val()?),
             "--portrait" => portrait = true,
             "--landscape" => landscape = true,
-            "--bands" => bands = Some(val()?.parse::<usize>().ok().filter(|&k| k > 0).ok_or("--bands needs a whole number, 1 or more")?),
+            "--bands" => {
+                bands = Some(
+                    val()?
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|&k| k > 0)
+                        .ok_or("--bands needs a whole number, 1 or more")?,
+                )
+            }
             "--force" => force = true,
             "--draft" => draft = true,
             "--short" => short = true,
@@ -301,17 +399,25 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
             "--max-font" => max_font = Some(num(val()?)?),
             "--wrap" => wrap = Some(num(val()?)?),
             "--budget" => budget = num(val()?)? as u64,
-            "--expand-budget" => expand_budget = val()?.parse::<u64>().map_err(|_| "--expand-budget needs a whole number")?,
+            "--expand-budget" => {
+                expand_budget = val()?
+                    .parse::<u64>()
+                    .map_err(|_| "--expand-budget needs a whole number")?
+            }
             "--scale" => scale = num(val()?)?,
             "--theme" => theme_name = Some(val()?),
             "--font-family" => family = Some(val()?),
             "--stable" => lock = Some(val()?),
-            s if (s == "-" || !s.starts_with('-')) && input.is_none() => input = Some(s.to_string()),
+            s if (s == "-" || !s.starts_with('-')) && input.is_none() => {
+                input = Some(s.to_string())
+            }
             s => return Err(format!("unknown argument `{s}`\n{USAGE}")),
         }
     }
     let mut input = input.ok_or(USAGE)?;
-    if !std::path::Path::new(&input).exists() && std::path::Path::new(&format!("{input}.fitd")).exists() {
+    if !std::path::Path::new(&input).exists()
+        && std::path::Path::new(&format!("{input}.fitd")).exists()
+    {
         input.push_str(".fitd");
     }
     let text = if input == "-" {
@@ -323,8 +429,21 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
     } else {
         std::fs::read_to_string(&input).map_err(|e| format!("{input}: {e}"))?
     };
-    let macros::Loaded { src, parse: parse_text, mut diags } = macros::load(&input, &text, expand_budget);
-    let show = |diags: &[Diag]| eprint!("{}", if short { diag::render_short(&src, diags) } else { diag::render(&src, diags) });
+    let macros::Loaded {
+        src,
+        parse: parse_text,
+        mut diags,
+    } = macros::load(&input, &text, expand_budget);
+    let show = |diags: &[Diag]| {
+        eprint!(
+            "{}",
+            if short {
+                diag::render_short(&src, diags)
+            } else {
+                diag::render(&src, diags)
+            }
+        )
+    };
     let (stmts, parse_diags) = parse::parse(&parse_text);
     diags.extend(parse_diags);
     let (mut g, sema_diags) = sema::analyze(&stmts);
@@ -351,7 +470,11 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
     if landscape {
         (page_w, page_h) = (page_w.max(page_h), page_w.min(page_h));
     }
-    let page_fixed = portrait || landscape || page_spec.as_ref().map_or(set.page_fixed, |p| sema::paper(&p.to_ascii_lowercase()).is_none());
+    let page_fixed = portrait
+        || landscape
+        || page_spec.as_ref().map_or(set.page_fixed, |p| {
+            sema::paper(&p.to_ascii_lowercase()).is_none()
+        });
     let mut anchor = None;
     if let Some(path) = &lock
         && let Ok(text) = std::fs::read_to_string(path)
@@ -364,7 +487,10 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
         if a.page == (page_w, page_h) {
             anchor = Some(a);
         } else {
-            show(&[Diag::info(format!("{path} was made for a {:.0}x{:.0}pt page; laying out afresh", a.page.0, a.page.1))]);
+            show(&[Diag::info(format!(
+                "{path} was made for a {:.0}x{:.0}pt page; laying out afresh",
+                a.page.0, a.page.1
+            ))]);
         }
     }
     let font = set.font.unwrap_or((7.0, 48.0));
@@ -390,25 +516,57 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
         show(&t.notes);
     }
     let fonts = metrics::Fonts::load(family.as_deref().or(set.family.as_deref()))?;
-    show(&fonts.notes.iter().map(|n| Diag::info(n.clone())).collect::<Vec<_>>());
-    let name = theme_name.as_deref().or(set.theme.as_deref()).unwrap_or("dark");
-    let th = theme::Theme::preset(name).ok_or(format!("unknown theme `{name}` (expected one of: {})", theme::PRESETS.join(", ")))?.with(&set.theme_over);
+    show(
+        &fonts
+            .notes
+            .iter()
+            .map(|n| Diag::info(n.clone()))
+            .collect::<Vec<_>>(),
+    );
+    let name = theme_name
+        .as_deref()
+        .or(set.theme.as_deref())
+        .unwrap_or("dark");
+    let th = theme::Theme::preset(name)
+        .ok_or(format!(
+            "unknown theme `{name}` (expected one of: {})",
+            theme::PRESETS.join(", ")
+        ))?
+        .with(&set.theme_over);
     layout::measure_groups(&mut g, &fonts);
     let mut lay = match layout::solve(&g, &t, &fonts, &cfg) {
         Ok(lay) => lay,
         Err(Failure::NoRoom { crowded, cut_off }) => {
-            eprintln!("error: no layout fits at the {}pt font floor on a {:.0}x{:.0}pt page, even ignoring `require` constraints", cfg.min_font, cfg.page_w, cfg.page_h);
+            eprintln!(
+                "error: no layout fits at the {}pt font floor on a {:.0}x{:.0}pt page, even ignoring `require` constraints",
+                cfg.min_font, cfg.page_w, cfg.page_h
+            );
             match cut_off {
-                Some(n) => eprintln!("  = note: the search was cut off after {n} checks, so a layout may still exist; try `--budget {}`", budget * 4),
-                None => eprintln!("  = note: proved for every candidate position this layout considers"),
+                Some(n) => eprintln!(
+                    "  = note: the search was cut off after {n} checks, so a layout may still exist; try `--budget {}`",
+                    budget * 4
+                ),
+                None => {
+                    eprintln!("  = note: proved for every candidate position this layout considers")
+                }
             }
             match (crowded, g.settings.layout) {
                 (Some((layers, need, have)), Some(LayoutKind::Layered(dir))) => {
-                    let (along, other) = if dir == graph::Dir::Down { ("tall", "right") } else { ("wide", "down") };
-                    eprintln!("  = note: the longest path has {layers} layers, which need {need:.0}pt along the flow; the page gives {have:.0}pt");
-                    eprintln!("  = help: use `layout layered dir={other}`, a page that is more {along}, or fewer steps on the longest path");
+                    let (along, other) = if dir == graph::Dir::Down {
+                        ("tall", "right")
+                    } else {
+                        ("wide", "down")
+                    };
+                    eprintln!(
+                        "  = note: the longest path has {layers} layers, which need {need:.0}pt along the flow; the page gives {have:.0}pt"
+                    );
+                    eprintln!(
+                        "  = help: use `layout layered dir={other}`, a page that is more {along}, or fewer steps on the longest path"
+                    );
                 }
-                _ => eprintln!("  = help: use a larger page, a lower font floor (`font 6pt..30pt`), or a narrower `wrap`"),
+                _ => eprintln!(
+                    "  = help: use a larger page, a lower font floor (`font 6pt..30pt`), or a narrower `wrap`"
+                ),
             }
             if let Some((b, n, share)) = layout::largest_branch(&g, &t, &fonts, &cfg) {
                 eprintln!(
@@ -421,17 +579,31 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
             return Ok(ExitCode::FAILURE);
         }
         Err(Failure::Core { core, cut_off }) => {
-            let what = if core.len() == 1 { "this constraint cannot hold".to_string() } else { format!("these {} constraints cannot all hold", core.len()) };
-            let mut d = Diag::error("E0110", format!("{what} at {}pt on this page", cfg.min_font));
+            let what = if core.len() == 1 {
+                "this constraint cannot hold".to_string()
+            } else {
+                format!("these {} constraints cannot all hold", core.len())
+            };
+            let mut d = Diag::error(
+                "E0110",
+                format!("{what} at {}pt on this page", cfg.min_font),
+            );
             for (k, &ci) in core.iter().enumerate() {
                 let span = g.constraints[ci].span;
-                d = if k == 0 { d.primary(span, "") } else { d.secondary(span, "") };
+                d = if k == 0 {
+                    d.primary(span, "")
+                } else {
+                    d.secondary(span, "")
+                };
             }
             // Say where the floor came from, since a smaller font is often the easiest fix.
             let d = match (min_font, g.settings.font_span) {
                 (Some(_), _) => d.note("the font floor is set by `--min-font`"),
                 (None, Some(span)) => d.secondary(span, "the font floor is set here"),
-                (None, None) => d.note(format!("{}pt is the default font floor; a `font` statement can lower it", cfg.min_font)),
+                (None, None) => d.note(format!(
+                    "{}pt is the default font floor; a `font` statement can lower it",
+                    cfg.min_font
+                )),
             };
             let d = if core.len() == 1 {
                 d.note("it fails even with every other `require` removed")
@@ -469,7 +641,10 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
     let warnings = diags.iter().filter(|d| d.level == Level::Warning).count();
     let s = lay.stats;
     if short {
-        eprintln!("body font {:.1}pt on {:.0}x{:.0}pt; {errors} errors, {warnings} warnings", lay.body, cfg.page_w, cfg.page_h);
+        eprintln!(
+            "body font {:.1}pt on {:.0}x{:.0}pt; {errors} errors, {warnings} warnings",
+            lay.body, cfg.page_w, cfg.page_h
+        );
     } else {
         eprintln!(
             "body font {:.1}pt (titles {:.1}pt) on {:.0}x{:.0}pt; {} nodes, {} edges; {errors} errors, {warnings} warnings; solver: {} attempts, {} nodes, {} checks, {} backjumps{}",
@@ -483,10 +658,15 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
             s.search.nodes,
             s.search.checks,
             s.search.backjumps,
-            if s.soft_total > 0 { format!("; soft cost {}/{}", s.soft_cost, s.soft_total) } else { String::new() }
+            if s.soft_total > 0 {
+                format!("; soft cost {}/{}", s.soft_cost, s.soft_total)
+            } else {
+                String::new()
+            }
         );
         let rects: Vec<Rect> = (0..g.nodes.len()).map(|v| lay.rect(v)).collect();
-        let q = layout::Readable::new(&t, lay.kind, &lay.edges, cfg.page(), cfg.legible).score(&rects);
+        let q =
+            layout::Readable::new(&t, lay.kind, &lay.edges, cfg.page(), cfg.legible).score(&rects);
         eprintln!(
             "readability penalty {:.0}: crossings {:.0}, proximity {:.0}, grouping {:.0}, angles {:.0}, alignment {:.0}, spread {:.0}",
             q.total(),
@@ -498,40 +678,106 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
             q.spread
         );
         if lay.tradeoff.len() > 1 {
-            let tried: Vec<String> = lay.tradeoff.iter().map(|(f, m)| format!("{f:.1}pt {m:.0}{}", if *f == lay.body { " (chosen)" } else { "" })).collect();
-            eprintln!("font trade-off, merit (lower is better; legible from {:.1}pt): {}", cfg.legible, tried.join(", "));
+            let tried: Vec<String> = lay
+                .tradeoff
+                .iter()
+                .map(|(f, m)| {
+                    format!(
+                        "{f:.1}pt {m:.0}{}",
+                        if *f == lay.body { " (chosen)" } else { "" }
+                    )
+                })
+                .collect();
+            eprintln!(
+                "font trade-off, merit (lower is better; legible from {:.1}pt): {}",
+                cfg.legible,
+                tried.join(", ")
+            );
         }
     }
     if errors > 0 && !force {
-        eprintln!("error: aborting due to {errors} previous errors; no output written (use --force to write anyway)");
+        eprintln!(
+            "error: aborting due to {errors} previous errors; no output written (use --force to write anyway)"
+        );
         return Ok(ExitCode::FAILURE);
     }
     if let Some(pages) = pages {
-        pages.push((emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h), &th), fonts, (cfg.page_w, cfg.page_h)));
+        pages.push((
+            emit::svg(
+                &g,
+                &t,
+                &fonts,
+                &lay,
+                Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h),
+                &th,
+            ),
+            fonts,
+            (cfg.page_w, cfg.page_h),
+        ));
         return Ok(ExitCode::SUCCESS);
     }
     let stem = input.strip_suffix(".fitd").unwrap_or(&input).to_string();
     let out = svg_out.unwrap_or(format!("{stem}.svg"));
     let bytes = if out.to_ascii_lowercase().ends_with(".png") {
         // A PNG is cropped to the drawing, with the margin as padding, not sized to the page.
-        let svg = emit::svg(&g, &t, &fonts, &lay, emit::bounds(&g, &lay).inflate(cfg.margin), &th);
+        let svg = emit::svg(
+            &g,
+            &t,
+            &fonts,
+            &lay,
+            emit::bounds(&g, &lay).inflate(cfg.margin),
+            &th,
+        );
         emit::png(&svg, &fonts, scale)?
     } else if out.to_ascii_lowercase().ends_with(".pdf") {
-        emit::pdf(&[emit::Sheet { size: None, cells: vec![(&emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h), &th), &fonts, 0.0, 0.0)] }])?
+        emit::pdf(&[emit::Sheet {
+            size: None,
+            cells: vec![(
+                &emit::svg(
+                    &g,
+                    &t,
+                    &fonts,
+                    &lay,
+                    Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h),
+                    &th,
+                ),
+                &fonts,
+                0.0,
+                0.0,
+            )],
+        }])?
     } else {
-        emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h), &th).into_bytes()
+        emit::svg(
+            &g,
+            &t,
+            &fonts,
+            &lay,
+            Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h),
+            &th,
+        )
+        .into_bytes()
     };
     write(&out, &bytes)?;
     eprintln!("wrote {out}");
     if let Some(p) = tikz_out {
-        write(&p, emit::tikz(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h, &th).as_bytes())?;
+        write(
+            &p,
+            emit::tikz(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h, &th).as_bytes(),
+        )?;
         eprintln!("wrote {p}");
     }
     if let Some(p) = lock {
         write(&p, layout::Anchor::render(&g, &lay, &cfg).as_bytes())?;
         if let Some(a) = cfg.anchor {
-            let kept = (0..g.nodes.len()).filter(|&v| a.pos[v].is_some_and(|q| (q.0 - lay.pos[v].0).hypot(q.1 - lay.pos[v].1) <= 0.01)).count();
-            eprintln!("wrote {p} ({kept} of {} locked nodes kept their spots)", a.pos.iter().flatten().count());
+            let kept = (0..g.nodes.len())
+                .filter(|&v| {
+                    a.pos[v].is_some_and(|q| (q.0 - lay.pos[v].0).hypot(q.1 - lay.pos[v].1) <= 0.01)
+                })
+                .count();
+            eprintln!(
+                "wrote {p} ({kept} of {} locked nodes kept their spots)",
+                a.pos.iter().flatten().count()
+            );
         } else {
             eprintln!("wrote {p}");
         }
@@ -543,23 +789,66 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
 /// links and, when the file leaves the orientation open, on the turned page. The variants run
 /// in parallel; the one with the fewest diagnostics wins, then the best merit. Returns the
 /// winner's config and a note saying what changed.
-fn retry(g: &graph::Graph, t: &tree::Tree, fonts: &metrics::Fonts, cfg: Config, page_fixed: bool, lay: &mut layout::Layout, diags: &mut Vec<Diag>) -> (Config, Vec<Diag>) {
-    let arranged = if lay.kind == LayoutKind::Radial { radial::arrange(g, t, &cfg) } else { None };
+fn retry(
+    g: &graph::Graph,
+    t: &tree::Tree,
+    fonts: &metrics::Fonts,
+    cfg: Config,
+    page_fixed: bool,
+    lay: &mut layout::Layout,
+    diags: &mut Vec<Diag>,
+) -> (Config, Vec<Diag>) {
+    let arranged = if lay.kind == LayoutKind::Radial {
+        radial::arrange(g, t, &cfg)
+    } else {
+        None
+    };
     // The first build already found about where the font lands, so the variants give up on
     // fonts far above it as soon as a draft would.
-    let quick = Config { first_cap: cfg.budget / 20, ..cfg };
-    let turned = Config { page_w: cfg.page_h, page_h: cfg.page_w, ..quick };
+    let quick = Config {
+        first_cap: cfg.budget / 20,
+        ..cfg
+    };
+    let turned = Config {
+        page_w: cfg.page_h,
+        page_h: cfg.page_w,
+        ..quick
+    };
     let mut tries: Vec<(&tree::Tree, Config, String)> = Vec::new();
     if let Some(a) = &arranged {
-        let moved: Vec<String> = (0..t.children.len()).filter(|&v| a.children[v] != t.children[v]).map(|v| format!("`{}`", g.nodes[v].id)).collect();
-        tries.push((a, quick, format!("reordered the branches under {}", moved.join(", "))));
+        let moved: Vec<String> = (0..t.children.len())
+            .filter(|&v| a.children[v] != t.children[v])
+            .map(|v| format!("`{}`", g.nodes[v].id))
+            .collect();
+        tries.push((
+            a,
+            quick,
+            format!("reordered the branches under {}", moved.join(", ")),
+        ));
     }
     if !page_fixed && cfg.page_w != cfg.page_h {
-        tries.push((t, turned, format!("turned the page to {}", if turned.page_w < turned.page_h { "portrait" } else { "landscape" })));
+        tries.push((
+            t,
+            turned,
+            format!(
+                "turned the page to {}",
+                if turned.page_w < turned.page_h {
+                    "portrait"
+                } else {
+                    "landscape"
+                }
+            ),
+        ));
     }
     let runs: Vec<_> = std::thread::scope(|s| {
-        let handles: Vec<_> = tries.iter().map(|(tr, c, _)| s.spawn(move || layout::solve(g, tr, fonts, c).ok())).collect();
-        handles.into_iter().map(|h| h.join().expect("retry thread")).collect()
+        let handles: Vec<_> = tries
+            .iter()
+            .map(|(tr, c, _)| s.spawn(move || layout::solve(g, tr, fonts, c).ok()))
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().expect("retry thread"))
+            .collect()
     });
     let before = diags.len();
     let mut best = (before, layout::merit(g, t, &cfg, lay));
@@ -579,7 +868,11 @@ fn retry(g: &graph::Graph, t: &tree::Tree, fonts: &metrics::Fonts, cfg: Config, 
         }
     }
     let soft = (lay.stats.soft_cost, lay.stats.soft_total);
-    lay.stats = layout::Stats { soft_cost: soft.0, soft_total: soft.1, ..stats };
+    lay.stats = layout::Stats {
+        soft_cost: soft.0,
+        soft_total: soft.1,
+        ..stats
+    };
     match win {
         Some((k, now)) => {
             let note = Diag::info(format!("{} (warnings: {before} -> {now})", tries[k].2));
@@ -591,7 +884,10 @@ fn retry(g: &graph::Graph, t: &tree::Tree, fonts: &metrics::Fonts, cfg: Config, 
 
 /// write saves an output file, creating its directory if needed.
 fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
-    if let Some(dir) = std::path::Path::new(path).parent().filter(|d| !d.as_os_str().is_empty()) {
+    if let Some(dir) = std::path::Path::new(path)
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+    {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     // Through a temporary file and a rename, so a viewer never reads half an image.
@@ -599,7 +895,8 @@ fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
     let renamed = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path));
     // Windows refuses to replace a file another program holds open, as viewers often do.
     #[cfg(windows)]
-    let renamed = renamed.or_else(|_| std::fs::write(path, bytes).and_then(|_| std::fs::remove_file(&tmp)));
+    let renamed =
+        renamed.or_else(|_| std::fs::write(path, bytes).and_then(|_| std::fs::remove_file(&tmp)));
     renamed.map_err(|e| {
         let _ = std::fs::remove_file(&tmp);
         format!("{path}: {e}")

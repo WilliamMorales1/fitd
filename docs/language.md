@@ -41,7 +41,7 @@ Source: [02-lexical.fitd](language/02-lexical.fitd)
 
 ## Relations
 
-Relations are predicates on the final boxes. `a left-of b gap=2em`, `a above b`, `a near b within=4em`, `a at top-left`, and `align row(a, b)` all work under `require` (must hold, or the build fails with E0110) and `prefer` (minimized, warns W0205 if unmet). Chains such as `a left-of b left-of c` expand to one constraint per step.
+Relations apply to the final box positions. Examples include `a left-of b gap=2em`, `a above b`, `a near b within=4em`, `a at top-left`, and `align row(a, b)`. Put a relation under `require` when it must hold; use `prefer` for a weighted suggestion. An unmet preference produces W0205. A chain such as `a left-of b left-of c` becomes one constraint per link.
 
 ![Relations](language/03-relations.png)
 
@@ -57,7 +57,7 @@ Source: [04-groups.fitd](language/04-groups.fitd)
 
 ## Macros
 
-Macros expand after `include` and before parsing. `for i in 1..4` repeats a block, `if`/`else if`/`else` selects, `def NAME(args)` ... `end` defines a template, `use NAME(args)` expands it, and `${expr}` interpolates anywhere except comments. Templates plus `if` are Turing complete; `--expand-budget` stops runaway expansion (E0013).
+Macros expand after `include` and before parsing. `for i in 1..4` repeats a block. `if`/`else if`/`else` selects a block. `def NAME(args)` ... `end` defines a template, and `use NAME(args)` expands it. `${expr}` interpolates values except inside comments. `--expand-budget` stops runaway expansion and reports E0013.
 
 ![Macros](language/05-macros.png)
 

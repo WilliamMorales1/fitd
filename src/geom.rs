@@ -10,11 +10,21 @@ pub struct Rect {
 
 impl Rect {
     pub fn centered(c: P, w: f64, h: f64) -> Rect {
-        Rect { x0: c.0 - w / 2.0, y0: c.1 - h / 2.0, x1: c.0 + w / 2.0, y1: c.1 + h / 2.0 }
+        Rect {
+            x0: c.0 - w / 2.0,
+            y0: c.1 - h / 2.0,
+            x1: c.0 + w / 2.0,
+            y1: c.1 + h / 2.0,
+        }
     }
 
     pub fn inflate(&self, g: f64) -> Rect {
-        Rect { x0: self.x0 - g, y0: self.y0 - g, x1: self.x1 + g, y1: self.y1 + g }
+        Rect {
+            x0: self.x0 - g,
+            y0: self.y0 - g,
+            x1: self.x1 + g,
+            y1: self.y1 + g,
+        }
     }
 
     pub fn intersects(&self, o: &Rect) -> bool {
@@ -34,14 +44,23 @@ impl Rect {
 pub fn segment_hits_rect(a: P, b: P, r: &Rect) -> bool {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let (mut t0, mut t1) = (0.0f64, 1.0f64);
-    for (p, q) in [(-dx, a.0 - r.x0), (dx, r.x1 - a.0), (-dy, a.1 - r.y0), (dy, r.y1 - a.1)] {
+    for (p, q) in [
+        (-dx, a.0 - r.x0),
+        (dx, r.x1 - a.0),
+        (-dy, a.1 - r.y0),
+        (dy, r.y1 - a.1),
+    ] {
         if p == 0.0 {
             if q <= 0.0 {
                 return false;
             }
         } else {
             let t = q / p;
-            if p < 0.0 { t0 = t0.max(t) } else { t1 = t1.min(t) }
+            if p < 0.0 {
+                t0 = t0.max(t)
+            } else {
+                t1 = t1.min(t)
+            }
         }
     }
     t0 < t1
@@ -74,8 +93,23 @@ mod tests {
 
     #[test]
     fn crossing_ignores_shared_endpoints() {
-        assert!(segments_cross((0.0, 0.0), (2.0, 2.0), (0.0, 2.0), (2.0, 0.0)));
-        assert!(!segments_cross((0.0, 0.0), (2.0, 2.0), (0.0, 0.0), (2.0, 0.0)));
-        assert!(!segments_cross((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)));
+        assert!(segments_cross(
+            (0.0, 0.0),
+            (2.0, 2.0),
+            (0.0, 2.0),
+            (2.0, 0.0)
+        ));
+        assert!(!segments_cross(
+            (0.0, 0.0),
+            (2.0, 2.0),
+            (0.0, 0.0),
+            (2.0, 0.0)
+        ));
+        assert!(!segments_cross(
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (0.0, 1.0),
+            (1.0, 1.0)
+        ));
     }
 }

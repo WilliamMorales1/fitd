@@ -19,7 +19,11 @@ impl Splice {
         if self.segs.last().is_some_and(|s| s.line == line) {
             self.segs.pop();
         }
-        self.segs.push(Seg { line, path: path.to_string(), file_line });
+        self.segs.push(Seg {
+            line,
+            path: path.to_string(),
+            file_line,
+        });
     }
 }
 
@@ -27,7 +31,11 @@ impl Splice {
 /// paths are relative to the including file. A cycle or unreadable file is E0011 at its
 /// include line, which is then left out.
 pub fn expand(path: &str, text: &str) -> (Source, Vec<Diag>) {
-    let mut out = Splice { text: String::new(), segs: Vec::new(), diags: Vec::new() };
+    let mut out = Splice {
+        text: String::new(),
+        segs: Vec::new(),
+        diags: Vec::new(),
+    };
     let mut stack = vec![canonical(Path::new(path))];
     splice(&mut out, path, text, &mut stack);
     (Source::spliced(path, &out.text, out.segs), out.diags)
@@ -48,8 +56,12 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
     out.seg(path, 1);
     let mut cursor = 0;
     for st in stmts {
-        let StmtKind::Include(target) = &st.kind else { continue };
-        let end = text[st.span.hi..].find('\n').map_or(text.len(), |i| st.span.hi + i + 1);
+        let StmtKind::Include(target) = &st.kind else {
+            continue;
+        };
+        let end = text[st.span.hi..]
+            .find('\n')
+            .map_or(text.len(), |i| st.span.hi + i + 1);
         let base = out.text.len() - cursor;
         out.text += &text[cursor..end];
         if !out.text.ends_with('\n') {
@@ -60,9 +72,15 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
         let file = dir.join(target);
         let key = canonical(&file);
         if let Some(k) = stack.iter().position(|p| *p == key) {
-            let chain: Vec<String> = stack[k..].iter().chain([&key]).map(|p| p.display().to_string()).collect();
-            let d = Diag::error("E0011", format!("`{target}` includes itself")).primary(span, "this include closes a cycle");
-            out.diags.push(d.note(format!("cycle: {}", chain.join(" -> "))));
+            let chain: Vec<String> = stack[k..]
+                .iter()
+                .chain([&key])
+                .map(|p| p.display().to_string())
+                .collect();
+            let d = Diag::error("E0011", format!("`{target}` includes itself"))
+                .primary(span, "this include closes a cycle");
+            out.diags
+                .push(d.note(format!("cycle: {}", chain.join(" -> "))));
         } else {
             match std::fs::read_to_string(&file) {
                 Ok(child) => {
@@ -74,7 +92,10 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
                         out.text.push('\n');
                     }
                 }
-                Err(e) => out.diags.push(Diag::error("E0011", format!("cannot read `{}`: {e}", file.display())).primary(span, "included here")),
+                Err(e) => out.diags.push(
+                    Diag::error("E0011", format!("cannot read `{}`: {e}", file.display()))
+                        .primary(span, "included here"),
+                ),
             }
         }
         cursor = end;
@@ -91,24 +112,56 @@ mod tests {
     fn spliced_lines_map_back_to_their_files() {
         let dir = std::env::temp_dir().join(format!("fitd-include-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("parts")).unwrap();
-        std::fs::write(dir.join("parts/a.fitd"), "node a\ninclude \"b.fitd\"\nnode a2\n").unwrap();
+        std::fs::write(
+            dir.join("parts/a.fitd"),
+            "node a\ninclude \"b.fitd\"\nnode a2\n",
+        )
+        .unwrap();
         std::fs::write(dir.join("parts/b.fitd"), "node b").unwrap();
         std::fs::write(dir.join("loop.fitd"), "include \"loop.fitd\"\n").unwrap();
         let main = dir.join("main.fitd");
         let text = "node m\ninclude \"parts/a.fitd\"\nnode m2\ninclude \"loop.fitd\"\n";
         std::fs::write(&main, text).unwrap();
         let (src, diags) = expand(main.to_str().unwrap(), text);
-        assert_eq!(src.text, "node m\ninclude \"parts/a.fitd\"\nnode a\ninclude \"b.fitd\"\nnode b\nnode a2\nnode m2\ninclude \"loop.fitd\"\ninclude \"loop.fitd\"\n");
+        assert_eq!(
+            src.text,
+            "node m\ninclude \"parts/a.fitd\"\nnode a\ninclude \"b.fitd\"\nnode b\nnode a2\nnode m2\ninclude \"loop.fitd\"\ninclude \"loop.fitd\"\n"
+        );
         let at = |line: usize| {
             let (p, n) = src.file_line(line);
-            (Path::new(p).file_name().unwrap().to_str().unwrap().to_string(), n)
+            (
+                Path::new(p)
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string(),
+                n,
+            )
         };
-        let want = [("main.fitd", 1), ("main.fitd", 2), ("a.fitd", 1), ("a.fitd", 2), ("b.fitd", 1), ("a.fitd", 3), ("main.fitd", 3), ("main.fitd", 4), ("loop.fitd", 1)];
+        let want = [
+            ("main.fitd", 1),
+            ("main.fitd", 2),
+            ("a.fitd", 1),
+            ("a.fitd", 2),
+            ("b.fitd", 1),
+            ("a.fitd", 3),
+            ("main.fitd", 3),
+            ("main.fitd", 4),
+            ("loop.fitd", 1),
+        ];
         for (i, (f, n)) in want.iter().enumerate() {
             assert_eq!(at(i + 1), (f.to_string(), *n), "line {}", i + 1);
         }
         assert_eq!(diags.len(), 1);
-        assert!(diags[0].code == "E0011" && diags[0].msg.contains("includes itself"), "{}", diags[0].msg);
-        assert_eq!(at(src.line_col(diags[0].labels[0].span.lo).0), ("loop.fitd".to_string(), 1));
+        assert!(
+            diags[0].code == "E0011" && diags[0].msg.contains("includes itself"),
+            "{}",
+            diags[0].msg
+        );
+        assert_eq!(
+            at(src.line_col(diags[0].labels[0].span.lo).0),
+            ("loop.fitd".to_string(), 1)
+        );
     }
 }

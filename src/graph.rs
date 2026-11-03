@@ -82,24 +82,50 @@ pub struct Place(pub u8, pub u8);
 #[derive(Clone, PartialEq, Debug)]
 pub enum Relation {
     /// a's right edge plus gap is at most b's left edge.
-    LeftOf { a: usize, b: usize, gap: Length },
+    LeftOf {
+        a: usize,
+        b: usize,
+        gap: Length,
+    },
     /// a's bottom edge is at least gap above b's top edge.
-    Above { a: usize, b: usize, gap: Length },
+    Above {
+        a: usize,
+        b: usize,
+        gap: Length,
+    },
     /// The space between the two boxes is at most `within`.
-    Near { a: usize, b: usize, within: Length },
-    Align { side: Side, items: Vec<usize> },
-    At { a: usize, place: Place },
+    Near {
+        a: usize,
+        b: usize,
+        within: Length,
+    },
+    Align {
+        side: Side,
+        items: Vec<usize>,
+    },
+    At {
+        a: usize,
+        place: Place,
+    },
     /// A frame, with the title on top, around these nodes and no others, on the page.
     /// `title_em` is the title's width in ems of the body font, measured once fonts are
     /// loaded (`layout::measure_groups`). `inner` holds copies of the groups directly nested
     /// in this one, whose frames this frame must enclose.
-    Group { items: Vec<usize>, title: Option<String>, color: Option<String>, title_em: f64, inner: Vec<Relation> },
+    Group {
+        items: Vec<usize>,
+        title: Option<String>,
+        color: Option<String>,
+        title_em: f64,
+        inner: Vec<Relation>,
+    },
 }
 
 impl Relation {
     pub fn nodes(&self) -> Vec<usize> {
         match self {
-            Relation::LeftOf { a, b, .. } | Relation::Above { a, b, .. } | Relation::Near { a, b, .. } => vec![*a, *b],
+            Relation::LeftOf { a, b, .. }
+            | Relation::Above { a, b, .. }
+            | Relation::Near { a, b, .. } => vec![*a, *b],
             Relation::Align { items, .. } | Relation::Group { items, .. } => items.clone(),
             Relation::At { a, .. } => vec![*a],
         }
@@ -109,7 +135,9 @@ impl Relation {
     /// relation that is not a group.
     pub fn depth(&self) -> usize {
         match self {
-            Relation::Group { inner, .. } => 1 + inner.iter().map(Relation::depth).max().unwrap_or(0),
+            Relation::Group { inner, .. } => {
+                1 + inner.iter().map(Relation::depth).max().unwrap_or(0)
+            }
             _ => 0,
         }
     }

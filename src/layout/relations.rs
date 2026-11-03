@@ -22,10 +22,28 @@ pub const FRAME_CLEAR: f64 = 0.4;
 /// frame is a group's border: around its members' boxes and nested groups' frames, with a
 /// title band on top that is wide enough for the title. Only defined for `Relation::Group`.
 pub fn frame(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64) -> Rect {
-    let Relation::Group { items, title, title_em, inner, .. } = rel else { unreachable!("frame of a non-group") };
+    let Relation::Group {
+        items,
+        title,
+        title_em,
+        inner,
+        ..
+    } = rel
+    else {
+        unreachable!("frame of a non-group")
+    };
     let mut r = rect(items[0]);
-    for b in items[1..].iter().map(|&v| rect(v)).chain(inner.iter().map(|g| frame(g, rect, body))) {
-        r = Rect { x0: r.x0.min(b.x0), y0: r.y0.min(b.y0), x1: r.x1.max(b.x1), y1: r.y1.max(b.y1) };
+    for b in items[1..]
+        .iter()
+        .map(|&v| rect(v))
+        .chain(inner.iter().map(|g| frame(g, rect, body)))
+    {
+        r = Rect {
+            x0: r.x0.min(b.x0),
+            y0: r.y0.min(b.y0),
+            x1: r.x1.max(b.x1),
+            y1: r.y1.max(b.y1),
+        };
     }
     let mut r = r.inflate(FRAME_PAD * body);
     if title.is_some() {
@@ -44,7 +62,13 @@ pub const TITLE_BAND: f64 = 1.1;
 /// relation_holds is the meaning of a user constraint, shared by the solver and the checker.
 /// `rect` gives a node's region; y grows upward. For a group it checks only that the frame is
 /// on the page; `frame_clear` checks it against everything else.
-pub fn relation_holds(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64, page: &Rect, tol: f64) -> bool {
+pub fn relation_holds(
+    rel: &Relation,
+    rect: &dyn Fn(usize) -> Rect,
+    body: f64,
+    page: &Rect,
+    tol: f64,
+) -> bool {
     match rel {
         Relation::LeftOf { a, b, gap } => rect(*a).x1 + gap.pt(body) <= rect(*b).x0 + 1e-9,
         Relation::Above { a, b, gap } => rect(*a).y0 >= rect(*b).y1 + gap.pt(body) - 1e-9,
@@ -54,7 +78,9 @@ pub fn relation_holds(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64, p
             let dy = (ra.y0 - rb.y1).max(rb.y0 - ra.y1).max(0.0);
             dx.hypot(dy) <= within.pt(body) + 1e-9
         }
-        Relation::Align { side, items } => items.windows(2).all(|w| aligned(*side, &rect(w[0]), &rect(w[1]), tol)),
+        Relation::Align { side, items } => items
+            .windows(2)
+            .all(|w| aligned(*side, &rect(w[0]), &rect(w[1]), tol)),
         Relation::At { a, place } => {
             let r = rect(*a);
             let (cx, cy) = ((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0);

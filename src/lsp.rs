@@ -8,7 +8,10 @@ use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
 
-const KEYWORDS: &[&str] = &["title", "root", "layout", "page", "font", "theme", "style", "node", "group", "require", "prefer", "include"];
+const KEYWORDS: &[&str] = &[
+    "title", "root", "layout", "page", "font", "theme", "style", "node", "group", "require",
+    "prefer", "include",
+];
 
 /// Out is stdout, shared with the threads that run full layouts.
 type Out = Arc<Mutex<std::io::Stdout>>;
@@ -51,7 +54,10 @@ fn position(text: &str, off: usize) -> Value {
 
 /// offset converts an LSP position back to a byte offset, clamped to its line.
 fn offset(text: &str, pos: &Value) -> usize {
-    let (line, ch) = (pos["line"].as_u64().unwrap_or(0) as usize, pos["character"].as_u64().unwrap_or(0) as usize);
+    let (line, ch) = (
+        pos["line"].as_u64().unwrap_or(0) as usize,
+        pos["character"].as_u64().unwrap_or(0) as usize,
+    );
     let start: usize = text.split_inclusive('\n').take(line).map(str::len).sum();
     let mut units = 0;
     for (i, c) in text[start..].char_indices() {
@@ -74,7 +80,12 @@ const NOWHERE: Span = Span { lo: 0, hi: 0 };
 fn spliced_range(src: &Source, span: Span) -> (String, Value) {
     let at = |off: usize| {
         let (line, col) = src.line_col(off);
-        let units: usize = src.line_text(line).chars().take(col - 1).map(char::len_utf16).sum();
+        let units: usize = src
+            .line_text(line)
+            .chars()
+            .take(col - 1)
+            .map(char::len_utf16)
+            .sum();
         let (path, n) = src.file_line(line);
         (path, json!({ "line": n - 1, "character": units }))
     };
@@ -102,14 +113,23 @@ type Diags = HashMap<String, Vec<Value>>;
 /// front_end runs include, lex, parse, and sema, which include the static contradiction
 /// check (E0008).
 fn front_end(path: &str, text: &str) -> Diags {
-    let crate::macros::Loaded { src, parse, mut diags } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
+    let crate::macros::Loaded {
+        src,
+        parse,
+        mut diags,
+    } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
     let (stmts, parse_diags) = crate::parse::parse(&parse);
     diags.extend(parse_diags);
     diags.extend(crate::sema::analyze(&stmts).1);
     diags.retain(|d| !crate::include::unused_shared_style(&src, d));
     let mut out = Diags::from([(path.to_string(), Vec::new())]);
     for d in diags.iter().filter(|d| d.level != Level::Note) {
-        let span = d.labels.iter().find(|l| l.primary).or(d.labels.first()).map_or(NOWHERE, |l| l.span);
+        let span = d
+            .labels
+            .iter()
+            .find(|l| l.primary)
+            .or(d.labels.first())
+            .map_or(NOWHERE, |l| l.span);
         let (file, r) = spliced_range(&src, span);
         out.entry(file).or_default().push(lsp_diag(r, d));
     }
@@ -166,7 +186,11 @@ fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Diags>
     // Still registered means nobody killed it; reap it here.
     let mine = {
         let mut r = running.lock().unwrap();
-        if r.get(uri).is_some_and(|c| c.id() == id) { r.remove(uri) } else { None }
+        if r.get(uri).is_some_and(|c| c.id() == id) {
+            r.remove(uri)
+        } else {
+            None
+        }
     };
     let _ = std::fs::remove_file(&out);
     let _ = std::fs::remove_file(format!("{}.fitd-tmp{id}", out.display()));
@@ -178,18 +202,29 @@ fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Diags>
     for line in String::from_utf8_lossy(&log).lines() {
         let (file, at, rest) = match short_line(line) {
             Some((f, ln, col, rest)) => (f.to_string(), Some((ln, col)), rest),
-            None if line.starts_with("error: ") && !line.contains("aborting due to") => (path.to_string(), None, line),
+            None if line.starts_with("error: ") && !line.contains("aborting due to") => {
+                (path.to_string(), None, line)
+            }
             None => continue,
         };
         let severity = if rest.starts_with("error") { 1 } else { 2 };
-        let code = rest.split_once('[').and_then(|(_, r)| r.split_once(']')).map_or("", |(c, _)| c);
+        let code = rest
+            .split_once('[')
+            .and_then(|(_, r)| r.split_once(']'))
+            .map_or("", |(c, _)| c);
         let msg = rest.split_once("]: ").map_or(rest, |(_, m)| m);
-        let src = texts.entry(file.clone()).or_insert_with(|| Source::new(&file, &std::fs::read_to_string(&file).unwrap_or_default()));
+        let src = texts.entry(file.clone()).or_insert_with(|| {
+            Source::new(&file, &std::fs::read_to_string(&file).unwrap_or_default())
+        });
         // `--short` gives a line and column, so the mark runs from there to the end of the line.
         let r = match at {
             Some((ln, col)) if ln >= 1 && ln <= src.text.lines().count().max(1) => {
                 let line_text = src.line_text(ln);
-                let start_units: usize = line_text.chars().take(col.saturating_sub(1)).map(char::len_utf16).sum();
+                let start_units: usize = line_text
+                    .chars()
+                    .take(col.saturating_sub(1))
+                    .map(char::len_utf16)
+                    .sum();
                 json!({ "start": { "line": ln - 1, "character": start_units }, "end": { "line": ln - 1, "character": line_text.encode_utf16().count() } })
             }
             _ => range("", NOWHERE),
@@ -209,11 +244,16 @@ struct Decl {
 /// declared lists node ids and style names, for definitions and completion, including those
 /// declared in included files.
 fn declared(path: &str, text: &str) -> (Vec<Decl>, Vec<Decl>) {
-    let crate::macros::Loaded { src, parse, .. } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
+    let crate::macros::Loaded { src, parse, .. } =
+        crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
     let (stmts, _) = crate::parse::parse(&parse);
     let decl = |n: Name| {
         let (path, range) = spliced_range(&src, n.span);
-        Decl { name: n.text, path, range }
+        Decl {
+            name: n.text,
+            path,
+            range,
+        }
     };
     let (mut nodes, mut styles) = (Vec::new(), Vec::new());
     for st in stmts {
@@ -229,17 +269,31 @@ fn declared(path: &str, text: &str) -> (Vec<Decl>, Vec<Decl>) {
 /// word_at finds the name under the cursor and whether a `.` marks it as a style.
 fn word_at(text: &str, off: usize) -> Option<(String, bool)> {
     let is = |c: char| c.is_alphanumeric() || c == '_' || c == '-';
-    let lo = text[..off].char_indices().rev().take_while(|&(_, c)| is(c)).last().map_or(off, |(i, _)| i);
-    let hi = off + text[off..].char_indices().find(|&(_, c)| !is(c)).map_or(text.len() - off, |(i, _)| i);
+    let lo = text[..off]
+        .char_indices()
+        .rev()
+        .take_while(|&(_, c)| is(c))
+        .last()
+        .map_or(off, |(i, _)| i);
+    let hi = off
+        + text[off..]
+            .char_indices()
+            .find(|&(_, c)| !is(c))
+            .map_or(text.len() - off, |(i, _)| i);
     (lo < hi).then(|| (text[lo..hi].to_string(), text[..lo].ends_with('.')))
 }
 
 fn definition(path: &str, text: &str, uri: &Value, pos: &Value) -> Value {
-    let Some((word, style)) = word_at(text, offset(text, pos)) else { return Value::Null };
+    let Some((word, style)) = word_at(text, offset(text, pos)) else {
+        return Value::Null;
+    };
     let (nodes, styles) = declared(path, text);
     let pool = if style { styles } else { nodes };
     // The open file's own declaration wins over one in an include.
-    let found = pool.iter().find(|d| d.name == word && d.path == path).or_else(|| pool.iter().find(|d| d.name == word));
+    let found = pool
+        .iter()
+        .find(|d| d.name == word && d.path == path)
+        .or_else(|| pool.iter().find(|d| d.name == word));
     found.map_or(Value::Null, |d| json!({ "uri": if d.path == path { uri.clone() } else { json!(uri_of(&d.path)) }, "range": d.range }))
 }
 
@@ -247,16 +301,30 @@ fn completion(path: &str, text: &str, pos: &Value) -> Value {
     let off = offset(text, pos);
     let line_start = text[..off].rfind('\n').map_or(0, |i| i + 1);
     let before = &text[line_start..off];
-    let typed = before.rsplit(|c: char| !(c.is_alphanumeric() || c == '_' || c == '-')).next().unwrap_or("");
+    let typed = before
+        .rsplit(|c: char| !(c.is_alphanumeric() || c == '_' || c == '-'))
+        .next()
+        .unwrap_or("");
     let (nodes, styles) = declared(path, text);
     let mut seen = HashSet::new();
     let items: Vec<Value> = if before[..before.len() - typed.len()].ends_with('.') {
-        styles.iter().filter(|s| seen.insert(s.name.clone())).map(|s| json!({ "label": s.name, "kind": 7 })).collect()
+        styles
+            .iter()
+            .filter(|s| seen.insert(s.name.clone()))
+            .map(|s| json!({ "label": s.name, "kind": 7 }))
+            .collect()
     } else if before.trim() == typed {
-        KEYWORDS.iter().map(|k| json!({ "label": k, "kind": 14 })).collect()
+        KEYWORDS
+            .iter()
+            .map(|k| json!({ "label": k, "kind": 14 }))
+            .collect()
     } else {
         // A node may be referenced before its `node` line, so every declaration is offered.
-        nodes.iter().filter(|n| seen.insert(n.name.clone())).map(|n| json!({ "label": n.name, "kind": 6 })).collect()
+        nodes
+            .iter()
+            .filter(|n| seen.insert(n.name.clone()))
+            .map(|n| json!({ "label": n.name, "kind": 6 }))
+            .collect()
     };
     Value::Array(items)
 }
@@ -274,7 +342,11 @@ fn uri_of(path: &str) -> String {
         }
     }
     let p = parts.join("/");
-    let mut s = String::from(if p.starts_with('/') { "file://" } else { "file:///" });
+    let mut s = String::from(if p.starts_with('/') {
+        "file://"
+    } else {
+        "file:///"
+    });
     for b in p.bytes() {
         if b.is_ascii_alphanumeric() || b"-._~/:".contains(&b) {
             s.push(b as char);
@@ -290,7 +362,10 @@ fn uri_of(path: &str) -> String {
 type Published = Arc<Mutex<HashMap<String, HashSet<String>>>>;
 
 fn publish(out: &Out, uri: &str, diags: Vec<Value>) {
-    send(out, json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": diags } }));
+    send(
+        out,
+        json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": diags } }),
+    );
 }
 
 /// publish_all sends the diagnostics of the document at `uri` and of the files it includes,
@@ -304,7 +379,12 @@ fn publish_all(out: &Out, published: &Published, uri: &str, path: &str, mut diag
         others.insert(u);
     }
     let mut published = published.lock().unwrap();
-    for stale in published.get(uri).into_iter().flatten().filter(|u| !others.contains(*u)) {
+    for stale in published
+        .get(uri)
+        .into_iter()
+        .flatten()
+        .filter(|u| !others.contains(*u))
+    {
         publish(out, stale, Vec::new());
     }
     published.insert(uri.to_string(), others);
@@ -346,8 +426,16 @@ pub fn serve() -> std::process::ExitCode {
     while let Some(msg) = read(&mut input) {
         let method = msg["method"].as_str().unwrap_or("");
         let params = &msg["params"];
-        let uri = params["textDocument"]["uri"].as_str().unwrap_or("").to_string();
-        let reply = |result: Value| send(&out, json!({ "jsonrpc": "2.0", "id": msg["id"], "result": result }));
+        let uri = params["textDocument"]["uri"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        let reply = |result: Value| {
+            send(
+                &out,
+                json!({ "jsonrpc": "2.0", "id": msg["id"], "result": result }),
+            )
+        };
         let bump = |uri: &str| *versions.lock().unwrap().entry(uri.to_string()).or_insert(0) += 1;
         match method {
             "initialize" => reply(json!({
@@ -364,7 +452,11 @@ pub fn serve() -> std::process::ExitCode {
             }
             "exit" => break,
             "textDocument/didOpen" | "textDocument/didChange" => {
-                let text = if method == "textDocument/didOpen" { &params["textDocument"]["text"] } else { &params["contentChanges"][0]["text"] };
+                let text = if method == "textDocument/didOpen" {
+                    &params["textDocument"]["text"]
+                } else {
+                    &params["contentChanges"][0]["text"]
+                };
                 let text = text.as_str().unwrap_or("").to_string();
                 bump(&uri);
                 let path = path_of(&uri).unwrap_or_default();
@@ -378,20 +470,43 @@ pub fn serve() -> std::process::ExitCode {
                 publish_all(&out, &published, &uri, "", Diags::new());
             }
             "textDocument/didSave" => {
-                let (Some(path), Some(text)) = (path_of(&uri), docs.get(&uri).cloned()) else { continue };
+                let (Some(path), Some(text)) = (path_of(&uri), docs.get(&uri).cloned()) else {
+                    continue;
+                };
                 bump(&uri);
                 let at = versions.lock().unwrap()[&uri];
-                let (out, versions, running, published) = (out.clone(), versions.clone(), running.clone(), published.clone());
+                let (out, versions, running, published) = (
+                    out.clone(),
+                    versions.clone(),
+                    running.clone(),
+                    published.clone(),
+                );
                 std::thread::spawn(move || {
-                    let Some(diags) = layout(&path, &text, &uri, &running) else { return };
+                    let Some(diags) = layout(&path, &text, &uri, &running) else {
+                        return;
+                    };
                     if versions.lock().unwrap().get(&uri) == Some(&at) {
                         publish_all(&out, &published, &uri, &path, diags);
                     }
                 });
             }
-            "textDocument/definition" => reply(docs.get(&uri).map_or(Value::Null, |t| definition(&path_of(&uri).unwrap_or_default(), t, &params["textDocument"]["uri"], &params["position"]))),
-            "textDocument/completion" => reply(docs.get(&uri).map_or(Value::Array(Vec::new()), |t| completion(&path_of(&uri).unwrap_or_default(), t, &params["position"]))),
-            _ if msg.get("id").is_some() => send(&out, json!({ "jsonrpc": "2.0", "id": msg["id"], "error": { "code": -32601, "message": format!("unsupported method {method}") } })),
+            "textDocument/definition" => reply(docs.get(&uri).map_or(Value::Null, |t| {
+                definition(
+                    &path_of(&uri).unwrap_or_default(),
+                    t,
+                    &params["textDocument"]["uri"],
+                    &params["position"],
+                )
+            })),
+            "textDocument/completion" => {
+                reply(docs.get(&uri).map_or(Value::Array(Vec::new()), |t| {
+                    completion(&path_of(&uri).unwrap_or_default(), t, &params["position"])
+                }))
+            }
+            _ if msg.get("id").is_some() => send(
+                &out,
+                json!({ "jsonrpc": "2.0", "id": msg["id"], "error": { "code": -32601, "message": format!("unsupported method {method}") } }),
+            ),
             _ => {}
         }
     }
@@ -399,7 +514,11 @@ pub fn serve() -> std::process::ExitCode {
         let _ = c.kill();
         let _ = c.wait();
     }
-    if shutdown { std::process::ExitCode::SUCCESS } else { std::process::ExitCode::FAILURE }
+    if shutdown {
+        std::process::ExitCode::SUCCESS
+    } else {
+        std::process::ExitCode::FAILURE
+    }
 }
 
 #[cfg(test)]
@@ -413,7 +532,10 @@ mod tests {
         let p = position(text, off);
         assert_eq!(p, json!({ "line": 0, "character": 11 }));
         assert_eq!(offset(text, &p), off);
-        assert_eq!(offset(text, &json!({ "line": 1, "character": 5 })), text.find("b\n").unwrap());
+        assert_eq!(
+            offset(text, &json!({ "line": 1, "character": 5 })),
+            text.find("b\n").unwrap()
+        );
     }
 
     #[test]
@@ -421,46 +543,117 @@ mod tests {
         let text = "style hot color=#C62828\nnode a .hot\nnode b\na -> b\nrequire a left-of \n";
         let uri = json!("file:///x.fitd");
         let at = |s: &str, k: usize| position(text, text.match_indices(s).nth(k).unwrap().0);
-        assert_eq!(definition("/x.fitd", text, &uri, &at("b", 1))["range"]["start"], json!({ "line": 2, "character": 5 }));
-        assert_eq!(definition("/x.fitd", text, &uri, &at("hot", 1))["range"]["start"], json!({ "line": 0, "character": 6 }));
-        let labels = |v: Value| v.as_array().unwrap().iter().map(|i| i["label"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        assert_eq!(labels(completion("/x.fitd", text, &position(text, text.find("hot\nnode b").unwrap()))), ["hot"]);
-        assert_eq!(labels(completion("/x.fitd", text, &position(text, text.rfind('\n').unwrap()))), ["a", "b"]);
-        assert!(labels(completion("/x.fitd", text, &json!({ "line": 5, "character": 0 }))).contains(&"require".to_string()));
+        assert_eq!(
+            definition("/x.fitd", text, &uri, &at("b", 1))["range"]["start"],
+            json!({ "line": 2, "character": 5 })
+        );
+        assert_eq!(
+            definition("/x.fitd", text, &uri, &at("hot", 1))["range"]["start"],
+            json!({ "line": 0, "character": 6 })
+        );
+        let labels = |v: Value| {
+            v.as_array()
+                .unwrap()
+                .iter()
+                .map(|i| i["label"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            labels(completion(
+                "/x.fitd",
+                text,
+                &position(text, text.find("hot\nnode b").unwrap())
+            )),
+            ["hot"]
+        );
+        assert_eq!(
+            labels(completion(
+                "/x.fitd",
+                text,
+                &position(text, text.rfind('\n').unwrap())
+            )),
+            ["a", "b"]
+        );
+        assert!(
+            labels(completion(
+                "/x.fitd",
+                text,
+                &json!({ "line": 5, "character": 0 })
+            ))
+            .contains(&"require".to_string())
+        );
     }
 
     #[test]
     fn includes_lend_their_names_and_diagnostics() {
         let dir = std::env::temp_dir().join(format!("fitd-lsp-inc-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("parts")).unwrap();
-        std::fs::write(dir.join("parts/more.fitd"), "style hot color=#EF5350\nnode far \"Far\" .hot\nfar -> ghost\n").unwrap();
+        std::fs::write(
+            dir.join("parts/more.fitd"),
+            "style hot color=#EF5350\nnode far \"Far\" .hot\nfar -> ghost\n",
+        )
+        .unwrap();
         let main = dir.join("main.fitd");
         let path = main.to_str().unwrap();
         let text = "node a \"A\"\ninclude \"parts/more.fitd\"\na -> far\n";
         let uri = json!("file:///main");
-        let def = definition(path, text, &uri, &position(text, text.rfind("far").unwrap()));
-        assert_eq!(def["uri"], json!(uri_of(dir.join("parts/more.fitd").to_str().unwrap())));
+        let def = definition(
+            path,
+            text,
+            &uri,
+            &position(text, text.rfind("far").unwrap()),
+        );
+        assert_eq!(
+            def["uri"],
+            json!(uri_of(dir.join("parts/more.fitd").to_str().unwrap()))
+        );
         assert_eq!(def["range"]["start"], json!({ "line": 1, "character": 5 }));
-        let labels = |v: Value| v.as_array().unwrap().iter().map(|i| i["label"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        assert_eq!(labels(completion(path, text, &position(text, text.len() - 1))), ["a", "far"]);
+        let labels = |v: Value| {
+            v.as_array()
+                .unwrap()
+                .iter()
+                .map(|i| i["label"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            labels(completion(path, text, &position(text, text.len() - 1))),
+            ["a", "far"]
+        );
         let diags = front_end(path, text);
         assert!(diags[path].is_empty(), "{diags:?}");
         let inc = &diags[dir.join("parts/more.fitd").to_str().unwrap()];
-        assert!(inc.len() == 1 && inc[0]["code"] == "E0001" && inc[0]["range"]["start"] == json!({ "line": 2, "character": 7 }), "{inc:?}");
+        assert!(
+            inc.len() == 1
+                && inc[0]["code"] == "E0001"
+                && inc[0]["range"]["start"] == json!({ "line": 2, "character": 7 }),
+            "{inc:?}"
+        );
     }
 
     #[test]
     fn short_lines_split_and_uris_encode() {
-        assert_eq!(short_line("C:/m/a.fitd:3:7: error[E0001]: x"), Some(("C:/m/a.fitd", 3, 7, "error[E0001]: x")));
+        assert_eq!(
+            short_line("C:/m/a.fitd:3:7: error[E0001]: x"),
+            Some(("C:/m/a.fitd", 3, 7, "error[E0001]: x"))
+        );
         assert_eq!(short_line("error: no room"), None);
-        assert_eq!(uri_of("/home/a b/./parts/../m.fitd"), "file:///home/a%20b/m.fitd");
+        assert_eq!(
+            uri_of("/home/a b/./parts/../m.fitd"),
+            "file:///home/a%20b/m.fitd"
+        );
         assert_eq!(uri_of("c:\\Users\\m.fitd"), "file:///c:/Users/m.fitd");
     }
 
     #[test]
     fn file_uris_decode() {
-        assert_eq!(path_of("file:///home/a%20b/m.fitd").as_deref(), Some("/home/a b/m.fitd"));
-        assert_eq!(path_of("file:///c%3A/Users/m.fitd").as_deref(), Some("c:/Users/m.fitd"));
+        assert_eq!(
+            path_of("file:///home/a%20b/m.fitd").as_deref(),
+            Some("/home/a b/m.fitd")
+        );
+        assert_eq!(
+            path_of("file:///c%3A/Users/m.fitd").as_deref(),
+            Some("c:/Users/m.fitd")
+        );
         assert_eq!(path_of("file:///C:/m.fitd").as_deref(), Some("C:/m.fitd"));
         assert_eq!(path_of("untitled:1"), None);
     }

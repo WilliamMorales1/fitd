@@ -12,7 +12,10 @@ impl Span {
     }
 
     pub fn to(self, o: Span) -> Span {
-        Span { lo: self.lo.min(o.lo), hi: self.hi.max(o.hi) }
+        Span {
+            lo: self.lo.min(o.lo),
+            hi: self.hi.max(o.hi),
+        }
     }
 }
 
@@ -40,24 +43,45 @@ pub struct Diag {
 
 impl Diag {
     pub fn error(code: &'static str, msg: impl Into<String>) -> Diag {
-        Diag { level: Level::Error, code, msg: msg.into(), labels: Vec::new(), notes: Vec::new(), help: None }
+        Diag {
+            level: Level::Error,
+            code,
+            msg: msg.into(),
+            labels: Vec::new(),
+            notes: Vec::new(),
+            help: None,
+        }
     }
 
     pub fn warning(code: &'static str, msg: impl Into<String>) -> Diag {
-        Diag { level: Level::Warning, ..Diag::error(code, msg) }
+        Diag {
+            level: Level::Warning,
+            ..Diag::error(code, msg)
+        }
     }
 
     pub fn info(msg: impl Into<String>) -> Diag {
-        Diag { level: Level::Note, ..Diag::error("", msg) }
+        Diag {
+            level: Level::Note,
+            ..Diag::error("", msg)
+        }
     }
 
     pub fn primary(mut self, span: Span, msg: impl Into<String>) -> Diag {
-        self.labels.push(Label { span, msg: msg.into(), primary: true });
+        self.labels.push(Label {
+            span,
+            msg: msg.into(),
+            primary: true,
+        });
         self
     }
 
     pub fn secondary(mut self, span: Span, msg: impl Into<String>) -> Diag {
-        self.labels.push(Label { span, msg: msg.into(), primary: false });
+        self.labels.push(Label {
+            span,
+            msg: msg.into(),
+            primary: false,
+        });
         self
     }
 
@@ -91,13 +115,26 @@ pub struct Seg {
 
 impl Source {
     pub fn new(path: &str, text: &str) -> Source {
-        Source::spliced(path, text, vec![Seg { line: 1, path: path.to_string(), file_line: 1 }])
+        Source::spliced(
+            path,
+            text,
+            vec![Seg {
+                line: 1,
+                path: path.to_string(),
+                file_line: 1,
+            }],
+        )
     }
 
     pub fn spliced(path: &str, text: &str, segs: Vec<Seg>) -> Source {
         let mut starts = vec![0];
         starts.extend(text.match_indices('\n').map(|(i, _)| i + 1));
-        Source { path: path.to_string(), text: text.to_string(), starts, segs }
+        Source {
+            path: path.to_string(),
+            text: text.to_string(),
+            starts,
+            segs,
+        }
     }
 
     fn seg(&self, line: usize) -> &Seg {
@@ -113,7 +150,9 @@ impl Source {
     /// line_col is 1-based; the column counts characters, not bytes.
     pub fn line_col(&self, off: usize) -> (usize, usize) {
         let line = self.starts.partition_point(|&s| s <= off) - 1;
-        let col = self.text[self.starts[line]..off.min(self.text.len())].chars().count();
+        let col = self.text[self.starts[line]..off.min(self.text.len())]
+            .chars()
+            .count();
         (line + 1, col + 1)
     }
 
@@ -127,7 +166,11 @@ impl Source {
 impl Diag {
     /// pos orders diagnostics by where they point, so output reads top to bottom.
     pub fn pos(&self) -> usize {
-        self.labels.iter().find(|l| l.primary).or(self.labels.first()).map_or(usize::MAX, |l| l.span.lo)
+        self.labels
+            .iter()
+            .find(|l| l.primary)
+            .or(self.labels.first())
+            .map_or(usize::MAX, |l| l.span.lo)
     }
 }
 
@@ -135,10 +178,16 @@ impl Diag {
 /// below on connectors, as rustc does; overlapping marks each get their own row.
 fn mark_rows(pad: &str, marks: &[(usize, String, &str)]) -> String {
     let mut s = String::new();
-    let overlap = marks.windows(2).any(|w| w[0].0 + w[0].1.chars().count() > w[1].0);
+    let overlap = marks
+        .windows(2)
+        .any(|w| w[0].0 + w[0].1.chars().count() > w[1].0);
     if overlap {
         for (col, mark, msg) in marks {
-            let msg = if msg.is_empty() { String::new() } else { format!(" {msg}") };
+            let msg = if msg.is_empty() {
+                String::new()
+            } else {
+                format!(" {msg}")
+            };
             s += &format!("{pad} | {}{mark}{msg}\n", " ".repeat(*col));
         }
         return s;
@@ -148,7 +197,11 @@ fn mark_rows(pad: &str, marks: &[(usize, String, &str)]) -> String {
         row += &" ".repeat(col - row.chars().count());
         row += mark;
     }
-    let mut hang: Vec<(usize, &str)> = marks.iter().filter(|m| !m.2.is_empty()).map(|m| (m.0, m.2)).collect();
+    let mut hang: Vec<(usize, &str)> = marks
+        .iter()
+        .filter(|m| !m.2.is_empty())
+        .map(|m| (m.0, m.2))
+        .collect();
     // The rightmost message fits on the mark row itself.
     if let Some(&(col, msg)) = hang.last()
         && marks.last().is_some_and(|m| m.0 == col)
@@ -186,7 +239,11 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
         }
         let mut labels: Vec<&Label> = d.labels.iter().collect();
         labels.sort_by_key(|l| (src.line_col(l.span.lo).0, !l.primary));
-        let width = labels.iter().map(|l| src.file_line(src.line_col(l.span.lo).0).1.to_string().len()).max().unwrap_or(1);
+        let width = labels
+            .iter()
+            .map(|l| src.file_line(src.line_col(l.span.lo).0).1.to_string().len())
+            .max()
+            .unwrap_or(1);
         let pad = " ".repeat(width);
         let mut file = "";
         if let Some(l) = labels.iter().find(|l| l.primary).or(labels.first()) {
@@ -218,9 +275,17 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
                 .take_while(|l| src.line_col(l.span.lo).0 == line)
                 .map(|l| {
                     let col = src.line_col(l.span.lo).1 - 1;
-                    let end = if src.line_col(l.span.hi).0 == line { src.line_col(l.span.hi).1 - 1 } else { text.chars().count() };
+                    let end = if src.line_col(l.span.hi).0 == line {
+                        src.line_col(l.span.hi).1 - 1
+                    } else {
+                        text.chars().count()
+                    };
                     let n = end.saturating_sub(col).max(1);
-                    (col, (if l.primary { "^" } else { "-" }).repeat(n), l.msg.as_str())
+                    (
+                        col,
+                        (if l.primary { "^" } else { "-" }).repeat(n),
+                        l.msg.as_str(),
+                    )
                 })
                 .collect();
             marks.sort_by_key(|m| m.0);
@@ -245,18 +310,39 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
 pub fn render_short(src: &Source, diags: &[Diag]) -> String {
     let mut s = String::new();
     for d in diags.iter().filter(|d| d.level != Level::Note) {
-        let level = if d.level == Level::Error { "error" } else { "warning" };
-        let (line, col) = d.labels.iter().find(|l| l.primary).or(d.labels.first()).map_or((0, 0), |l| src.line_col(l.span.lo));
-        let (path, fline) = if line == 0 { (src.path.as_str(), 0) } else { src.file_line(line) };
+        let level = if d.level == Level::Error {
+            "error"
+        } else {
+            "warning"
+        };
+        let (line, col) = d
+            .labels
+            .iter()
+            .find(|l| l.primary)
+            .or(d.labels.first())
+            .map_or((0, 0), |l| src.line_col(l.span.lo));
+        let (path, fline) = if line == 0 {
+            (src.path.as_str(), 0)
+        } else {
+            src.file_line(line)
+        };
         s += &format!("{path}:{fline}:{col}: {level}[{}]: {}", d.code, d.msg);
-        let mut also: Vec<usize> = d.labels.iter().map(|l| src.line_col(l.span.lo).0).filter(|&l| l != line).collect();
+        let mut also: Vec<usize> = d
+            .labels
+            .iter()
+            .map(|l| src.line_col(l.span.lo).0)
+            .filter(|&l| l != line)
+            .collect();
         also.dedup();
         if !also.is_empty() {
             let at = |l: usize| match src.file_line(l) {
                 (p, n) if p == path => n.to_string(),
                 (p, n) => format!("{p}:{n}"),
             };
-            s += &format!("; also line {}", also.iter().map(|&l| at(l)).collect::<Vec<_>>().join(", "));
+            s += &format!(
+                "; also line {}",
+                also.iter().map(|&l| at(l)).collect::<Vec<_>>().join(", ")
+            );
         }
         if let Some(h) = &d.help {
             s += &format!("; {h}");
@@ -273,16 +359,22 @@ mod tests {
     #[test]
     fn renders_caret_under_span() {
         let src = Source::new("t.fitd", "node a\na -> bb\n");
-        let d = Diag::error("E0001", "unknown node `bb`").primary(Span::new(12, 14), "not declared");
+        let d =
+            Diag::error("E0001", "unknown node `bb`").primary(Span::new(12, 14), "not declared");
         let out = render(&src, &[d]);
         assert!(out.contains(" --> t.fitd:2:6"), "{out}");
-        assert!(out.contains("2 | a -> bb\n  |      ^^ not declared"), "{out}");
+        assert!(
+            out.contains("2 | a -> bb\n  |      ^^ not declared"),
+            "{out}"
+        );
     }
 
     #[test]
     fn unlabeled_marks_share_a_row() {
         let src = Source::new("t.fitd", "a x b y c\n");
-        let d = Diag::error("E0008", "m").secondary(Span::new(2, 3), "").secondary(Span::new(6, 7), "");
+        let d = Diag::error("E0008", "m")
+            .secondary(Span::new(2, 3), "")
+            .secondary(Span::new(6, 7), "");
         let out = render(&src, &[d]);
         assert!(out.contains("1 | a x b y c\n  |   -   -\n"), "{out}");
     }
@@ -290,7 +382,9 @@ mod tests {
     #[test]
     fn left_message_hangs_on_a_connector() {
         let src = Source::new("t.fitd", "a x b y c\n");
-        let d = Diag::error("E0008", "m").primary(Span::new(2, 3), "here").secondary(Span::new(6, 7), "");
+        let d = Diag::error("E0008", "m")
+            .primary(Span::new(2, 3), "here")
+            .secondary(Span::new(6, 7), "");
         let out = render(&src, &[d]);
         assert!(out.contains("  |   ^   -\n  |   |\n  |   here\n"), "{out}");
     }
@@ -298,7 +392,10 @@ mod tests {
     #[test]
     fn short_form_is_one_line_per_diagnostic() {
         let src = Source::new("t.fitd", "node a\na -> bb\nrequire a above bb\n");
-        let d = Diag::error("E0110", "m").primary(Span::new(7, 8), "").secondary(Span::new(15, 33), "").help("h");
+        let d = Diag::error("E0110", "m")
+            .primary(Span::new(7, 8), "")
+            .secondary(Span::new(15, 33), "")
+            .help("h");
         let out = render_short(&src, &[d, Diag::info("skipped")]);
         assert_eq!(out, "t.fitd:2:1: error[E0110]: m; also line 3; h\n");
     }

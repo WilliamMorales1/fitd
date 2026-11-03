@@ -23,7 +23,11 @@ pub struct Tree {
 
 impl Tree {
     pub fn leaves(&self, v: usize) -> usize {
-        if self.children[v].is_empty() { 1 } else { self.children[v].iter().map(|&c| self.leaves(c)).sum() }
+        if self.children[v].is_empty() {
+            1
+        } else {
+            self.children[v].iter().map(|&c| self.leaves(c)).sum()
+        }
     }
 
     /// branch returns the depth-1 ancestor that decides a node's color.
@@ -59,7 +63,11 @@ fn center(adj: &[Vec<usize>]) -> usize {
         let d = bfs_dist(adj, v);
         let reach = d.iter().flatten().count();
         let ecc = d.iter().flatten().max().copied().unwrap_or(0);
-        (std::cmp::Reverse(reach), ecc, std::cmp::Reverse(adj[v].len()))
+        (
+            std::cmp::Reverse(reach),
+            ecc,
+            std::cmp::Reverse(adj[v].len()),
+        )
     };
     (0..adj.len()).min_by_key(|&v| score(v)).unwrap_or(0)
 }
@@ -82,7 +90,10 @@ pub fn build(g: &Graph) -> Tree {
         notes: Vec::new(),
     };
     if g.root.is_none() {
-        t.notes.push(Diag::info(format!("no `root` given; chose graph center `{}`", g.nodes[root].id)));
+        t.notes.push(Diag::info(format!(
+            "no `root` given; chose graph center `{}`",
+            g.nodes[root].id
+        )));
     }
     let mut seen = vec![false; n];
     let mut used_link = vec![false; g.edges.len()];
@@ -116,11 +127,23 @@ pub fn build(g: &Graph) -> Tree {
                 Some((i, e)) => {
                     used_link[i] = true;
                     let (inside, out) = if seen[e.a] { (e.a, e.b) } else { (e.b, e.a) };
-                    t.notes.push(Diag::info(format!("`{}` reachable only by a link; attached under `{}`", g.nodes[out].id, g.nodes[inside].id)).primary(e.span, "this link"));
+                    t.notes.push(
+                        Diag::info(format!(
+                            "`{}` reachable only by a link; attached under `{}`",
+                            g.nodes[out].id, g.nodes[inside].id
+                        ))
+                        .primary(e.span, "this link"),
+                    );
                     (out, Some(inside))
                 }
                 None => {
-                    t.notes.push(Diag::info(format!("`{}` is disconnected; attached under root", g.nodes[v].id)).primary(g.nodes[v].span, "no edges reach this node"));
+                    t.notes.push(
+                        Diag::info(format!(
+                            "`{}` is disconnected; attached under root",
+                            g.nodes[v].id
+                        ))
+                        .primary(g.nodes[v].span, "no edges reach this node"),
+                    );
                     (v, Some(root))
                 }
             });
@@ -132,9 +155,19 @@ pub fn build(g: &Graph) -> Tree {
             continue;
         }
         if e.kind == EdgeKind::Tree {
-            t.notes.push(Diag::info(format!("edge `{}` -- `{}` closes a cycle; drawn as a cross link", g.nodes[e.a].id, g.nodes[e.b].id)).primary(e.span, "closes a cycle"));
+            t.notes.push(
+                Diag::info(format!(
+                    "edge `{}` -- `{}` closes a cycle; drawn as a cross link",
+                    g.nodes[e.a].id, g.nodes[e.b].id
+                ))
+                .primary(e.span, "closes a cycle"),
+            );
         }
-        t.links.push(Link { a: e.a, b: e.b, label: e.label.clone() });
+        t.links.push(Link {
+            a: e.a,
+            b: e.b,
+            label: e.label.clone(),
+        });
     }
     t
 }

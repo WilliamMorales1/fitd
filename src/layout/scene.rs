@@ -54,10 +54,19 @@ impl Grid {
             (x0, y0, x1, y1) = (x0.min(p.0), y0.min(p.1), x1.max(p.0), y1.max(p.1));
         }
         // About sixteen candidates per bucket.
-        let cell = (((x1 - x0) * (y1 - y0)).max(1.0) * 16.0 / at.len().max(1) as f64).sqrt().max(1.0);
+        let cell = (((x1 - x0) * (y1 - y0)).max(1.0) * 16.0 / at.len().max(1) as f64)
+            .sqrt()
+            .max(1.0);
         let key = |p: &P| ((p.0 / cell).floor() as i64, (p.1 / cell).floor() as i64);
-        let (cx0, cy0, cx1, cy1) = at.iter().map(key).fold((i64::MAX, i64::MAX, i64::MIN, i64::MIN), |(a, b, c, d), (x, y)| (a.min(x), b.min(y), c.max(x), d.max(y)));
-        let (nx, ny) = if at.is_empty() { (0, 0) } else { (cx1 - cx0 + 1, cy1 - cy0 + 1) };
+        let (cx0, cy0, cx1, cy1) = at.iter().map(key).fold(
+            (i64::MAX, i64::MAX, i64::MIN, i64::MIN),
+            |(a, b, c, d), (x, y)| (a.min(x), b.min(y), c.max(x), d.max(y)),
+        );
+        let (nx, ny) = if at.is_empty() {
+            (0, 0)
+        } else {
+            (cx1 - cx0 + 1, cy1 - cy0 + 1)
+        };
         let index = |(x, y): (i64, i64)| ((x - cx0) * ny + (y - cy0)) as usize;
         let mut start = vec![0u32; (nx * ny) as usize + 1];
         for p in at {
@@ -73,8 +82,20 @@ impl Grid {
             items[fill[k] as usize] = i as u32;
             fill[k] += 1;
         }
-        let full = (0..nx).flat_map(|x| (0..ny).map(move |y| (cx0 + x, cy0 + y))).filter(|&c| start[index(c)] < start[index(c) + 1]).map(|c| (c.0, c.1, index(c))).collect();
-        Grid { cell, x0: cx0, y0: cy0, ny, start, items, full }
+        let full = (0..nx)
+            .flat_map(|x| (0..ny).map(move |y| (cx0 + x, cy0 + y)))
+            .filter(|&c| start[index(c)] < start[index(c) + 1])
+            .map(|c| (c.0, c.1, index(c)))
+            .collect();
+        Grid {
+            cell,
+            x0: cx0,
+            y0: cy0,
+            ny,
+            start,
+            items,
+            full,
+        }
     }
 
     fn bucket(&self, k: usize) -> &[u32] {
@@ -87,7 +108,10 @@ impl Grid {
     pub(super) fn shadow(&self, apex: P, pts: &[P], mut f: impl FnMut(u32)) -> Option<u64> {
         let cross = |a: P, b: P| a.0 * b.1 - a.1 * b.0;
         let n = pts.len() as f64;
-        let mid = (pts.iter().map(|p| p.0).sum::<f64>() / n - apex.0, pts.iter().map(|p| p.1).sum::<f64>() / n - apex.1);
+        let mid = (
+            pts.iter().map(|p| p.0).sum::<f64>() / n - apex.0,
+            pts.iter().map(|p| p.1).sum::<f64>() / n - apex.1,
+        );
         if mid.0.hypot(mid.1) < 1e-9 {
             return None;
         }
@@ -108,11 +132,16 @@ impl Grid {
         let (dlo, dhi) = (lo.1, hi.1);
         let mut n = 0;
         for &(cx, cy, k) in &self.full {
-            let (x0, y0) = (cx as f64 * self.cell - apex.0, cy as f64 * self.cell - apex.1);
+            let (x0, y0) = (
+                cx as f64 * self.cell - apex.0,
+                cy as f64 * self.cell - apex.1,
+            );
             let (x1, y1) = (x0 + self.cell, y0 + self.cell);
             let corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)];
             // The wedge is left of `dlo` and right of `dhi`; skip cells wholly outside either side.
-            if corners.iter().all(|&c| cross(dlo, c) < 0.0) || corners.iter().all(|&c| cross(dhi, c) > 0.0) {
+            if corners.iter().all(|&c| cross(dlo, c) < 0.0)
+                || corners.iter().all(|&c| cross(dhi, c) > 0.0)
+            {
                 continue;
             }
             let b = self.bucket(k);
@@ -124,8 +153,14 @@ impl Grid {
 
     /// near calls `f` with every candidate whose center may lie in `r` (and some that do not).
     pub(super) fn near(&self, r: &Rect, mut f: impl FnMut(u32)) -> u64 {
-        let (cx0, cx1) = ((r.x0 / self.cell).floor() as i64, (r.x1 / self.cell).floor() as i64);
-        let (cy0, cy1) = ((r.y0 / self.cell).floor() as i64, (r.y1 / self.cell).floor() as i64);
+        let (cx0, cx1) = (
+            (r.x0 / self.cell).floor() as i64,
+            (r.x1 / self.cell).floor() as i64,
+        );
+        let (cy0, cy1) = (
+            (r.y0 / self.cell).floor() as i64,
+            (r.y1 / self.cell).floor() as i64,
+        );
         if (cx1 - cx0 + 1) * (cy1 - cy0 + 1) > self.full.len() as i64 {
             self.items.iter().for_each(|&i| f(i));
             return self.items.len() as u64;
@@ -140,7 +175,8 @@ impl Grid {
                 break;
             }
             let k = ((cx - self.x0) * self.ny + (cy0 - self.y0)) as usize;
-            let b = &self.items[self.start[k] as usize..self.start[k + (cy1 - cy0) as usize + 1] as usize];
+            let b = &self.items
+                [self.start[k] as usize..self.start[k + (cy1 - cy0) as usize + 1] as usize];
             n += b.len() as u64;
             b.iter().for_each(|&i| f(i));
         }
@@ -199,13 +235,23 @@ impl Scene<'_> {
         };
         Cow::Owned(match r.opts[k].0.checked_sub(r.bows.len()) {
             Some(j) => trim(&r.vias[j], &|p| inside(r.a, p), &|p| inside(r.b, p)),
-            None => curve(self.center(r.a, val), &|p| inside(r.a, p), self.center(r.b, val), &|p| inside(r.b, p), r.bows[r.opts[k].0]),
+            None => curve(
+                self.center(r.a, val),
+                &|p| inside(r.a, p),
+                self.center(r.b, val),
+                &|p| inside(r.b, p),
+                r.bows[r.opts[k].0],
+            ),
         })
     }
 
     pub(super) fn route_label(&self, i: usize, val: &[u32]) -> Rect {
         let r = &self.routes[i];
-        let key = [val[self.var[r.a]], val[self.var[r.b]], val[self.node.len() + i]];
+        let key = [
+            val[self.var[r.a]],
+            val[self.var[r.b]],
+            val[self.node.len() + i],
+        ];
         let mut memo = self.labels.borrow_mut();
         if memo.len() <= i {
             memo.resize(self.routes.len(), None);
@@ -246,7 +292,14 @@ impl Problem for Scene<'_> {
         matches!(self.kinds[c], Kind::Rel(_) | Kind::Aligned(_))
     }
 
-    fn filter(&self, c: usize, val: &[u32], y: usize, removed: &[u32], bad: &mut Vec<usize>) -> Option<u64> {
+    fn filter(
+        &self,
+        c: usize,
+        val: &[u32],
+        y: usize,
+        removed: &[u32],
+        bad: &mut Vec<usize>,
+    ) -> Option<u64> {
         if self.grids.is_empty() || y >= self.node.len() {
             return None;
         }
@@ -254,7 +307,13 @@ impl Problem for Scene<'_> {
         let (w, h) = self.size[y];
         let mut tests = 0;
         // Generic, not a closure, so `hit` inlines into the scan.
-        fn visit(a: u32, removed: &[u32], tests: &mut u64, bad: &mut Vec<usize>, hit: impl Fn(usize) -> bool) {
+        fn visit(
+            a: u32,
+            removed: &[u32],
+            tests: &mut u64,
+            bad: &mut Vec<usize>,
+            hit: impl Fn(usize) -> bool,
+        ) {
             let a = a as usize;
             if removed[a] == csp::UNSET {
                 *tests += 1;
@@ -267,22 +326,53 @@ impl Problem for Scene<'_> {
             Kind::Apart(gap) => {
                 let other = if s[0] == y { s[1] } else { s[0] };
                 let r = self.rects[other][val[other] as usize].inflate(gap);
-                let grown = Rect { x0: r.x0 - w / 2.0, y0: r.y0 - h / 2.0, x1: r.x1 + w / 2.0, y1: r.y1 + h / 2.0 };
-                self.grids[y].near(&grown, |a| visit(a, removed, &mut tests, bad, |a| r.intersects(&self.rects[y][a])));
+                let grown = Rect {
+                    x0: r.x0 - w / 2.0,
+                    y0: r.y0 - h / 2.0,
+                    x1: r.x1 + w / 2.0,
+                    y1: r.y1 + h / 2.0,
+                };
+                self.grids[y].near(&grown, |a| {
+                    visit(a, removed, &mut tests, bad, |a| {
+                        r.intersects(&self.rects[y][a])
+                    })
+                });
                 Some(tests)
             }
             Kind::Clear(thin) if s[2] == y => {
-                let (p, q) = (self.at[s[0]][val[s[0]] as usize], self.at[s[1]][val[s[1]] as usize]);
-                let grown = Rect { x0: p.0.min(q.0) - thin - w / 2.0, y0: p.1.min(q.1) - thin - h / 2.0, x1: p.0.max(q.0) + thin + w / 2.0, y1: p.1.max(q.1) + thin + h / 2.0 };
-                self.grids[y].near(&grown, |a| visit(a, removed, &mut tests, bad, |a| segment_hits_rect(p, q, &self.rects[y][a].inflate(thin))));
+                let (p, q) = (
+                    self.at[s[0]][val[s[0]] as usize],
+                    self.at[s[1]][val[s[1]] as usize],
+                );
+                let grown = Rect {
+                    x0: p.0.min(q.0) - thin - w / 2.0,
+                    y0: p.1.min(q.1) - thin - h / 2.0,
+                    x1: p.0.max(q.0) + thin + w / 2.0,
+                    y1: p.1.max(q.1) + thin + h / 2.0,
+                };
+                self.grids[y].near(&grown, |a| {
+                    visit(a, removed, &mut tests, bad, |a| {
+                        segment_hits_rect(p, q, &self.rects[y][a].inflate(thin))
+                    })
+                });
                 Some(tests)
             }
             Kind::Clear(thin) => {
                 // An endpoint is open: the edge hits the box only from inside the box's shadow.
-                let (apex, open) = if s[0] == y { (self.at[s[1]][val[s[1]] as usize], 0) } else { (self.at[s[0]][val[s[0]] as usize], 1) };
+                let (apex, open) = if s[0] == y {
+                    (self.at[s[1]][val[s[1]] as usize], 0)
+                } else {
+                    (self.at[s[0]][val[s[0]] as usize], 1)
+                };
                 let r = self.rects[s[2]][val[s[2]] as usize].inflate(thin);
                 let corners = [(r.x0, r.y0), (r.x1, r.y0), (r.x0, r.y1), (r.x1, r.y1)];
-                let ends = |a: usize| if open == 0 { (self.at[y][a], apex) } else { (apex, self.at[y][a]) };
+                let ends = |a: usize| {
+                    if open == 0 {
+                        (self.at[y][a], apex)
+                    } else {
+                        (apex, self.at[y][a])
+                    }
+                };
                 self.grids[y].shadow(apex, &corners, |a| {
                     visit(a, removed, &mut tests, bad, |a| {
                         let (p, q) = ends(a);
@@ -311,9 +401,23 @@ impl Problem for Scene<'_> {
                 Some(tests)
             }
             Kind::Outside(ci, _) if s[s.len() - 1] == y => {
-                let f = frame(&self.g.constraints[ci].rel, &|v| self.node_rect(v, val), self.body).inflate(FRAME_CLEAR * self.body);
-                let grown = Rect { x0: f.x0 - w / 2.0, y0: f.y0 - h / 2.0, x1: f.x1 + w / 2.0, y1: f.y1 + h / 2.0 };
-                self.grids[y].near(&grown, |a| visit(a, removed, &mut tests, bad, |a| f.intersects(&self.rects[y][a])));
+                let f = frame(
+                    &self.g.constraints[ci].rel,
+                    &|v| self.node_rect(v, val),
+                    self.body,
+                )
+                .inflate(FRAME_CLEAR * self.body);
+                let grown = Rect {
+                    x0: f.x0 - w / 2.0,
+                    y0: f.y0 - h / 2.0,
+                    x1: f.x1 + w / 2.0,
+                    y1: f.y1 + h / 2.0,
+                };
+                self.grids[y].near(&grown, |a| {
+                    visit(a, removed, &mut tests, bad, |a| {
+                        f.intersects(&self.rects[y][a])
+                    })
+                });
                 Some(tests)
             }
             _ => None,
@@ -326,17 +430,30 @@ impl Problem for Scene<'_> {
         let rect = |k: usize| self.rects[s[k]][val[s[k]] as usize];
         match self.kinds[c] {
             Kind::Apart(gap) => !rect(0).inflate(gap).intersects(&rect(1)),
-            Kind::Outward(step) => self.r[s[1]][val[s[1]] as usize] >= self.r[s[0]][val[s[0]] as usize] + step - 1e-9,
+            Kind::Outward(step) => {
+                self.r[s[1]][val[s[1]] as usize] >= self.r[s[0]][val[s[0]] as usize] + step - 1e-9
+            }
             Kind::Clear(thin) => !segment_hits_rect(at(0), at(1), &rect(2).inflate(thin)),
             Kind::NoCross => !segments_cross(at(0), at(1), at(2), at(3)),
             Kind::Aligned(side) => aligned(side, &rect(0), &rect(1), self.tol),
             Kind::Rel(ci) => {
                 let by_node = |u: usize| self.rects[self.var[u]][val[self.var[u]] as usize];
-                relation_holds(&self.g.constraints[ci].rel, &by_node, self.body, &self.page, self.tol)
+                relation_holds(
+                    &self.g.constraints[ci].rel,
+                    &by_node,
+                    self.body,
+                    &self.page,
+                    self.tol,
+                )
             }
-            Kind::LabelClear(i, u, m) => !self.route_label(i, val).intersects(&self.node_rect(u, val).inflate(m * self.body)),
+            Kind::LabelClear(i, u, m) => !self
+                .route_label(i, val)
+                .intersects(&self.node_rect(u, val).inflate(m * self.body)),
             Kind::LabelPage(i) => self.route_label(i, val).within(&self.page),
-            Kind::LabelApart(i, j, m) => !self.route_label(i, val).inflate(m * self.body).intersects(&self.route_label(j, val)),
+            Kind::LabelApart(i, j, m) => !self
+                .route_label(i, val)
+                .inflate(m * self.body)
+                .intersects(&self.route_label(j, val)),
             Kind::LinkApart(i, j) if self.apart.get(c).is_some_and(|t| !t.is_empty()) => {
                 let bend = |i: usize| self.routes[i].opts[val[self.node.len() + i] as usize].0;
                 self.apart[c][bend(i) * self.routes[j].bends() + bend(j)]
@@ -348,14 +465,29 @@ impl Problem for Scene<'_> {
                     .filter(|u| *u == rj.a || *u == rj.b)
                     .map(|u| self.node_rect(u, val).inflate(1.5 * self.body))
                     .collect();
-                !paths_meet(&self.route_path(i, val), &self.route_path(j, val), 0.5 * self.body, &skip)
+                !paths_meet(
+                    &self.route_path(i, val),
+                    &self.route_path(j, val),
+                    0.5 * self.body,
+                    &skip,
+                )
             }
             Kind::Outside(ci, u) => {
                 let rel = &self.g.constraints[ci].rel;
-                frame_clear(&frame(rel, &|v| self.node_rect(v, val), self.body), &self.node_rect(u, val), self.body)
+                frame_clear(
+                    &frame(rel, &|v| self.node_rect(v, val), self.body),
+                    &self.node_rect(u, val),
+                    self.body,
+                )
             }
             Kind::Frames(ci, cj) => {
-                let f = |c: usize| frame(&self.g.constraints[c].rel, &|v| self.node_rect(v, val), self.body);
+                let f = |c: usize| {
+                    frame(
+                        &self.g.constraints[c].rel,
+                        &|v| self.node_rect(v, val),
+                        self.body,
+                    )
+                };
                 frame_clear(&f(ci), &f(cj), self.body)
             }
             Kind::LabelFrame(i, ci) => {
@@ -363,19 +495,29 @@ impl Problem for Scene<'_> {
                 let f = frame(rel, &|v| self.node_rect(v, val), self.body);
                 let l = self.route_label(i, val);
                 let titled = matches!(rel, Relation::Group { title: Some(_), .. });
-                let inner = Rect { y1: f.y1 - if titled { TITLE_BAND * self.body } else { 0.0 }, ..f }.inflate(-LABEL_CLEAR * self.body);
+                let inner = Rect {
+                    y1: f.y1 - if titled { TITLE_BAND * self.body } else { 0.0 },
+                    ..f
+                }
+                .inflate(-LABEL_CLEAR * self.body);
                 !l.intersects(&f.inflate(CLEAR * self.body)) || l.within(&inner)
             }
             Kind::LinkEdge(i, p, q) => {
                 let (a, b) = (self.center(p, val), self.center(q, val));
-                !self.route_path(i, val).windows(2).any(|s| segments_cross(s[0], s[1], a, b))
+                !self
+                    .route_path(i, val)
+                    .windows(2)
+                    .any(|s| segments_cross(s[0], s[1], a, b))
             }
             Kind::LinkClear(i, u, margin) => {
                 let (w, h) = self.size[self.var[u]];
                 let (w, h) = (w + 2.0 * margin * self.body, h + 2.0 * margin * self.body);
                 let c = self.center(u, val);
                 let shape = self.shapes[self.var[u]];
-                !self.route_path(i, val).iter().any(|&p| inside_box(c, shape, w, h, p))
+                !self
+                    .route_path(i, val)
+                    .iter()
+                    .any(|&p| inside_box(c, shape, w, h, p))
             }
         }
     }
@@ -383,7 +525,17 @@ impl Problem for Scene<'_> {
 
 /// build turns one plan into a CSP scene, plus the plan's edges and its (kx, ky, tol).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64, users: Users, kind: LayoutKind, boxes: &[Boxed], rot: f64) -> (Scene<'a>, Vec<Drawn>, (f64, f64, f64)) {
+pub(super) fn build<'a>(
+    g: &'a Graph,
+    t: &Tree,
+    fonts: &Fonts,
+    cfg: &Config,
+    b: f64,
+    users: Users,
+    kind: LayoutKind,
+    boxes: &[Boxed],
+    rot: f64,
+) -> (Scene<'a>, Vec<Drawn>, (f64, f64, f64)) {
     let n = g.nodes.len();
     let plan = match kind {
         LayoutKind::Radial => radial::plan(g, t, boxes, cfg, b, rot),
@@ -394,14 +546,28 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
     if let Some(a) = cfg.anchor {
         for (v, c) in plan.cands.iter_mut().enumerate() {
             if let Some(q) = a.pos[v] {
-                c.insert(0, Cand { cost: f64::NEG_INFINITY, at: q, r: (q.0 / plan.kx).hypot(q.1 / plan.ky) });
+                c.insert(
+                    0,
+                    Cand {
+                        cost: f64::NEG_INFINITY,
+                        at: q,
+                        r: (q.0 / plan.kx).hypot(q.1 / plan.ky),
+                    },
+                );
             }
         }
     }
     // Starting from a known layout guarantees a first solution; search then improves on it.
     if let Users::Shrunk(prev) | Users::All(prev) | Users::Routes(prev) = users {
         for (v, c) in plan.cands.iter_mut().enumerate() {
-            c.insert(0, Cand { cost: f64::NEG_INFINITY, at: prev.pos[v], r: prev.radius(v) });
+            c.insert(
+                0,
+                Cand {
+                    cost: f64::NEG_INFINITY,
+                    at: prev.pos[v],
+                    r: prev.radius(v),
+                },
+            );
         }
     }
     let mut var = vec![0; n];
@@ -434,7 +600,11 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
         sc.shapes.push(boxes[v].shape);
         sc.at.push(c.iter().map(|c| c.at).collect());
         sc.r.push(c.iter().map(|c| c.r).collect());
-        sc.rects.push(c.iter().map(|c| Rect::centered(c.at, boxes[v].w, boxes[v].h)).collect());
+        sc.rects.push(
+            c.iter()
+                .map(|c| Rect::centered(c.at, boxes[v].w, boxes[v].h))
+                .collect(),
+        );
     }
     let mut cons = plan.cons;
     for (ci, c) in g.constraints.iter().enumerate() {
@@ -446,7 +616,11 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
         if !on {
             continue;
         }
-        let w = if c.hard || matches!(users, Users::Wanted) { 0 } else { c.weight as u64 };
+        let w = if c.hard || matches!(users, Users::Wanted) {
+            0
+        } else {
+            c.weight as u64
+        };
         match &c.rel {
             Relation::Align { side, items } if c.hard => {
                 for (i, &a) in items.iter().enumerate() {
@@ -478,7 +652,10 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
     let routing = matches!(users, Users::Routes(_));
     if let Users::Routes(prev) = users {
         for (i, &v) in sc.node.iter().enumerate() {
-            let k = sc.at[i].iter().position(|&p| p == prev.pos[v]).expect("fixed node keeps its spot");
+            let k = sc.at[i]
+                .iter()
+                .position(|&p| p == prev.pos[v])
+                .expect("fixed node keeps its spot");
             sc.at[i] = vec![sc.at[i][k]];
             sc.r[i] = vec![sc.r[i][k]];
             sc.rects[i] = vec![sc.rects[i][k]];
@@ -494,14 +671,34 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
         let mut vias = Vec::new();
         if link && routing {
             // Nodes are fixed, so detours around the other boxes can be computed up front.
-            let others: Vec<Rect> = (0..n).filter(|&u| u != e.a && u != e.b).map(|u| sc.rects[sc.var[u]][0]).collect();
-            vias = detours(sc.at[sc.var[e.a]][0], sc.at[sc.var[e.b]][0], &others, &sc.page, 0.4 * b);
+            let others: Vec<Rect> = (0..n)
+                .filter(|&u| u != e.a && u != e.b)
+                .map(|u| sc.rects[sc.var[u]][0])
+                .collect();
+            vias = detours(
+                sc.at[sc.var[e.a]][0],
+                sc.at[sc.var[e.b]][0],
+                &others,
+                &sc.page,
+                0.4 * b,
+            );
         }
         let spots: &[f64] = if e.label.is_some() { &SPOTS } else { &[0.5] };
-        let opts = (0..bows.len() + vias.len()).flat_map(|k| spots.iter().map(move |&t| (k, t))).collect();
+        let opts = (0..bows.len() + vias.len())
+            .flat_map(|k| spots.iter().map(move |&t| (k, t)))
+            .collect();
         let label = e.label.as_ref().map(|l| label_size(fonts, l, b));
         e.label_size = label.unwrap_or((0.0, 0.0));
-        sc.routes.push(Route { edge: k, a: e.a, b: e.b, bows, vias, opts, label, paths: Vec::new() });
+        sc.routes.push(Route {
+            edge: k,
+            a: e.a,
+            b: e.b,
+            bows,
+            vias,
+            opts,
+            label,
+            paths: Vec::new(),
+        });
         if routing {
             // Every node has a single spot, so value 0 everywhere places them all.
             let i = sc.routes.len() - 1;
@@ -512,9 +709,24 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
                 let r = &sc.routes[i];
                 let hits: Vec<usize> = (0..r.bends())
                     .map(|k| {
-                        val[sc.node.len() + i] = r.opts.iter().position(|o| o.0 == k).unwrap() as u32;
+                        val[sc.node.len() + i] =
+                            r.opts.iter().position(|o| o.0 == k).unwrap() as u32;
                         let path = sc.route_path(i, &val);
-                        (0..n).filter(|&u| u != r.a && u != r.b && path.iter().any(|&p| inside_box(sc.at[sc.var[u]][0], sc.shapes[sc.var[u]], sc.size[sc.var[u]].0, sc.size[sc.var[u]].1, p))).count()
+                        (0..n)
+                            .filter(|&u| {
+                                u != r.a
+                                    && u != r.b
+                                    && path.iter().any(|&p| {
+                                        inside_box(
+                                            sc.at[sc.var[u]][0],
+                                            sc.shapes[sc.var[u]],
+                                            sc.size[sc.var[u]].0,
+                                            sc.size[sc.var[u]].1,
+                                            p,
+                                        )
+                                    })
+                            })
+                            .count()
                     })
                     .collect();
                 sc.routes[i].opts.sort_by_key(|o| hits[o.0]);
@@ -537,9 +749,11 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
         }
         // Keep first occurrences in order: structural kinds read their scope by position.
         let mut seen = Vec::new();
-        scope.retain(|v| !seen.contains(v) && {
-            seen.push(*v);
-            true
+        scope.retain(|v| {
+            !seen.contains(v) && {
+                seen.push(*v);
+                true
+            }
         });
         sc.scopes.push(scope);
         sc.kinds.push(kind);
@@ -550,7 +764,9 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
             push(&mut sc, &nodes, &[], kind, w);
         }
     }
-    let links: Vec<usize> = (0..sc.routes.len()).filter(|&i| edges[sc.routes[i].edge].style == EdgeStyle::Link).collect();
+    let links: Vec<usize> = (0..sc.routes.len())
+        .filter(|&i| edges[sc.routes[i].edge].style == EdgeStyle::Link)
+        .collect();
     for i in 0..sc.routes.len() {
         if sc.routes[i].label.is_some() {
             push(&mut sc, &[], &[i], Kind::LabelPage(i), 0);
@@ -571,7 +787,13 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
             }
             for j in i + 1..sc.routes.len() {
                 if sc.routes[j].label.is_some() {
-                    push(&mut sc, &[], &[i, j], Kind::LabelApart(i, j, LABEL_CLEAR), 0);
+                    push(
+                        &mut sc,
+                        &[],
+                        &[i, j],
+                        Kind::LabelApart(i, j, LABEL_CLEAR),
+                        0,
+                    );
                     if routing {
                         push(&mut sc, &[], &[i, j], Kind::LabelApart(i, j, CLEAR), 2);
                     }
@@ -589,7 +811,9 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
             for &j in links.iter().filter(|&&j| j > i) {
                 push(&mut sc, &[], &[i, j], Kind::LinkApart(i, j), 20);
             }
-            for e in edges.iter().filter(|e| e.style != EdgeStyle::Link && ![a, b2].contains(&e.a) && ![a, b2].contains(&e.b)) {
+            for e in edges.iter().filter(|e| {
+                e.style != EdgeStyle::Link && ![a, b2].contains(&e.a) && ![a, b2].contains(&e.b)
+            }) {
                 push(&mut sc, &[e.a, e.b], &[i], Kind::LinkEdge(i, e.a, e.b), 1);
             }
         }
@@ -600,7 +824,9 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
         // asks the same question many times, so answer each pair once.
         sc.apart = vec![Vec::new(); sc.kinds.len()];
         for c in 0..sc.kinds.len() {
-            let Kind::LinkApart(i, j) = sc.kinds[c] else { continue };
+            let Kind::LinkApart(i, j) = sc.kinds[c] else {
+                continue;
+            };
             let (ni, nj) = (sc.routes[i].bends(), sc.routes[j].bends());
             let first = |r: &Route, k: usize| r.opts.iter().position(|o| o.0 == k).unwrap() as u32;
             let mut val = vec![0; sc.node.len() + sc.routes.len()];
@@ -622,7 +848,6 @@ pub(super) fn build<'a>(g: &'a Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: 
 mod tests {
     use super::*;
     use crate::graph::Settings;
-
 
     /// scene builds `k` random candidates for each of `n` boxes, with every `Apart` pair, a
     /// path of edges that must clear every box, and crossing-free edge pairs.
@@ -657,7 +882,8 @@ mod tests {
         for _ in 0..n {
             let (w, h) = (300.0 + rnd().abs() / 3.0, 160.0 + rnd().abs() / 4.0);
             let at: Vec<P> = (0..k).map(|_| (rnd(), rnd())).collect();
-            sc.rects.push(at.iter().map(|&p| Rect::centered(p, w, h)).collect());
+            sc.rects
+                .push(at.iter().map(|&p| Rect::centered(p, w, h)).collect());
             sc.r.push(vec![0.0; at.len()]);
             sc.at.push(at);
             sc.size.push((w, h));
@@ -690,16 +916,29 @@ mod tests {
 
     #[test]
     fn grid_filter_matches_plain_checks() {
-        let g = Graph { title: None, root: None, nodes: vec![], edges: vec![], constraints: vec![], settings: Settings::default() };
+        let g = Graph {
+            title: None,
+            root: None,
+            nodes: vec![],
+            edges: vec![],
+            constraints: vec![],
+            settings: Settings::default(),
+        };
         let (mut sat, mut unsat, mut jumps) = (0, 0, 0);
         // Many candidates: mostly satisfiable after some search. Few: mostly unsatisfiable.
-        let cases = (1..12).map(|seed| (8 + seed as usize % 2, 100, seed)).chain((1..12).map(|seed| (10, 25, seed)));
+        let cases = (1..12)
+            .map(|seed| (8 + seed as usize % 2, 100, seed))
+            .chain((1..12).map(|seed| (10, 25, seed)));
         for (n, k, seed) in cases {
             let mut sc = scene(&g, n, k, seed * 7919);
             let (plain, ps) = csp::solve(&sc, u64::MAX, &AtomicBool::new(false));
             sc.grids = sc.at.iter().map(|a| Grid::new(a)).collect();
             let (fast, fs) = csp::solve(&sc, u64::MAX, &AtomicBool::new(false));
-            assert_eq!((ps.nodes, ps.backjumps), (fs.nodes, fs.backjumps), "seed {seed}");
+            assert_eq!(
+                (ps.nodes, ps.backjumps),
+                (fs.nodes, fs.backjumps),
+                "seed {seed}"
+            );
             match fast {
                 Outcome::Sat(_) => sat += 1,
                 _ => unsat += 1,
@@ -708,6 +947,9 @@ mod tests {
             jumps += fs.backjumps;
         }
         // The scenes must be hard enough to exercise pruning, wipeouts, and backjumps.
-        assert!(sat > 0 && unsat > 0 && jumps > 0, "sat {sat} unsat {unsat} backjumps {jumps}");
+        assert!(
+            sat > 0 && unsat > 0 && jumps > 0,
+            "sat {sat} unsat {unsat} backjumps {jumps}"
+        );
     }
 }

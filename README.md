@@ -1,6 +1,8 @@
 # fitd
 
-A small diagram language with a constraint solver for layout. Write nodes, edges, and layout constraints in a plain text file; fitd finds the largest font that fits a fixed page, satisfies every `require`, trades off every `prefer`, then verifies the result before writing SVG, PNG, PDF, or TikZ.
+[![CI](https://github.com/WilliamMorales1/fitd/actions/workflows/ci.yml/badge.svg)](https://github.com/WilliamMorales1/fitd/actions/workflows/ci.yml)
+
+fitd turns plain-text diagrams into SVG, PNG, PDF, or TikZ. It lays out the diagram, chooses a font size that fits the page, applies layout constraints, and checks the finished drawing before writing it.
 
 ```
 title "How fitd compiles a diagram"
@@ -32,11 +34,21 @@ prefer out at right weight=2
 
 ![docs/pipeline.fitd rendered to PNG](docs/pipeline.png)
 
-That is the whole file. [examples/](examples/) holds larger ones, each rendered in the format that suits it (PNG, SVG, or PDF in [examples/out/](examples/out/)), including [the full pipeline](examples/compiler.fitd). Longer docs: [language](docs/language.md), [options](docs/options.md), [internals](docs/internals.md).
+This is a complete input file. More examples are in [examples/](examples/), with rendered output in `examples/out/`. See the [language guide](docs/language.md), [options](docs/options.md), and [internals](docs/internals.md) for details.
 
 ## Dependencies
 
 Rust 1.85+ (edition 2024) and Cargo. Crates, fetched by Cargo: `resvg` (SVG/PNG rendering), `ttf-parser` (font metrics), `serde_json` (LSP and lock files). DejaVu fonts are compiled in; a custom `family` needs fontconfig (`fc-match`). Compiling `--tikz` output needs a LaTeX install with TikZ.
+
+## Install
+
+Build from source with Rust 1.85 or newer:
+
+```fish
+cargo install --path .
+```
+
+Tagged releases provide binaries for Linux, macOS, and Windows on the [Releases page](https://github.com/WilliamMorales1/fitd/releases).
 
 ## Usage
 
@@ -54,7 +66,7 @@ cargo build --release
 ./target/release/fitd examples/fib_calls.fitd -o fib.png  # macros: a recursive template
 ```
 
-Editors: `fitd lsp` is a language server (front-end diagnostics as you type, full layout on save, cancelled by a newer save, go-to-definition and completion for node and style names, including those from included files, whose diagnostics are published under their own names; names built by macros, such as `s${i}`, have no definition to jump to). `editors/vscode/` holds a TextMate grammar packaged as a VS Code extension; copy or symlink it into `~/.vscode/extensions/fitd` for highlighting. `editors/tree-sitter-fitd/` is a tree-sitter grammar with setup for Neovim and Helix.
+Editor support includes `fitd lsp`, a VS Code TextMate grammar, and a Tree-sitter grammar for Neovim and Helix. The language server reports source diagnostics, completes node and style names, and supports definitions across included files.
 
 Tests: `cargo test --release`.
 
@@ -65,9 +77,11 @@ Tests: `cargo test --release`.
 - [Agent skill](skills/fitd/SKILL.md): drawing diagrams with fitd from an AI agent.
 - [Internals](docs/internals.md): pipeline, solver, references, tests.
 
-## Compared with DOT, Mermaid, and D2
+## Why fitd?
 
-Those languages have far wider adoption and tooling; `fitd import` translates Graphviz (`.dot`), Mermaid flowcharts and mind maps (`.mmd`), and D2 (`.d2`): nodes, labels, edges, and clusters, subgraphs, or containers (as nested `group`s), D2 `classes` and `vars`, with a mind map's indentation becoming a radial tree; it lists whatever has no equivalent. What fitd adds:
+`fitd import` reads Graphviz (`.dot`), Mermaid (`.mmd`), and D2 (`.d2`) files. It converts common nodes, labels, edges, groups, and containers, and reports features with no direct equivalent.
+
+fitd adds:
 
 - Hard constraints: `require a left-of b`, `align row(...)`, `a at top-left` hold in the output or the build fails.
 - Weighted preferences: `prefer ... weight=N` trades soft wishes against each other explicitly.

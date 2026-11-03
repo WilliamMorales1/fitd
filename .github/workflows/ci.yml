@@ -18,6 +18,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --release
 
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+
   tree-sitter:
     runs-on: ubuntu-latest
     defaults:

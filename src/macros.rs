@@ -71,7 +71,9 @@ enum T {
     Op(&'static str),
 }
 
-const OPS: [&str; 16] = ["..", "==", "!=", "<=", ">=", "+", "-", "*", "/", "%", "<", ">", "(", ")", ",", "="];
+const OPS: [&str; 16] = [
+    "..", "==", "!=", "<=", ">=", "+", "-", "*", "/", "%", "<", ">", "(", ")", ",", "=",
+];
 
 fn tokens(s: &str) -> Result<Vec<T>, String> {
     let cs: Vec<char> = s.chars().collect();
@@ -89,7 +91,10 @@ fn tokens(s: &str) -> Result<Vec<T>, String> {
                 i += 1;
             }
             let w: String = cs[lo..i].iter().collect();
-            out.push(T::Int(w.parse().map_err(|_| format!("number `{w}` is too large"))?));
+            out.push(T::Int(
+                w.parse()
+                    .map_err(|_| format!("number `{w}` is too large"))?,
+            ));
         } else if c.is_alphabetic() || c == '_' {
             let lo = i;
             while i < cs.len() && (cs[i].is_alphanumeric() || cs[i] == '_') {
@@ -117,7 +122,11 @@ fn tokens(s: &str) -> Result<Vec<T>, String> {
             out.push(T::Str(s));
         } else {
             for op in OPS {
-                if op.chars().enumerate().all(|(k, oc)| cs.get(i + k) == Some(&oc)) {
+                if op
+                    .chars()
+                    .enumerate()
+                    .all(|(k, oc)| cs.get(i + k) == Some(&oc))
+                {
                     out.push(T::Op(op));
                     i += op.len();
                     continue 'outer;
@@ -148,10 +157,12 @@ impl P {
     }
 
     fn op(&mut self, o: &str) -> bool {
-        if self.peek() == Some(&T::Op(match OPS.iter().find(|x| **x == o) {
-            Some(x) => x,
-            None => return false,
-        })) {
+        if self.peek()
+            == Some(&T::Op(match OPS.iter().find(|x| **x == o) {
+                Some(x) => x,
+                None => return false,
+            }))
+        {
             self.i += 1;
             return true;
         }
@@ -177,7 +188,11 @@ impl P {
     }
 
     fn expect(&mut self, o: &str) -> Result<(), String> {
-        if self.op(o) { Ok(()) } else { Err(format!("expected `{o}`")) }
+        if self.op(o) {
+            Ok(())
+        } else {
+            Err(format!("expected `{o}`"))
+        }
     }
 
     fn done(&self) -> Result<(), String> {
@@ -217,7 +232,13 @@ impl P {
     fn sum(&mut self) -> Result<Expr, String> {
         let mut a = self.product()?;
         loop {
-            let op = if self.op("+") { "+" } else if self.op("-") { "-" } else { return Ok(a) };
+            let op = if self.op("+") {
+                "+"
+            } else if self.op("-") {
+                "-"
+            } else {
+                return Ok(a);
+            };
             a = Expr::Bin(op, Box::new(a), Box::new(self.product()?));
         }
     }
@@ -225,7 +246,15 @@ impl P {
     fn product(&mut self) -> Result<Expr, String> {
         let mut a = self.unary()?;
         loop {
-            let op = if self.op("*") { "*" } else if self.op("/") { "/" } else if self.op("%") { "%" } else { return Ok(a) };
+            let op = if self.op("*") {
+                "*"
+            } else if self.op("/") {
+                "/"
+            } else if self.op("%") {
+                "%"
+            } else {
+                return Ok(a);
+            };
             a = Expr::Bin(op, Box::new(a), Box::new(self.unary()?));
         }
     }
@@ -284,7 +313,10 @@ fn show(t: &T) -> String {
 }
 
 fn parse_expr(s: &str) -> Result<Expr, String> {
-    let mut p = P { t: tokens(s)?, i: 0 };
+    let mut p = P {
+        t: tokens(s)?,
+        i: 0,
+    };
     let e = p.expr()?;
     p.done()?;
     Ok(e)
@@ -406,7 +438,10 @@ enum Line {
 }
 
 fn is_kw_line(t: &str) -> Option<(&str, &str)> {
-    let w = t.split(|c: char| !(c.is_alphanumeric() || c == '_')).next().unwrap_or("");
+    let w = t
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .next()
+        .unwrap_or("");
     if !matches!(w, "for" | "if" | "else" | "end" | "def" | "use") {
         return None;
     }
@@ -426,7 +461,11 @@ fn classify(line: &str) -> Result<Line, String> {
     }
     let Some((w, rest)) = is_kw_line(t) else {
         // A trailing comment is copied as is, so `${` in it is just text.
-        let cut = if t.starts_with('|') { line.len() } else { comment_start(line) };
+        let cut = if t.starts_with('|') {
+            line.len()
+        } else {
+            comment_start(line)
+        };
         return Ok(Line::Item(match pieces(&line[..cut])? {
             Some(mut p) => {
                 p.push(Piece::Lit(line[cut..].to_string()));
@@ -438,7 +477,10 @@ fn classify(line: &str) -> Result<Line, String> {
     if w == "for" {
         return for_line(rest);
     }
-    let mut p = P { t: tokens(rest)?, i: 0 };
+    let mut p = P {
+        t: tokens(rest)?,
+        i: 0,
+    };
     Ok(match w {
         "end" => {
             p.done()?;
@@ -489,9 +531,18 @@ const FOR_SHAPE: &str = "`for NAME in LO..HI`, `for NAME in a, b, c`, or `for I,
 
 fn for_line(rest: &str) -> Result<Line, String> {
     let padded = format!(" {rest} ");
-    let Some(k) = padded.find(" in ") else { return Err(format!("expected `in`: {FOR_SHAPE}")) };
-    let vars: Vec<String> = padded[..k].split(',').map(|v| v.trim().to_string()).collect();
-    let ok = |v: &String| !v.is_empty() && v.chars().all(|c| c.is_alphanumeric() || c == '_') && !v.starts_with(|c: char| c.is_ascii_digit());
+    let Some(k) = padded.find(" in ") else {
+        return Err(format!("expected `in`: {FOR_SHAPE}"));
+    };
+    let vars: Vec<String> = padded[..k]
+        .split(',')
+        .map(|v| v.trim().to_string())
+        .collect();
+    let ok = |v: &String| {
+        !v.is_empty()
+            && v.chars().all(|c| c.is_alphanumeric() || c == '_')
+            && !v.starts_with(|c: char| c.is_ascii_digit())
+    };
     if vars.len() > 2 || !vars.iter().all(ok) {
         return Err(format!("expected one or two variable names: {FOR_SHAPE}"));
     }
@@ -586,7 +637,11 @@ impl Builder<'_> {
                 Ok(l) => l,
                 Err(m) => {
                     self.err(at, m);
-                    items.push(Item { lo: at, hi: at, kind: Kind::Skip });
+                    items.push(Item {
+                        lo: at,
+                        hi: at,
+                        kind: Kind::Skip,
+                    });
                     continue;
                 }
             };
@@ -630,14 +685,29 @@ impl Builder<'_> {
                         self.err(at, "`def` is allowed only at the top level");
                     } else if let Some(old) = self.defs.get(&name) {
                         let line = old.line;
-                        self.errs.push((at, Diag::error("E0012", format!("template `{name}` is defined twice")).note(format!("first defined at {}", at_marker(line)))));
+                        self.errs.push((
+                            at,
+                            Diag::error("E0012", format!("template `{name}` is defined twice"))
+                                .note(format!("first defined at {}", at_marker(line))),
+                        ));
                     } else {
-                        self.defs.insert(name, Def { params, body, line: at });
+                        self.defs.insert(
+                            name,
+                            Def {
+                                params,
+                                body,
+                                line: at,
+                            },
+                        );
                     }
                     Kind::Skip
                 }
             };
-            items.push(Item { lo: at, hi: self.i - 1, kind });
+            items.push(Item {
+                lo: at,
+                hi: self.i - 1,
+                kind,
+            });
         }
         (items, Stop::Eof, self.lines.len())
     }
@@ -705,7 +775,10 @@ impl Expander<'_> {
         if self.steps > self.budget {
             if !self.out_of_budget {
                 self.out_of_budget = true;
-                let d = Diag::error("E0013", format!("macro expansion ran past {} steps", self.budget));
+                let d = Diag::error(
+                    "E0013",
+                    format!("macro expansion ran past {} steps", self.budget),
+                );
                 self.errs.push((line, d.help("check for runaway recursion or a huge `for` range, or raise `--expand-budget`")));
             }
             return Err(());
@@ -714,14 +787,21 @@ impl Expander<'_> {
     }
 
     fn get(&self, name: &str) -> Option<&Val> {
-        self.frames.last().unwrap().get(name).or_else(|| self.frames[0].get(name))
+        self.frames
+            .last()
+            .unwrap()
+            .get(name)
+            .or_else(|| self.frames[0].get(name))
     }
 
     fn eval(&mut self, line: usize, e: &Expr) -> Run<Val> {
         let int = |me: &mut Self, v: Val, what: &str| match v {
             Val::Int(n) => Ok(n),
             o => {
-                me.fail(line, format!("{what} needs a number, found {} \"{o}\"", o.kind()));
+                me.fail(
+                    line,
+                    format!("{what} needs a number, found {} \"{o}\"", o.kind()),
+                );
                 Err(())
             }
         };
@@ -730,10 +810,27 @@ impl Expander<'_> {
             Expr::Var(x) => match self.get(x) {
                 Some(v) => v.clone(),
                 None => {
-                    let mut known: Vec<&String> = self.frames.last().unwrap().keys().chain(self.frames[0].keys()).collect();
+                    let mut known: Vec<&String> = self
+                        .frames
+                        .last()
+                        .unwrap()
+                        .keys()
+                        .chain(self.frames[0].keys())
+                        .collect();
                     known.sort();
                     known.dedup();
-                    let d = if known.is_empty() { String::new() } else { format!(" (known: {})", known.iter().map(|k| k.as_str()).collect::<Vec<_>>().join(", ")) };
+                    let d = if known.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            " (known: {})",
+                            known
+                                .iter()
+                                .map(|k| k.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    };
                     self.fail(line, format!("unknown variable `{x}`{d}"));
                     return Err(());
                 }
@@ -751,9 +848,14 @@ impl Expander<'_> {
                 match *op {
                     "==" => Val::Int((x == y) as i64),
                     "!=" => Val::Int((x != y) as i64),
-                    "+" if matches!((&x, &y), (Val::Str(_), _) | (_, Val::Str(_))) => Val::Str(format!("{x}{y}")),
+                    "+" if matches!((&x, &y), (Val::Str(_), _) | (_, Val::Str(_))) => {
+                        Val::Str(format!("{x}{y}"))
+                    }
                     _ => {
-                        let (m, n) = (int(self, x, &format!("`{op}`"))?, int(self, y, &format!("`{op}`"))?);
+                        let (m, n) = (
+                            int(self, x, &format!("`{op}`"))?,
+                            int(self, y, &format!("`{op}`"))?,
+                        );
                         let r = match *op {
                             "+" => m.checked_add(n),
                             "-" => m.checked_sub(n),
@@ -790,19 +892,29 @@ impl Expander<'_> {
         let arity = match f {
             "names" => 3,
             _ => {
-                let hint = if self.defs.contains_key(f) { format!("; `{f}` is a template, so write `use {f}(...)` on its own line") } else { String::new() };
+                let hint = if self.defs.contains_key(f) {
+                    format!("; `{f}` is a template, so write `use {f}(...)` on its own line")
+                } else {
+                    String::new()
+                };
                 self.fail(line, format!("unknown function `{f}`{hint}"));
                 return Err(());
             }
         };
         if vs.len() != arity {
-            self.fail(line, format!("`{f}` takes {arity} arguments, found {}", vs.len()));
+            self.fail(
+                line,
+                format!("`{f}` takes {arity} arguments, found {}", vs.len()),
+            );
             return Err(());
         }
         let num = |me: &mut Self, v: &Val| match v {
             Val::Int(n) => Ok(*n),
             o => {
-                me.fail(line, format!("`{f}` needs a number, found {} \"{o}\"", o.kind()));
+                me.fail(
+                    line,
+                    format!("`{f}` needs a number, found {} \"{o}\"", o.kind()),
+                );
                 Err(())
             }
         };
@@ -865,7 +977,14 @@ impl Expander<'_> {
                         match (lo, hi) {
                             (Val::Int(a), Val::Int(b)) => Box::new((a..=b).map(Val::Int)),
                             (a, b) => {
-                                self.fail(at, format!("a range needs numbers, found {} and {}", a.kind(), b.kind()));
+                                self.fail(
+                                    at,
+                                    format!(
+                                        "a range needs numbers, found {} and {}",
+                                        a.kind(),
+                                        b.kind()
+                                    ),
+                                );
                                 return Err(());
                             }
                         }
@@ -898,12 +1017,32 @@ impl Expander<'_> {
                 let Some(def) = defs.get(name) else {
                     let mut known: Vec<&String> = defs.keys().collect();
                     known.sort();
-                    let hint = if known.is_empty() { String::new() } else { format!(" (templates: {})", known.iter().map(|k| k.as_str()).collect::<Vec<_>>().join(", ")) };
+                    let hint = if known.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            " (templates: {})",
+                            known
+                                .iter()
+                                .map(|k| k.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    };
                     self.fail(at, format!("unknown template `{name}`{hint}"));
                     return Err(());
                 };
                 if args.len() != def.params.len() {
-                    self.fail(at, format!("`{name}` takes {} argument{} ({}), found {}", def.params.len(), if def.params.len() == 1 { "" } else { "s" }, def.params.join(", "), args.len()));
+                    self.fail(
+                        at,
+                        format!(
+                            "`{name}` takes {} argument{} ({}), found {}",
+                            def.params.len(),
+                            if def.params.len() == 1 { "" } else { "s" },
+                            def.params.join(", "),
+                            args.len()
+                        ),
+                    );
                     return Err(());
                 }
                 if self.calls.len() >= MAX_DEPTH {
@@ -948,12 +1087,28 @@ fn cmp(op: &str, o: std::cmp::Ordering) -> bool {
 fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
     let lines: Vec<&str> = a.text.split('\n').collect();
     // The last piece after a final newline is empty, not a line.
-    let lines = if a.text.ends_with('\n') { &lines[..lines.len() - 1] } else { &lines[..] };
-    if !lines.iter().any(|l| l.contains("${") || is_kw_line(l.trim()).is_some()) {
+    let lines = if a.text.ends_with('\n') {
+        &lines[..lines.len() - 1]
+    } else {
+        &lines[..]
+    };
+    if !lines
+        .iter()
+        .any(|l| l.contains("${") || is_kw_line(l.trim()).is_some())
+    {
         let parse = a.text.clone();
-        return Loaded { src: a, parse, diags: inc };
+        return Loaded {
+            src: a,
+            parse,
+            diags: inc,
+        };
     }
-    let mut b = Builder { lines, i: 0, defs: HashMap::new(), errs: Vec::new() };
+    let mut b = Builder {
+        lines,
+        i: 0,
+        defs: HashMap::new(),
+        errs: Vec::new(),
+    };
     let (items, _, _) = b.block(true);
     let mut x = Expander {
         lines,
@@ -980,10 +1135,18 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
         {
             continue;
         }
-        segs.push(Seg { line, path: path.to_string(), file_line: fl });
+        segs.push(Seg {
+            line,
+            path: path.to_string(),
+            file_line: fl,
+        });
     }
     if segs.is_empty() {
-        segs.push(Seg { line: 1, path: a.path.clone(), file_line: 1 });
+        segs.push(Seg {
+            line: 1,
+            path: a.path.clone(),
+            file_line: 1,
+        });
     }
     let src = Source::spliced(&a.path, &x.text, segs);
     let at_line = |line: usize| {
@@ -993,13 +1156,18 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
         Span::new(lo + lead, lo + t.trim_end().len().max(lead))
     };
     let mut diags = Vec::new();
-    let line_starts: Vec<usize> = std::iter::once(0).chain(a.text.match_indices('\n').map(|(k, _)| k + 1)).collect();
+    let line_starts: Vec<usize> = std::iter::once(0)
+        .chain(a.text.match_indices('\n').map(|(k, _)| k + 1))
+        .collect();
     for mut d in inc {
         for l in &mut d.labels {
             let line = line_starts.partition_point(|&s| s <= l.span.lo) - 1;
             if line < lines.len() {
                 let base = x.raw[line] as isize - line_starts[line] as isize;
-                l.span = Span::new((l.span.lo as isize + base) as usize, (l.span.hi as isize + base) as usize);
+                l.span = Span::new(
+                    (l.span.lo as isize + base) as usize,
+                    (l.span.hi as isize + base) as usize,
+                );
             }
         }
         diags.push(d);
@@ -1012,13 +1180,17 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
         }
         for n in &mut d.notes {
             let parts: Vec<String> = n.split('\u{1}').map(String::from).collect();
-            *n = parts.iter().enumerate().map(|(k, p)| match (k % 2, p.parse::<usize>()) {
-                (1, Ok(l)) => {
-                    let (path, fl) = a.file_line(l + 1);
-                    format!("{path}:{fl}")
-                }
-                _ => p.clone(),
-            }).collect();
+            *n = parts
+                .iter()
+                .enumerate()
+                .map(|(k, p)| match (k % 2, p.parse::<usize>()) {
+                    (1, Ok(l)) => {
+                        let (path, fl) = a.file_line(l + 1);
+                        format!("{path}:{fl}")
+                    }
+                    _ => p.clone(),
+                })
+                .collect();
         }
         let label = match d.code {
             "E0013" => "expansion stopped here",
@@ -1027,7 +1199,11 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
         };
         diags.push(d.primary(at_line(line), label));
     }
-    Loaded { src, parse: x.parse, diags }
+    Loaded {
+        src,
+        parse: x.parse,
+        diags,
+    }
 }
 
 #[cfg(test)]
@@ -1039,7 +1215,12 @@ mod tests {
     }
 
     fn visible(l: &Loaded) -> Vec<String> {
-        l.parse.lines().map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect()
+        l.parse
+            .lines()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from)
+            .collect()
     }
 
     #[test]
@@ -1052,11 +1233,32 @@ mod tests {
 
     #[test]
     fn loops_and_interpolation() {
-        let l = run("for i in 1..3\n  node s${i} \"Step ${i * 10}\"\n  if i < 3\n    s${i} -> s${i + 1}\n  end\nend\ngroup ${names(\"s\", 1, 3)}\n");
-        assert!(l.diags.is_empty(), "{:?}", l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>());
-        assert_eq!(visible(&l), ["node s1 \"Step 10\"", "s1 -> s2", "node s2 \"Step 20\"", "s2 -> s3", "node s3 \"Step 30\"", "group s1, s2, s3"]);
+        let l = run(
+            "for i in 1..3\n  node s${i} \"Step ${i * 10}\"\n  if i < 3\n    s${i} -> s${i + 1}\n  end\nend\ngroup ${names(\"s\", 1, 3)}\n",
+        );
+        assert!(
+            l.diags.is_empty(),
+            "{:?}",
+            l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            visible(&l),
+            [
+                "node s1 \"Step 10\"",
+                "s1 -> s2",
+                "node s2 \"Step 20\"",
+                "s2 -> s3",
+                "node s3 \"Step 30\"",
+                "group s1, s2, s3"
+            ]
+        );
         // Generated lines map back to the template line they came from.
-        let k = l.src.text.lines().position(|t| t.trim() == "s2 -> s3").unwrap();
+        let k = l
+            .src
+            .text
+            .lines()
+            .position(|t| t.trim() == "s2 -> s3")
+            .unwrap();
         assert_eq!(l.src.file_line(k + 1), ("t.fitd", 4));
     }
 
@@ -1065,7 +1267,11 @@ mod tests {
         let l = run("node a \"$${x} ${1 + 1}\"\n| $${y}\n");
         assert_eq!(visible(&l), ["node a \"${x} 2\"", "| ${y}"]);
         let l = run("for i in 1..1\n  node a${i} \"#${i}\" color=#123  # ${nope}\nend\n");
-        assert!(l.diags.is_empty(), "{:?}", l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        assert!(
+            l.diags.is_empty(),
+            "{:?}",
+            l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>()
+        );
         assert_eq!(visible(&l), ["node a1 \"#1\" color=#123  # ${nope}"]);
     }
 
@@ -1073,15 +1279,23 @@ mod tests {
     fn list_loops_and_else() {
         let l = run("for i, s in a, b\n  node ${s}${i}\nend\n");
         assert_eq!(visible(&l), ["node a1", "node b2"]);
-        let l = run("for s in auth, front-end, \"Big DB\"\n  if s == \"auth\"\n    node a\n  else if s == \"front-end\"\n    node c\n  else\n    node b\n  end\nend\n");
+        let l = run(
+            "for s in auth, front-end, \"Big DB\"\n  if s == \"auth\"\n    node a\n  else if s == \"front-end\"\n    node c\n  else\n    node b\n  end\nend\n",
+        );
         assert!(l.diags.is_empty());
         assert_eq!(visible(&l), ["node a", "node c", "node b"]);
     }
 
     #[test]
     fn recursive_templates() {
-        let l = run("use fib(\"f\", 3)\ndef fib(id, n)\n  node ${id} \"${n}\"\n  if n >= 2\n    use fib(id + \"a\", n - 1)\n    use fib(id + \"b\", n - 2)\n    ${id} -> ${id}a, ${id}b\n  end\nend\n");
-        assert!(l.diags.is_empty(), "{:?}", l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        let l = run(
+            "use fib(\"f\", 3)\ndef fib(id, n)\n  node ${id} \"${n}\"\n  if n >= 2\n    use fib(id + \"a\", n - 1)\n    use fib(id + \"b\", n - 2)\n    ${id} -> ${id}a, ${id}b\n  end\nend\n",
+        );
+        assert!(
+            l.diags.is_empty(),
+            "{:?}",
+            l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>()
+        );
         let nodes = visible(&l).iter().filter(|s| s.starts_with("node")).count();
         assert_eq!(nodes, 5);
     }
@@ -1090,10 +1304,21 @@ mod tests {
     fn collatz_runs_and_budget_stops_runaway() {
         let collatz = "def c(k)\n  node n${k}\n  if k > 1 and k % 2 == 0\n    n${k} -> n${k / 2}\n    use c(k / 2)\n  else if k > 1\n    n${k} -> n${3 * k + 1}\n    use c(3 * k + 1)\n  end\nend\nuse c(27)\n";
         let l = run(collatz);
-        assert!(l.diags.is_empty(), "{:?}", l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>());
-        assert_eq!(visible(&l).iter().filter(|s| s.starts_with("node")).count(), 112);
+        assert!(
+            l.diags.is_empty(),
+            "{:?}",
+            l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            visible(&l).iter().filter(|s| s.starts_with("node")).count(),
+            112
+        );
         let l = run("def f(n)\n  use f(n + 1)\nend\nuse f(0)\n");
-        assert!(l.diags.iter().any(|d| d.msg.contains("nest more than")), "{:?}", l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        assert!(
+            l.diags.iter().any(|d| d.msg.contains("nest more than")),
+            "{:?}",
+            l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>()
+        );
         let l = run("for i in 1..1000000000\n  node a${i}\nend\n");
         assert!(l.diags.iter().any(|d| d.code == "E0013"));
     }
@@ -1101,9 +1326,28 @@ mod tests {
     #[test]
     fn errors_point_at_raw_lines() {
         let l = run("node a\nfor i in 1..2\n  node b${j}\nend\nif 1\nnode c\n");
-        let msgs: Vec<_> = l.diags.iter().map(|d| (d.code, d.msg.clone(), l.src.file_line(l.src.line_col(d.pos()).0).1)).collect();
-        assert!(msgs.iter().any(|(c, m, line)| *c == "E0012" && m.contains("unknown variable `j`") && *line == 3), "{msgs:?}");
-        assert!(msgs.iter().any(|(c, m, line)| *c == "E0002" && m.contains("no matching `end`") && *line == 5), "{msgs:?}");
+        let msgs: Vec<_> = l
+            .diags
+            .iter()
+            .map(|d| {
+                (
+                    d.code,
+                    d.msg.clone(),
+                    l.src.file_line(l.src.line_col(d.pos()).0).1,
+                )
+            })
+            .collect();
+        assert!(
+            msgs.iter().any(|(c, m, line)| *c == "E0012"
+                && m.contains("unknown variable `j`")
+                && *line == 3),
+            "{msgs:?}"
+        );
+        assert!(
+            msgs.iter()
+                .any(|(c, m, line)| *c == "E0002" && m.contains("no matching `end`") && *line == 5),
+            "{msgs:?}"
+        );
         assert_eq!(l.parse.len(), l.src.text.len());
     }
 }

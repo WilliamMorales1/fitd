@@ -5,9 +5,9 @@
 //! non-square page. Structural constraints: regions stay apart, children sit farther out than
 //! parents, tree edges miss every other node, and tree edges never cross.
 
-use crate::layout::{Boxed, Cand, Config, Drawn, EdgeStyle, Kind, Plan, Role};
 use crate::geom::Rect;
 use crate::graph::{Graph, Place, Relation};
+use crate::layout::{Boxed, Cand, Config, Drawn, EdgeStyle, Kind, Plan, Role};
 use crate::tree::Tree;
 
 pub fn role(t: &Tree, v: usize) -> Role {
@@ -74,7 +74,10 @@ enum End {
 /// sweeps as in layered layouts. None when the source order already does best.
 pub fn arrange(g: &Graph, t: &Tree, cfg: &Config) -> Option<Tree> {
     let n = t.parent.len();
-    let (kx, ky) = ((cfg.page_w / cfg.page_h).sqrt(), (cfg.page_h / cfg.page_w).sqrt());
+    let (kx, ky) = (
+        (cfg.page_w / cfg.page_h).sqrt(),
+        (cfg.page_h / cfg.page_w).sqrt(),
+    );
     let mut pulls: Vec<Vec<(End, f64)>> = vec![Vec::new(); n];
     let mut aimed = false;
     for l in &t.links {
@@ -88,7 +91,10 @@ pub fn arrange(g: &Graph, t: &Tree, cfg: &Config) -> Option<Tree> {
             Relation::At { a, place } if place != Place(1, 1) => {
                 let w = 10.0 * w;
                 // The cell's center seen from the page center, on the stretched polar rays.
-                let (x, y) = ((place.0 as f64 - 1.0) * cfg.page_w / 3.0, (1.0 - place.1 as f64) * cfg.page_h / 3.0);
+                let (x, y) = (
+                    (place.0 as f64 - 1.0) * cfg.page_w / 3.0,
+                    (1.0 - place.1 as f64) * cfg.page_h / 3.0,
+                );
                 pulls[a].push((End::Angle((y / ky).atan2(x / kx).to_degrees()), w));
                 aimed = true;
             }
@@ -107,7 +113,11 @@ pub fn arrange(g: &Graph, t: &Tree, cfg: &Config) -> Option<Tree> {
     };
     let cost = |children: &[Vec<usize>]| {
         let wedge = wedges(t, children, 0.0);
-        (0..n).filter(|&v| v != t.root).flat_map(|v| pulls[v].iter().map(move |&(e, w)| (v, e, w))).map(|(v, e, w)| w * turn(aim(&wedge, e) - wedge[v].0).abs()).sum::<f64>()
+        (0..n)
+            .filter(|&v| v != t.root)
+            .flat_map(|v| pulls[v].iter().map(move |&(e, w)| (v, e, w)))
+            .map(|(v, e, w)| w * turn(aim(&wedge, e) - wedge[v].0).abs())
+            .sum::<f64>()
     };
     let mut children = t.children.clone();
     let roots = children[t.root].clone();
@@ -142,7 +152,11 @@ pub fn arrange(g: &Graph, t: &Tree, cfg: &Config) -> Option<Tree> {
                         total += w;
                     }
                 }
-                if total == 0.0 { turn(wedge[c].0 - wedge[v].0) } else { sum / total }
+                if total == 0.0 {
+                    turn(wedge[c].0 - wedge[v].0)
+                } else {
+                    sum / total
+                }
             };
             let mut keyed: Vec<(f64, usize)> = children[v].iter().map(|&c| (key(c), c)).collect();
             // Wedges run clockwise from the first child, so the most counterclockwise goes first.
@@ -150,7 +164,15 @@ pub fn arrange(g: &Graph, t: &Tree, cfg: &Config) -> Option<Tree> {
             children[v] = keyed.into_iter().map(|(_, c)| c).collect();
         }
     }
-    (children != t.children).then(|| Tree { root: t.root, parent: t.parent.clone(), children, depth: t.depth.clone(), order: t.order.clone(), links: t.links.clone(), notes: Vec::new() })
+    (children != t.children).then(|| Tree {
+        root: t.root,
+        parent: t.parent.clone(),
+        children,
+        depth: t.depth.clone(),
+        order: t.order.clone(),
+        links: t.links.clone(),
+        notes: Vec::new(),
+    })
 }
 
 /// permutations calls `f` with every order of `xs[k..]`, the given order first.
@@ -178,13 +200,27 @@ pub fn plan(g: &Graph, t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64, rot: f64
     let reach = 0.92 * (cfg.page_w * cfg.page_h).sqrt() / 2.0;
     let ideal = |v: usize| reach * t.depth[v] as f64 / (max_depth + 0.35);
 
-    let at: Vec<(usize, Place)> = g.constraints.iter().filter_map(|c| if let Relation::At { a, place } = c.rel { Some((a, place)) } else { None }).collect();
+    let at: Vec<(usize, Place)> = g
+        .constraints
+        .iter()
+        .filter_map(|c| {
+            if let Relation::At { a, place } = c.rel {
+                Some((a, place))
+            } else {
+                None
+            }
+        })
+        .collect();
     let mut cands = Vec::with_capacity(n);
     for v in 0..n {
         let fits = |c: &Cand| Rect::centered(c.at, boxes[v].w, boxes[v].h).within(&page);
         let mut vals = Vec::new();
         if t.parent[v].is_none() {
-            vals.push(Cand { cost: 0.0, at: (0.0, 0.0), r: 0.0 });
+            vals.push(Cand {
+                cost: 0.0,
+                at: (0.0, 0.0),
+                r: 0.0,
+            });
         } else {
             // Nudges past the wedge are allowed (at a cost): wide boxes rarely fit thin wedges.
             let (c, hw) = wedge[v];
@@ -194,7 +230,11 @@ pub fn plan(g: &Graph, t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64, rot: f64
                 let th = (c + d).to_radians();
                 let mut r = step;
                 loop {
-                    let cand = Cand { cost: (r - ideal(v)).abs() + lambda * d.abs(), at: (kx * r * th.cos(), ky * r * th.sin()), r };
+                    let cand = Cand {
+                        cost: (r - ideal(v)).abs() + lambda * d.abs(),
+                        at: (kx * r * th.cos(), ky * r * th.sin()),
+                        r,
+                    };
                     if !fits(&cand) {
                         break;
                     }
@@ -207,7 +247,9 @@ pub fn plan(g: &Graph, t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64, rot: f64
         vals.retain(fits);
         // Spots in a node's `at` cell go first.
         for &(_, place) in at.iter().filter(|a| a.0 == v) {
-            vals.iter_mut().filter(|c| in_place(c.at, place, &page)).for_each(|c| c.cost -= AT_FIRST);
+            vals.iter_mut()
+                .filter(|c| in_place(c.at, place, &page))
+                .for_each(|c| c.cost -= AT_FIRST);
         }
         vals.sort_by(|a, b| a.cost.total_cmp(&b.cost));
         cands.push(vals);
@@ -220,7 +262,11 @@ pub fn plan(g: &Graph, t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64, rot: f64
             cons.push((vec![i, j], Kind::Apart(gap), 0));
         }
     }
-    let edges: Vec<(usize, usize)> = t.order.iter().filter_map(|&v| t.parent[v].map(|p| (p, v))).collect();
+    let edges: Vec<(usize, usize)> = t
+        .order
+        .iter()
+        .filter_map(|&v| t.parent[v].map(|p| (p, v)))
+        .collect();
     for (k, &(p, v)) in edges.iter().enumerate() {
         cons.push((vec![p, v], Kind::Outward(step), 0));
         for u in (0..n).filter(|&u| u != p && u != v) {
@@ -234,13 +280,46 @@ pub fn plan(g: &Graph, t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64, rot: f64
     }
     // A tree edge keeps the label of the source edge it came from, a link too when the link
     // is what attached the node.
-    let label = |p: usize, v: usize| g.edges.iter().find(|e| (e.a, e.b) == (p, v) || (e.a, e.b) == (v, p)).and_then(|e| e.label.clone());
-    let mut drawn: Vec<Drawn> = edges.iter().map(|&(p, v)| Drawn::new(p, v, EdgeStyle::Line, if t.depth[v] == 1 { 0.45 } else { 0.18 }, label(p, v))).collect();
-    drawn.extend(t.links.iter().map(|l| Drawn::new(l.a, l.b, EdgeStyle::Link, 0.1, l.label.clone())));
+    let label = |p: usize, v: usize| {
+        g.edges
+            .iter()
+            .find(|e| (e.a, e.b) == (p, v) || (e.a, e.b) == (v, p))
+            .and_then(|e| e.label.clone())
+    };
+    let mut drawn: Vec<Drawn> = edges
+        .iter()
+        .map(|&(p, v)| {
+            Drawn::new(
+                p,
+                v,
+                EdgeStyle::Line,
+                if t.depth[v] == 1 { 0.45 } else { 0.18 },
+                label(p, v),
+            )
+        })
+        .collect();
+    drawn.extend(
+        t.links
+            .iter()
+            .map(|l| Drawn::new(l.a, l.b, EdgeStyle::Link, 0.1, l.label.clone())),
+    );
     // Group members go first, as in layered layouts: once a frame is known, forward checking
     // keeps everyone else off it.
-    let member = |v: usize| g.constraints.iter().any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)));
+    let member = |v: usize| {
+        g.constraints
+            .iter()
+            .any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)))
+    };
     let (mut order, rest): (Vec<usize>, Vec<usize>) = t.order.iter().partition(|&&v| member(v));
     order.extend(rest);
-    Plan { order, cands, cons, edges: drawn, kx, ky, tol: 0.5 * step, crowded: None }
+    Plan {
+        order,
+        cands,
+        cons,
+        edges: drawn,
+        kx,
+        ky,
+        tol: 0.5 * step,
+        crowded: None,
+    }
 }

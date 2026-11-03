@@ -22,7 +22,9 @@ pub struct Split {
 /// split reads the map at `path` (whose text is `text`) and lays it out over pages named after
 /// `stem`. Fails when the map has errors or its root has fewer than two branches.
 pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
-    let crate::macros::Loaded { parse, mut diags, .. } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
+    let crate::macros::Loaded {
+        parse, mut diags, ..
+    } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
     let (stmts, parse_diags) = crate::parse::parse(&parse);
     diags.extend(parse_diags);
     let (g, sema_diags) = crate::sema::analyze(&stmts);
@@ -33,7 +35,10 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let t = crate::tree::build(&g);
     let heads = &t.children[t.root];
     if heads.len() < 2 {
-        return Err(format!("{path}: the root `{}` has fewer than two branches, so there is nothing to split", g.nodes[t.root].id));
+        return Err(format!(
+            "{path}: the root `{}` has fewer than two branches, so there is nothing to split",
+            g.nodes[t.root].id
+        ));
     }
     let index = |n: &Name| g.nodes.iter().position(|v| v.id == n.text);
     // The pages a node appears on: a branch head is both a stub on the overview and its own
@@ -43,11 +48,21 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             None => BTreeSet::from([OVERVIEW]),
             Some(h) => {
                 let k = heads.iter().position(|&x| x == h).unwrap();
-                if h == v { BTreeSet::from([OVERVIEW, k]) } else { BTreeSet::from([k]) }
+                if h == v {
+                    BTreeSet::from([OVERVIEW, k])
+                } else {
+                    BTreeSet::from([k])
+                }
             }
         }
     };
-    let file = |p: Page| if p == OVERVIEW { format!("{stem}.fitd") } else { format!("{stem}-{}.fitd", g.nodes[heads[p]].id) };
+    let file = |p: Page| {
+        if p == OVERVIEW {
+            format!("{stem}.fitd")
+        } else {
+            format!("{stem}-{}.fitd", g.nodes[heads[p]].id)
+        }
+    };
     let snippet = |lo: usize, hi: usize| parse[lo..hi].trim_end().to_string();
 
     let mut shared = String::new();
@@ -71,7 +86,12 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         on.unwrap_or_default()
     };
     // The page that holds a node in full: its branch's page, or the overview.
-    let home = |v: usize| *pages_of(v).iter().find(|&&p| p != OVERVIEW).unwrap_or(&OVERVIEW);
+    let home = |v: usize| {
+        *pages_of(v)
+            .iter()
+            .find(|&&p| p != OVERVIEW)
+            .unwrap_or(&OVERVIEW)
+    };
     let parts = |items: &[Name]| -> Vec<(Page, Vec<Name>)> {
         let mut out: Vec<(Page, Vec<Name>)> = Vec::new();
         for n in items {
@@ -94,7 +114,14 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         }
         d
     };
-    let quoted = |s: &str| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n"));
+    let quoted = |s: &str| {
+        format!(
+            "\"{}\"",
+            s.replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+        )
+    };
     // Pages the last `node` went to, for the `|` body lines under it; the overview stub
     // drops them, since its page holds the full node.
     let mut last: BTreeSet<Page> = BTreeSet::new();
@@ -115,7 +142,10 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 shared.push('\n');
                 continue;
             }
-            StmtKind::Page { .. } | StmtKind::Font { .. } | StmtKind::Theme { .. } | StmtKind::Style { .. } => {
+            StmtKind::Page { .. }
+            | StmtKind::Font { .. }
+            | StmtKind::Theme { .. }
+            | StmtKind::Style { .. } => {
                 shared += &own;
                 shared.push('\n');
                 continue;
@@ -153,7 +183,9 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 let set: BTreeSet<String> = items.iter().map(|n| n.text.clone()).collect();
                 let sets = framed.entry(p).or_default();
                 if sets.contains(&set) {
-                    dropped.push(format!("{own} (frames the same nodes as another group on its page)"));
+                    dropped.push(format!(
+                        "{own} (frames the same nodes as another group on its page)"
+                    ));
                     continue;
                 }
                 sets.push(set);
@@ -161,7 +193,12 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             body[slot(p)].push(own);
             continue;
         }
-        let attrs_of = |attrs: &[Attr]| attrs.iter().map(|a| format!(" {}", snippet(a.key.span.lo, a.value.span().hi))).collect::<String>();
+        let attrs_of = |attrs: &[Attr]| {
+            attrs
+                .iter()
+                .map(|a| format!(" {}", snippet(a.key.span.lo, a.value.span().hi)))
+                .collect::<String>()
+        };
         match &st.kind {
             // Each end's page draws the edge to a stub of the other end.
             StmtKind::Edge { from, to, .. } => {
@@ -174,7 +211,9 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                         body[slot(p)].push(line);
                         continue;
                     }
-                    let (Some(a), Some(b)) = (index(from), index(t)) else { continue };
+                    let (Some(a), Some(b)) = (index(from), index(t)) else {
+                        continue;
+                    };
                     for (here, there) in [(a, b), (b, a)] {
                         let p = home(here);
                         body[slot(p)].push(line.clone());
@@ -184,15 +223,23 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                     }
                 }
             }
-            StmtKind::Group { title, items, attrs } => {
-                let title = title.as_ref().map_or(String::new(), |t| format!(" {}", quoted(t)));
+            StmtKind::Group {
+                title,
+                items,
+                attrs,
+            } => {
+                let title = title
+                    .as_ref()
+                    .map_or(String::new(), |t| format!(" {}", quoted(t)));
                 for (p, part) in parts(items) {
                     let ids: Vec<&str> = part.iter().map(|n| n.text.as_str()).collect();
                     let line = format!("group{title} {}{}", ids.join(", "), attrs_of(attrs));
                     let set: BTreeSet<String> = ids.iter().map(|i| i.to_string()).collect();
                     let sets = framed.entry(p).or_default();
                     if sets.contains(&set) {
-                        dropped.push(format!("{line} (frames the same nodes as another group on its page)"));
+                        dropped.push(format!(
+                            "{line} (frames the same nodes as another group on its page)"
+                        ));
                         continue;
                     }
                     sets.push(set);
@@ -207,10 +254,14 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                     Rel::Chain { nodes, ops } => {
                         let mut run: Option<(Page, String)> = None;
                         for (k, op) in ops.iter().enumerate() {
-                            let pair = format!("{} {} {}", nodes[k].text, op.text, nodes[k + 1].text);
+                            let pair =
+                                format!("{} {} {}", nodes[k].text, op.text, nodes[k + 1].text);
                             let on = meet(&[&nodes[k], &nodes[k + 1]]);
                             match on.iter().find(|&&p| p != OVERVIEW).or(on.first()) {
-                                Some(&p) if run.as_ref().is_some_and(|r| r.0 == p) => run.as_mut().unwrap().1 += &format!(" {} {}", op.text, nodes[k + 1].text),
+                                Some(&p) if run.as_ref().is_some_and(|r| r.0 == p) => {
+                                    run.as_mut().unwrap().1 +=
+                                        &format!(" {} {}", op.text, nodes[k + 1].text)
+                                }
                                 Some(&p) => {
                                     if let Some((q, r)) = run.replace((p, pair)) {
                                         body[slot(q)].push(format!("{kw} {r}{attrs}"));
@@ -234,7 +285,11 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                             let ids: Vec<&str> = part.iter().map(|n| n.text.as_str()).collect();
                             match part.len() {
                                 1 => alone.push(ids[0].to_string()),
-                                _ => body[slot(p)].push(format!("{kw} align {}({}){attrs}", side.text, ids.join(", "))),
+                                _ => body[slot(p)].push(format!(
+                                    "{kw} align {}({}){attrs}",
+                                    side.text,
+                                    ids.join(", ")
+                                )),
                             }
                         }
                         if !alone.is_empty() {
@@ -248,10 +303,20 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         }
     }
 
-    let from = std::path::Path::new(path).file_name().map_or(path.to_string(), |f| f.to_string_lossy().into_owned());
-    let mut files = vec![(format!("{stem}-shared.fitd"), format!("# Settings and styles shared by every page of {from}, written by `fitd split`.\n{shared}"))];
+    let from = std::path::Path::new(path)
+        .file_name()
+        .map_or(path.to_string(), |f| f.to_string_lossy().into_owned());
+    let mut files = vec![(
+        format!("{stem}-shared.fitd"),
+        format!(
+            "# Settings and styles shared by every page of {from}, written by `fitd split`.\n{shared}"
+        ),
+    )];
     let page = |p: Page, title: String, root: usize| {
-        let mut s = format!("# Written by `fitd split` from {from}.\ninclude \"{stem}-shared.fitd\"\n{title}\nroot {}\n\n", g.nodes[root].id);
+        let mut s = format!(
+            "# Written by `fitd split` from {from}.\ninclude \"{stem}-shared.fitd\"\n{title}\nroot {}\n\n",
+            g.nodes[root].id
+        );
         for line in &body[slot(p)] {
             s += line;
             s.push('\n');
@@ -260,11 +325,19 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             s += "\n# Nodes on other pages that edges here reach.\n";
         }
         for &v in &stubs[slot(p)] {
-            s += &format!("{}\n| see page {}\n", decl[v], file(home(v)).trim_end_matches(".fitd"));
+            s += &format!(
+                "{}\n| see page {}\n",
+                decl[v],
+                file(home(v)).trim_end_matches(".fitd")
+            );
         }
         (file(p), s)
     };
-    files.push(page(OVERVIEW, title.unwrap_or_else(|| format!("title {}", quoted(&g.nodes[t.root].title))), t.root));
+    files.push(page(
+        OVERVIEW,
+        title.unwrap_or_else(|| format!("title {}", quoted(&g.nodes[t.root].title))),
+        t.root,
+    ));
     for (k, &h) in heads.iter().enumerate() {
         files.push(page(k, format!("title {}", quoted(&g.nodes[h].title)), h));
     }
@@ -282,13 +355,37 @@ mod tests {
         let names: Vec<&str> = out.files.iter().map(|f| f.0.as_str()).collect();
         assert_eq!(names, ["m-shared.fitd", "m.fitd", "m-a.fitd", "m-b.fitd"]);
         let get = |n: &str| &out.files.iter().find(|f| f.0 == n).unwrap().1;
-        assert!(get("m-shared.fitd").contains("layout radial\nstyle s color=#1565C0\n"), "{}", get("m-shared.fitd"));
+        assert!(
+            get("m-shared.fitd").contains("layout radial\nstyle s color=#1565C0\n"),
+            "{}",
+            get("m-shared.fitd")
+        );
         let overview = get("m.fitd");
-        assert!(overview.contains("title \"Map\"\nroot r\n") && overview.contains("node a \"A\" .s\n| see page m-a\n") && overview.contains("r -> a, b"), "{overview}");
-        assert!(!overview.contains("about a") && !overview.contains("a1"), "{overview}");
+        assert!(
+            overview.contains("title \"Map\"\nroot r\n")
+                && overview.contains("node a \"A\" .s\n| see page m-a\n")
+                && overview.contains("r -> a, b"),
+            "{overview}"
+        );
+        assert!(
+            !overview.contains("about a") && !overview.contains("a1"),
+            "{overview}"
+        );
         let a = get("m-a.fitd");
-        assert!(a.contains("include \"m-shared.fitd\"\ntitle \"A\"\nroot a\n") && a.contains("| about a") && a.contains("a -> a1") && a.contains("require a1 left-of a"), "{a}");
-        assert!(a.contains("a1 ..> b1\n") && a.ends_with("\n# Nodes on other pages that edges here reach.\nnode b1\n| see page m-b\n"), "{a}");
+        assert!(
+            a.contains("include \"m-shared.fitd\"\ntitle \"A\"\nroot a\n")
+                && a.contains("| about a")
+                && a.contains("a -> a1")
+                && a.contains("require a1 left-of a"),
+            "{a}"
+        );
+        assert!(
+            a.contains("a1 ..> b1\n")
+                && a.ends_with(
+                    "\n# Nodes on other pages that edges here reach.\nnode b1\n| see page m-b\n"
+                ),
+            "{a}"
+        );
         assert!(get("m-b.fitd").ends_with("a1 ..> b1\n\n# Nodes on other pages that edges here reach.\nnode a1\n| see page m-a\n"), "{}", get("m-b.fitd"));
         assert_eq!(out.dropped, ["require a1 near b1"]);
     }
@@ -299,15 +396,45 @@ mod tests {
         let out = split("m.fitd", text, "m").unwrap();
         let get = |n: &str| &out.files.iter().find(|f| f.0 == n).unwrap().1;
         let (a, b) = (get("m-a.fitd"), get("m-b.fitd"));
-        assert!(a.contains("a ..> b1 \"x\"\na ..> b2 \"x\"\n") && a.contains("node b1\n| see page m-b\nnode b2\n| see page m-b\n"), "{a}");
-        assert!(b.contains("a ..> b1 \"x\"\na ..> b2 \"x\"\n") && b.contains("node a\n| see page m-a\n") && !b.contains("node a\n| see page m-a\nnode a\n"), "{b}");
-        assert!(a.contains("group \"G\" a1, a2 color=#6D4C41\n") && b.contains("group \"G\" b1 color=#6D4C41\n"), "{a}\n{b}");
-        assert!(a.contains("require a1 left-of a2 gap=1em\n") && b.contains("require b1 left-of b2 gap=1em\n") && a.contains("prefer align top(a1, a2)\n"), "{a}\n{b}");
-        assert_eq!(out.dropped, ["require a2 left-of b1 gap=1em", "prefer align top(a1, a2, b1) (for b1)"]);
+        assert!(
+            a.contains("a ..> b1 \"x\"\na ..> b2 \"x\"\n")
+                && a.contains("node b1\n| see page m-b\nnode b2\n| see page m-b\n"),
+            "{a}"
+        );
+        assert!(
+            b.contains("a ..> b1 \"x\"\na ..> b2 \"x\"\n")
+                && b.contains("node a\n| see page m-a\n")
+                && !b.contains("node a\n| see page m-a\nnode a\n"),
+            "{b}"
+        );
+        assert!(
+            a.contains("group \"G\" a1, a2 color=#6D4C41\n")
+                && b.contains("group \"G\" b1 color=#6D4C41\n"),
+            "{a}\n{b}"
+        );
+        assert!(
+            a.contains("require a1 left-of a2 gap=1em\n")
+                && b.contains("require b1 left-of b2 gap=1em\n")
+                && a.contains("prefer align top(a1, a2)\n"),
+            "{a}\n{b}"
+        );
+        assert_eq!(
+            out.dropped,
+            [
+                "require a2 left-of b1 gap=1em",
+                "prefer align top(a1, a2, b1) (for b1)"
+            ]
+        );
         let nested = "node r\nnode a\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\ngroup \"O\" a, a1, b1\ngroup \"I\" a, a1\n";
         let out = split("m.fitd", nested, "m").unwrap();
         let a = &out.files.iter().find(|f| f.0 == "m-a.fitd").unwrap().1;
-        assert!(a.contains("group \"O\" a, a1\n") && !a.contains("\"I\""), "{a}");
-        assert_eq!(out.dropped, ["group \"I\" a, a1 (frames the same nodes as another group on its page)"]);
+        assert!(
+            a.contains("group \"O\" a, a1\n") && !a.contains("\"I\""),
+            "{a}"
+        );
+        assert_eq!(
+            out.dropped,
+            ["group \"I\" a, a1 (frames the same nodes as another group on its page)"]
+        );
     }
 }

@@ -28,7 +28,10 @@ pub fn curve(pa: P, in_a: &dyn Fn(P) -> bool, pb: P, in_b: &dyn Fn(P) -> bool, b
         .map(|i| {
             let t = i as f64 / 60.0;
             let (u, w) = ((1.0 - t) * (1.0 - t), 2.0 * (1.0 - t) * t);
-            (u * pa.0 + w * c.0 + t * t * pb.0, u * pa.1 + w * c.1 + t * t * pb.1)
+            (
+                u * pa.0 + w * c.0 + t * t * pb.0,
+                u * pa.1 + w * c.1 + t * t * pb.1,
+            )
         })
         .collect();
     trim(&pts, in_a, in_b)
@@ -37,7 +40,11 @@ pub fn curve(pa: P, in_a: &dyn Fn(P) -> bool, pb: P, in_b: &dyn Fn(P) -> bool, b
 /// trim keeps the part of a path from where it leaves box `a` to where it enters box `b`.
 pub fn trim(pts: &[P], in_a: &dyn Fn(P) -> bool, in_b: &dyn Fn(P) -> bool) -> Vec<P> {
     let s = pts.iter().position(|&p| !in_a(p)).unwrap_or(0);
-    let e = pts.iter().rposition(|&p| !in_b(p)).unwrap_or(pts.len() - 1).max(s);
+    let e = pts
+        .iter()
+        .rposition(|&p| !in_b(p))
+        .unwrap_or(pts.len() - 1)
+        .max(s);
     pts[s..=e].to_vec()
 }
 
@@ -48,7 +55,9 @@ pub fn trim(pts: &[P], in_a: &dyn Fn(P) -> bool, in_b: &dyn Fn(P) -> bool) -> Ve
 /// box. Empty when the straight line is already clear or no route exists. Paths are
 /// untrimmed, about 60 points.
 pub fn detours(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Vec<Vec<P>> {
-    let Some(way) = route(pa, pb, boxes, page, clear) else { return Vec::new() };
+    let Some(way) = route(pa, pb, boxes, page, clear) else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     if let Some(wide) = route(pa, pb, boxes, page, 3.0 * clear) {
         out.push(densify(&fillet(&wide, 2.0 * clear), 60));
@@ -64,8 +73,14 @@ fn route(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Option<Vec<P>
     // Slightly smaller than `grown`, so a segment along a grown box's side still counts as clear.
     let hard: Vec<Rect> = boxes.iter().map(|r| r.inflate(0.98 * clear)).collect();
     let seen = |p: P, q: P| {
-        let bb = Rect { x0: p.0.min(q.0), y0: p.1.min(q.1), x1: p.0.max(q.0), y1: p.1.max(q.1) };
-        hard.iter().all(|r| !r.intersects(&bb.inflate(1e-9)) || !segment_hits_rect(p, q, r))
+        let bb = Rect {
+            x0: p.0.min(q.0),
+            y0: p.1.min(q.1),
+            x1: p.0.max(q.0),
+            y1: p.1.max(q.1),
+        };
+        hard.iter()
+            .all(|r| !r.intersects(&bb.inflate(1e-9)) || !segment_hits_rect(p, q, r))
     };
     if seen(pa, pb) {
         return None;
@@ -73,7 +88,11 @@ fn route(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Option<Vec<P>
     let mut pts = vec![pa, pb];
     for r in &grown {
         for c in [(r.x0, r.y0), (r.x1, r.y0), (r.x0, r.y1), (r.x1, r.y1)] {
-            if page.contains(c) && hard.iter().all(|h| !(h.x0 < c.0 && c.0 < h.x1 && h.y0 < c.1 && c.1 < h.y1)) {
+            if page.contains(c)
+                && hard
+                    .iter()
+                    .all(|h| !(h.x0 < c.0 && c.0 < h.x1 && h.y0 < c.1 && c.1 < h.y1))
+            {
                 pts.push(c);
             }
         }
@@ -97,7 +116,10 @@ fn fillet(way: &[P], reach: f64) -> Vec<P> {
         out.extend((0..=8).map(|j| {
             let t = j as f64 / 8.0;
             let (u, w) = ((1.0 - t) * (1.0 - t), 2.0 * (1.0 - t) * t);
-            (u * s.0 + w * c.0 + t * t * e.0, u * s.1 + w * c.1 + t * t * e.1)
+            (
+                u * s.0 + w * c.0 + t * t * e.0,
+                u * s.1 + w * c.1 + t * t * e.1,
+            )
         }));
     }
     out.push(way[way.len() - 1]);
@@ -108,10 +130,13 @@ fn fillet(way: &[P], reach: f64) -> Vec<P> {
 /// for visibility only when relaxed.
 fn shortest(pts: &[P], seen: &dyn Fn(P, P) -> bool) -> Option<Vec<usize>> {
     let n = pts.len();
-    let (mut dist, mut prev, mut done) = (vec![f64::INFINITY; n], vec![usize::MAX; n], vec![false; n]);
+    let (mut dist, mut prev, mut done) =
+        (vec![f64::INFINITY; n], vec![usize::MAX; n], vec![false; n]);
     dist[0] = 0.0;
     loop {
-        let u = (0..n).filter(|&u| !done[u] && dist[u].is_finite()).min_by(|&a, &b| dist[a].total_cmp(&dist[b]))?;
+        let u = (0..n)
+            .filter(|&u| !done[u] && dist[u].is_finite())
+            .min_by(|&a, &b| dist[a].total_cmp(&dist[b]))?;
         if u == 1 {
             break;
         }
@@ -133,13 +158,20 @@ fn shortest(pts: &[P], seen: &dyn Fn(P, P) -> bool) -> Option<Vec<usize>> {
 
 /// densify samples a polyline at about `n` evenly spaced points.
 fn densify(way: &[P], n: usize) -> Vec<P> {
-    let len: f64 = way.windows(2).map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1)).sum();
+    let len: f64 = way
+        .windows(2)
+        .map(|w| (w[1].0 - w[0].0).hypot(w[1].1 - w[0].1))
+        .sum();
     let mut out = vec![way[0]];
     for w in way.windows(2) {
-        let k = (((w[1].0 - w[0].0).hypot(w[1].1 - w[0].1) / len * n as f64).ceil() as usize).max(1);
+        let k =
+            (((w[1].0 - w[0].0).hypot(w[1].1 - w[0].1) / len * n as f64).ceil() as usize).max(1);
         out.extend((1..=k).map(|i| {
             let t = i as f64 / k as f64;
-            (w[0].0 + t * (w[1].0 - w[0].0), w[0].1 + t * (w[1].1 - w[0].1))
+            (
+                w[0].0 + t * (w[1].0 - w[0].0),
+                w[0].1 + t * (w[1].1 - w[0].1),
+            )
         }));
     }
     out
@@ -158,7 +190,8 @@ pub fn paths_meet(p: &[P], q: &[P], d: f64, skip: &[Rect]) -> bool {
         return false;
     }
     let free = |x: &P| skip.iter().all(|r| !r.contains(*x));
-    let (fp, fq): (Vec<bool>, Vec<bool>) = (p.iter().map(free).collect(), q.iter().map(free).collect());
+    let (fp, fq): (Vec<bool>, Vec<bool>) =
+        (p.iter().map(free).collect(), q.iter().map(free).collect());
     for i in 0..p.len() {
         if !fp[i] {
             continue;
@@ -170,7 +203,12 @@ pub fn paths_meet(p: &[P], q: &[P], d: f64, skip: &[Rect]) -> bool {
             if (p[i].0 - q[j].0).hypot(p[i].1 - q[j].1) < d {
                 return true;
             }
-            if i + 1 < p.len() && j + 1 < q.len() && fp[i + 1] && fq[j + 1] && segments_cross(p[i], p[i + 1], q[j], q[j + 1]) {
+            if i + 1 < p.len()
+                && j + 1 < q.len()
+                && fp[i + 1]
+                && fq[j + 1]
+                && segments_cross(p[i], p[i + 1], q[j], q[j + 1])
+            {
                 return true;
             }
         }
@@ -179,12 +217,20 @@ pub fn paths_meet(p: &[P], q: &[P], d: f64, skip: &[Rect]) -> bool {
 }
 
 pub(super) fn bounds(p: &[P]) -> Rect {
-    p.iter().fold(Rect { x0: f64::INFINITY, y0: f64::INFINITY, x1: f64::NEG_INFINITY, y1: f64::NEG_INFINITY }, |r, &(x, y)| Rect {
-        x0: r.x0.min(x),
-        y0: r.y0.min(y),
-        x1: r.x1.max(x),
-        y1: r.y1.max(y),
-    })
+    p.iter().fold(
+        Rect {
+            x0: f64::INFINITY,
+            y0: f64::INFINITY,
+            x1: f64::NEG_INFINITY,
+            y1: f64::NEG_INFINITY,
+        },
+        |r, &(x, y)| Rect {
+            x0: r.x0.min(x),
+            y0: r.y0.min(y),
+            x1: r.x1.max(x),
+            y1: r.y1.max(y),
+        },
+    )
 }
 
 #[cfg(test)]
@@ -195,14 +241,36 @@ mod tests {
     fn detour_goes_around_a_box() {
         let page = Rect::centered((0.0, 0.0), 200.0, 200.0);
         let wall = Rect::centered((0.0, 0.0), 20.0, 120.0);
-        assert!(detours((-50.0, 0.0), (50.0, 30.0), &[Rect::centered((0.0, 90.0), 5.0, 5.0)], &page, 4.0).is_empty(), "straight line is clear");
+        assert!(
+            detours(
+                (-50.0, 0.0),
+                (50.0, 30.0),
+                &[Rect::centered((0.0, 90.0), 5.0, 5.0)],
+                &page,
+                4.0
+            )
+            .is_empty(),
+            "straight line is clear"
+        );
         let ways = detours((-50.0, 0.0), (50.0, 0.0), &[wall], &page, 4.0);
         assert_eq!(ways.len(), 3);
         for w in &ways {
             assert_eq!((w[0], *w.last().unwrap()), ((-50.0, 0.0), (50.0, 0.0)));
-            assert!(w.windows(2).all(|s| !segment_hits_rect(s[0], s[1], &wall)), "{w:?}");
+            assert!(
+                w.windows(2).all(|s| !segment_hits_rect(s[0], s[1], &wall)),
+                "{w:?}"
+            );
         }
         // A wall across the whole page leaves no way around.
-        assert!(detours((-50.0, 0.0), (50.0, 0.0), &[Rect::centered((0.0, 0.0), 20.0, 400.0)], &page, 4.0).is_empty());
+        assert!(
+            detours(
+                (-50.0, 0.0),
+                (50.0, 0.0),
+                &[Rect::centered((0.0, 0.0), 20.0, 400.0)],
+                &page,
+                4.0
+            )
+            .is_empty()
+        );
     }
 }

@@ -49,19 +49,56 @@ pub enum Rel {
 pub enum StmtKind {
     Title(String),
     Root(Name),
-    Layout { kind: Name, attrs: Vec<Attr> },
+    Layout {
+        kind: Name,
+        attrs: Vec<Attr>,
+    },
     /// `page a1 portrait margin=24pt`: the size, then flags, then attributes.
-    Page { size: Value, flags: Vec<Name>, attrs: Vec<Attr> },
-    Font { size: Value, attrs: Vec<Attr> },
-    Style { name: Name, attrs: Vec<Attr> },
+    Page {
+        size: Value,
+        flags: Vec<Name>,
+        attrs: Vec<Attr>,
+    },
+    Font {
+        size: Value,
+        attrs: Vec<Attr>,
+    },
+    Style {
+        name: Name,
+        attrs: Vec<Attr>,
+    },
     /// `theme dark background=#000`: an optional preset, then overrides.
-    Theme { preset: Option<Name>, attrs: Vec<Attr> },
-    Node { id: Name, title: Option<(String, Span)>, classes: Vec<Name>, attrs: Vec<Attr> },
+    Theme {
+        preset: Option<Name>,
+        attrs: Vec<Attr>,
+    },
+    Node {
+        id: Name,
+        title: Option<(String, Span)>,
+        classes: Vec<Name>,
+        attrs: Vec<Attr>,
+    },
     Body(String),
-    Edge { from: Name, link: bool, directed: bool, to: Vec<Name>, label: Option<String>, classes: Vec<Name>, attrs: Vec<Attr> },
+    Edge {
+        from: Name,
+        link: bool,
+        directed: bool,
+        to: Vec<Name>,
+        label: Option<String>,
+        classes: Vec<Name>,
+        attrs: Vec<Attr>,
+    },
     /// `group "Front end" lex, parse, sema color=#1565C0`.
-    Group { title: Option<String>, items: Vec<Name>, attrs: Vec<Attr> },
-    Constraint { hard: bool, rel: Rel, attrs: Vec<Attr> },
+    Group {
+        title: Option<String>,
+        items: Vec<Name>,
+        attrs: Vec<Attr>,
+    },
+    Constraint {
+        hard: bool,
+        rel: Rel,
+        attrs: Vec<Attr>,
+    },
     /// `include "parts/cells.fitd"`; spliced in before parsing (`include::expand`), so later
     /// passes skip it.
     Include(String),

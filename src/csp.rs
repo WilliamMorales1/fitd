@@ -24,7 +24,14 @@ pub trait Problem {
     /// only unassigned variable; push to `bad` every value `a` of `y` that violates `c` and is
     /// alive (`removed[a] == UNSET`). Return the number of elementary tests done, or None to
     /// fall back to one check per value.
-    fn filter(&self, _c: usize, _val: &[u32], _y: usize, _removed: &[u32], _bad: &mut Vec<usize>) -> Option<u64> {
+    fn filter(
+        &self,
+        _c: usize,
+        _val: &[u32],
+        _y: usize,
+        _removed: &[u32],
+        _bad: &mut Vec<usize>,
+    ) -> Option<u64> {
         None
     }
     /// propagate marks binary hard constraint `c` for arc consistency before search. Worth it
@@ -112,23 +119,35 @@ struct Search<'a, P: Problem> {
 
 impl<P: Problem> Search<'_, P> {
     fn unassigned_in(&self, c: usize) -> usize {
-        self.p.scopes()[c].iter().filter(|&&v| self.val[v] == UNSET).count()
+        self.p.scopes()[c]
+            .iter()
+            .filter(|&&v| self.val[v] == UNSET)
+            .count()
     }
 
     fn spend(&mut self, n: u64) -> Result<(), Fail> {
         self.stats.checks += n;
-        if self.stats.checks > self.budget || self.stop.load(Ordering::Relaxed) { Err(Fail::Abort) } else { Ok(()) }
+        if self.stats.checks > self.budget || self.stop.load(Ordering::Relaxed) {
+            Err(Fail::Abort)
+        } else {
+            Ok(())
+        }
     }
 
     fn culprits(&self, c: usize) -> VarSet {
         let mut s = VarSet::new(self.n);
-        self.p.scopes()[c].iter().filter(|&&v| self.val[v] != UNSET).for_each(|&v| s.insert(v));
+        self.p.scopes()[c]
+            .iter()
+            .filter(|&&v| self.val[v] != UNSET)
+            .for_each(|&v| s.insert(v));
         s
     }
 
     fn everyone(&self) -> VarSet {
         let mut s = VarSet::new(self.n);
-        (0..self.n).filter(|&v| self.val[v] != UNSET).for_each(|v| s.insert(v));
+        (0..self.n)
+            .filter(|&v| self.val[v] != UNSET)
+            .for_each(|v| s.insert(v));
         s
     }
 
@@ -208,7 +227,9 @@ impl<P: Problem> Search<'_, P> {
     /// arc_consistency is AC-3 over the constraints the problem asks to propagate.
     fn arc_consistency(&mut self) -> Result<(), Fail> {
         let arcs: Vec<(usize, usize, usize)> = (0..self.p.scopes().len())
-            .filter(|&c| self.p.scopes()[c].len() == 2 && self.p.weight(c) == 0 && self.p.propagate(c))
+            .filter(|&c| {
+                self.p.scopes()[c].len() == 2 && self.p.weight(c) == 0 && self.p.propagate(c)
+            })
             .flat_map(|c| {
                 let s = &self.p.scopes()[c];
                 [(c, s[0], s[1]), (c, s[1], s[0])]
@@ -241,7 +262,10 @@ impl<P: Problem> Search<'_, P> {
             if self.unassigned_in(c) != 1 {
                 continue;
             }
-            let y = *self.p.scopes()[c].iter().find(|&&v| self.val[v] == UNSET).unwrap();
+            let y = *self.p.scopes()[c]
+                .iter()
+                .find(|&&v| self.val[v] == UNSET)
+                .unwrap();
             self.revise(c, y, depth)?;
             if self.size[y] == 0 {
                 return Ok(Some(self.past_fc(y)));
@@ -288,7 +312,11 @@ impl<P: Problem> Search<'_, P> {
             }
             self.best = Some((self.cost, self.val.clone()));
             // Keep searching for a cheaper solution unless this one is perfect.
-            return if self.cost == 0 { Ok(()) } else { Err(Fail::Conflict(self.everyone())) };
+            return if self.cost == 0 {
+                Ok(())
+            } else {
+                Err(Fail::Conflict(self.everyone()))
+            };
         }
         let depth = x as u32 + 1;
         let mut conf = self.past_fc(x);
@@ -355,7 +383,11 @@ fn run<P: Problem>(p: &P, budget: u64, stop: &AtomicBool, optimize: bool) -> (Ou
     let (mut hard, mut soft) = (vec![Vec::new(); n], vec![Vec::new(); n]);
     for (c, s) in p.scopes().iter().enumerate() {
         for &v in s {
-            if p.weight(c) == 0 { hard[v].push(c) } else { soft[v].push(c) }
+            if p.weight(c) == 0 {
+                hard[v].push(c)
+            } else {
+                soft[v].push(c)
+            }
         }
     }
     let mut s = Search {
@@ -377,7 +409,8 @@ fn run<P: Problem>(p: &P, budget: u64, stop: &AtomicBool, optimize: bool) -> (Ou
     };
     // Unary constraints have nothing to propagate from; filter them once up front.
     for c in 0..p.scopes().len() {
-        if p.scopes()[c].len() == 1 && p.weight(c) == 0 && s.revise(c, p.scopes()[c][0], 0).is_err() {
+        if p.scopes()[c].len() == 1 && p.weight(c) == 0 && s.revise(c, p.scopes()[c][0], 0).is_err()
+        {
             return (Outcome::Unknown, 0, s.stats);
         }
     }
@@ -435,7 +468,9 @@ mod tests {
     }
 
     fn all_pairs(n: usize) -> Vec<Vec<usize>> {
-        (0..n).flat_map(|i| (i + 1..n).map(move |j| vec![i, j])).collect()
+        (0..n)
+            .flat_map(|i| (i + 1..n).map(move |j| vec![i, j]))
+            .collect()
     }
 
     #[test]
@@ -444,14 +479,30 @@ mod tests {
             let (a, b) = (v[s[0]] as i64, v[s[1]] as i64);
             a != b && (a - b).unsigned_abs() as usize != s[1] - s[0]
         };
-        let q = Table { n: 12, k: 12, scopes: all_pairs(12), ok, weights: vec![], propagate: false };
-        let (Outcome::Sat(v), _) = solve(&q, u64::MAX, &GO) else { panic!("no solution") };
+        let q = Table {
+            n: 12,
+            k: 12,
+            scopes: all_pairs(12),
+            ok,
+            weights: vec![],
+            propagate: false,
+        };
+        let (Outcome::Sat(v), _) = solve(&q, u64::MAX, &GO) else {
+            panic!("no solution")
+        };
         assert!((0..q.scopes.len()).all(|c| q.holds(c, &v)));
     }
 
     #[test]
     fn proves_pigeonhole_unsat_and_respects_budget() {
-        let p = Table { n: 6, k: 5, scopes: all_pairs(6), ok: |_, s, v| v[s[0]] != v[s[1]], weights: vec![], propagate: false };
+        let p = Table {
+            n: 6,
+            k: 5,
+            scopes: all_pairs(6),
+            ok: |_, s, v| v[s[0]] != v[s[1]],
+            weights: vec![],
+            propagate: false,
+        };
         assert_eq!(solve(&p, u64::MAX, &GO).0, Outcome::Unsat);
         assert_eq!(solve(&p, 100, &GO).0, Outcome::Unknown);
     }
@@ -464,7 +515,14 @@ mod tests {
             2 => v[0] == 1,
             _ => v[2] == 0,
         };
-        let p = Table { n: 3, k: 2, scopes: vec![vec![0, 1], vec![1, 2], vec![0], vec![2]], ok, weights: vec![0, 0, 5, 1], propagate: false };
+        let p = Table {
+            n: 3,
+            k: 2,
+            scopes: vec![vec![0, 1], vec![1, 2], vec![0], vec![2]],
+            ok,
+            weights: vec![0, 0, 5, 1],
+            propagate: false,
+        };
         // a=1 forces b=0, c=1: pay 1 for c rather than 5 for a.
         let (out, cost, _) = optimize(&p, u64::MAX, &GO);
         assert_eq!((out, cost), (Outcome::Sat(vec![1, 0, 1]), 1));
@@ -475,10 +533,20 @@ mod tests {
     fn arc_consistency_proves_ordering_chain_unsat_before_search() {
         // v0 < v1 < ... < v5 over five values cannot hold; forward checking alone would
         // search, while arc consistency empties a domain without assigning anything.
-        let p = Table { n: 6, k: 5, scopes: (0..5).map(|i| vec![i, i + 1]).collect(), ok: |_, s, v| v[s[0]] < v[s[1]], weights: vec![], propagate: true };
+        let p = Table {
+            n: 6,
+            k: 5,
+            scopes: (0..5).map(|i| vec![i, i + 1]).collect(),
+            ok: |_, s, v| v[s[0]] < v[s[1]],
+            weights: vec![],
+            propagate: true,
+        };
         let (out, st) = solve(&p, u64::MAX, &GO);
         assert_eq!((out, st.nodes), (Outcome::Unsat, 0));
         let fits = Table { k: 6, ..p };
-        assert_eq!(solve(&fits, u64::MAX, &GO).0, Outcome::Sat(vec![0, 1, 2, 3, 4, 5]));
+        assert_eq!(
+            solve(&fits, u64::MAX, &GO).0,
+            Outcome::Sat(vec![0, 1, 2, 3, 4, 5])
+        );
     }
 }

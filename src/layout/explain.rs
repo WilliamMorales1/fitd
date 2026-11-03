@@ -2,7 +2,12 @@
 
 /// quickxplain returns a minimal subset of `cs` that is infeasible together with `base`
 /// (Junker 2004). It needs `base` feasible and `base + cs` infeasible.
-pub(super) fn quickxplain(feasible: &mut dyn FnMut(&[usize]) -> bool, base: &[usize], added: bool, cs: &[usize]) -> Vec<usize> {
+pub(super) fn quickxplain(
+    feasible: &mut dyn FnMut(&[usize]) -> bool,
+    base: &[usize],
+    added: bool,
+    cs: &[usize],
+) -> Vec<usize> {
     if added && !feasible(base) {
         return Vec::new();
     }

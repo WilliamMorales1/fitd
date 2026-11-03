@@ -3,7 +3,10 @@
 use super::*;
 
 pub fn label_size(fonts: &Fonts, text: &str, body: f64) -> (f64, f64) {
-    (fonts.width(text, 0.8 * body, false) + 0.4 * body, 1.04 * body)
+    (
+        fonts.width(text, 0.8 * body, false) + 0.4 * body,
+        1.04 * body,
+    )
 }
 
 pub(super) fn words(s: &str) -> Vec<String> {
@@ -110,7 +113,14 @@ pub fn measure(fonts: &Fonts, g: &Graph, v: usize, role: Role, b: f64, cfg: &Con
         }
         let runs = fonts.runs(&text, bold);
         let width = fonts.runs_width(&runs, size, bold);
-        lines.push(TextLine { runs, size, bold, width, x: 0.0, baseline: top + 0.96 * size });
+        lines.push(TextLine {
+            runs,
+            size,
+            bold,
+            width,
+            x: 0.0,
+            baseline: top + 0.96 * size,
+        });
         top += line_height(size);
     }
     let text_h = top;
@@ -121,7 +131,14 @@ pub fn measure(fonts: &Fonts, g: &Graph, v: usize, role: Role, b: f64, cfg: &Con
                 l.x = pad;
                 l.baseline += pad;
             }
-            Boxed { shape, role, w, h: text_h + 2.0 * pad, pad, lines }
+            Boxed {
+                shape,
+                role,
+                w,
+                h: text_h + 2.0 * pad,
+                pad,
+                lines,
+            }
         }
         Shape::Circle => {
             // Radius from the farthest line corner, so text always fits inside the circle.
@@ -136,7 +153,14 @@ pub fn measure(fonts: &Fonts, g: &Graph, v: usize, role: Role, b: f64, cfg: &Con
                 l.x = r - l.width / 2.0;
                 l.baseline += r - text_h / 2.0;
             }
-            Boxed { shape, role, w: 2.0 * r, h: 2.0 * r, pad, lines }
+            Boxed {
+                shape,
+                role,
+                w: 2.0 * r,
+                h: 2.0 * r,
+                pad,
+                lines,
+            }
         }
     }
 }
@@ -144,8 +168,12 @@ pub fn measure(fonts: &Fonts, g: &Graph, v: usize, role: Role, b: f64, cfg: &Con
 pub(super) fn measure_all(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64) -> Vec<Boxed> {
     let n = g.nodes.len();
     match g.settings.layout.unwrap_or(LayoutKind::Radial) {
-        LayoutKind::Radial => (0..n).map(|v| measure(fonts, g, v, radial::role(t, v), b, cfg)).collect(),
-        LayoutKind::Layered(_) => (0..n).map(|v| measure(fonts, g, v, Role::Leaf, b, cfg)).collect(),
+        LayoutKind::Radial => (0..n)
+            .map(|v| measure(fonts, g, v, radial::role(t, v), b, cfg))
+            .collect(),
+        LayoutKind::Layered(_) => (0..n)
+            .map(|v| measure(fonts, g, v, Role::Leaf, b, cfg))
+            .collect(),
     }
 }
 
@@ -160,8 +188,14 @@ mod tests {
         let w = fonts.width("lakes wetlands and soil moisture", 10.0, false);
         let lines = wrap(&fonts, text, 10.0, false, w);
         assert_eq!(lines.len(), 2, "{lines:?}");
-        assert!(lines.iter().all(|l| l.contains(' ')), "lone word in {lines:?}");
-        assert!(lines.iter().all(|l| fonts.width(l, 10.0, false) <= w), "{lines:?}");
+        assert!(
+            lines.iter().all(|l| l.contains(' ')),
+            "lone word in {lines:?}"
+        );
+        assert!(
+            lines.iter().all(|l| fonts.width(l, 10.0, false) <= w),
+            "{lines:?}"
+        );
         assert_eq!(lines.join(" "), text);
     }
 }

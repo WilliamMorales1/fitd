@@ -2,6 +2,9 @@
 name = "fitd"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/WilliamMorales1/fitd"
 description = "Constraint-diagram compiler: concept maps and flowcharts laid out by a CSP solver, with rustc-style diagnostics"
 
 [features]
