@@ -1,5 +1,5 @@
 title "Macros"
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 root mac
 
 style line color=#6A1B9A

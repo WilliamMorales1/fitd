@@ -1,6 +1,6 @@
 title "Three ways a layout is refused"
 layout layered dir=down
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 
 style stat color=#1565C0
 style search color=#6A1B9A

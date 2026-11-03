@@ -1,5 +1,5 @@
 title "Diagnostic codes"
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 root diag
 
 style front color=#1565C0

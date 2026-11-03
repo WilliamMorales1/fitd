@@ -1,5 +1,5 @@
 title "Statements: one per line"
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 root file
 
 style content color=#8D6E63

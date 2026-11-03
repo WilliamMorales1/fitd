@@ -58,6 +58,13 @@ Editors: `fitd lsp` is a language server (front-end diagnostics as you type, ful
 
 Tests: `cargo test --release`.
 
+## Docs
+
+- [Language](docs/language.md): grammar, semantics, relations, diagnostics.
+- [Options and theming](docs/options.md): command-line flags, colors, fonts.
+- [Agent skill](skills/fitd/SKILL.md): drawing diagrams with fitd from an AI agent.
+- [Internals](docs/internals.md): pipeline, solver, references, tests.
+
 ## Compared with DOT, Mermaid, and D2
 
 Those languages have far wider adoption and tooling; `fitd import` translates Graphviz (`.dot`), Mermaid flowcharts and mind maps (`.mmd`), and D2 (`.d2`): nodes, labels, edges, and clusters, subgraphs, or containers (as nested `group`s), D2 `classes` and `vars`, with a mind map's indentation becoming a radial tree; it lists whatever has no equivalent. What fitd adds:

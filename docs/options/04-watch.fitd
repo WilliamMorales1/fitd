@@ -1,6 +1,6 @@
 title "fitd map.fitd --watch"
 layout layered dir=right
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 
 style fast color=#1565C0
 style slow color=#6A1B9A

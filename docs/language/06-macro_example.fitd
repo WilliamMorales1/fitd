@@ -1,4 +1,4 @@
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 layout layered dir=down
 
 for i in 1..4                    # inclusive range; also `for s in a, b, "two words"`

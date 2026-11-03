@@ -1,6 +1,6 @@
 title "--stable map.fitd.lock"
 layout layered dir=down
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 
 style lock color=#EF6C00
 

@@ -1,6 +1,6 @@
 title "Groups"
 layout layered dir=down
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 font 7pt..30pt wrap=12em
 
 node syntax "group \"Title\" a, b, c color=#hex"

@@ -1,6 +1,6 @@
 title "How the solver picks a font"
 layout layered dir=down
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 
 style probe color=#1565C0
 style fail color=#C62828

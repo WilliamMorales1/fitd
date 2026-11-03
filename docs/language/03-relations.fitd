@@ -1,5 +1,5 @@
 title "Relations: predicates on final boxes (y points up)"
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 root rel
 
 style ord color=#1565C0

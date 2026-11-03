@@ -1,6 +1,6 @@
 title "fitd split map.fitd [-o DIR]"
 layout layered dir=down
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 
 style src color=#1565C0
 style shared color=#EF6C00

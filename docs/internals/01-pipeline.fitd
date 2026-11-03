@@ -1,6 +1,6 @@
 title "From source to drawing"
 layout layered dir=down
-page a4 portrait margin=1cm
+page 360x203mm margin=1cm
 
 style front color=#1565C0
 style solver color=#6A1B9A

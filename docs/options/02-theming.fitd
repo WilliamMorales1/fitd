@@ -1,5 +1,5 @@
 title "Theming"
-page a4 portrait margin=1cm
+page 320x180mm margin=1cm
 root theme
 
 node theme "theme light|dark|mono key=#hex"
