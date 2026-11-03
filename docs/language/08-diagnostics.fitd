@@ -1,0 +1,57 @@
+title "Diagnostic codes"
+page a4 portrait margin=1cm
+root diag
+
+style front color=#1565C0
+style layout color=#C62828
+style warn color=#EF6C00
+
+node diag "Diagnostics"
+| rustc style, at the source lines that caused them
+| fitd explain CODE prints the long form
+| --short prints one line each
+
+node front "E00xx: front end" .front
+node lay "E01xx: layout" .layout
+node warn "W02xx: warnings" .warn
+| never block output
+diag -> front, lay, warn
+
+def code(parent, c, text)
+  node ${c} "${c}"
+  | ${text}
+  ${parent} -> ${c}
+end
+
+use code("front", "E0001", "unknown node, with a did-you-mean by edit distance")
+use code("front", "E0002", "syntax error")
+use code("front", "E0003", "node or style declared twice; points at both")
+use code("front", "E0004", "unknown style")
+use code("front", "E0005", "attribute not valid on this statement")
+use code("front", "E0006", "wrong value type or unit")
+use code("front", "E0007", "constraint names a node twice, or align with one node")
+use code("front", "E0008", "contradictory hard orderings, found statically")
+use code("front", "E0009", "unknown layout, relation, side, place, shape, or flag")
+use code("front", "E0010", "two groups share some nodes without one holding the other")
+use code("front", "E0011", "include cycle or unreadable file")
+use code("front", "E0012", "macro error: unknown variable or template, argument count, type, division by zero, nesting too deep")
+use code("front", "E0013", "macro expansion ran past --expand-budget steps")
+
+use code("lay", "E0101", "checker: overlap")
+use code("lay", "E0102", "checker: edge through node")
+use code("lay", "E0103", "checker: crossing")
+use code("lay", "E0104", "checker: off page")
+use code("lay", "E0105", "checker: text overflow")
+use code("lay", "E0106", "checker: font too small")
+use code("lay", "E0107", "checker: child nearer the center")
+use code("lay", "E0108", "layout breaks a require or group; a solver bug")
+use code("lay", "E0109", "edge label covered, overlapping, or clipped; a solver bug")
+use code("lay", "E0110", "minimal set of requires that cannot hold together")
+
+use code("warn", "W0201", "link through a node")
+use code("warn", "W0202", "missing glyph")
+use code("warn", "W0203", "unused style")
+use code("warn", "W0204", "repeated setting")
+use code("warn", "W0205", "unmet preference")
+use code("warn", "W0206", "layered crossing")
+use code("warn", "W0207", "links crossing or running together")

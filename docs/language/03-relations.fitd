@@ -1,0 +1,38 @@
+title "Relations: predicates on final boxes (y points up)"
+page a4 portrait margin=1cm
+root rel
+
+style ord color=#1565C0
+style al color=#6A1B9A
+style kind color=#C62828
+
+node rel "REL"
+
+node leftof "a left-of b gap=1em" .ord
+| a.right + gap <= b.left
+| right-of swaps
+node above "a above b gap=1em" .ord
+| a.bottom >= b.top + gap
+| below swaps
+node near "a near b within=4em" .ord
+| the space between the boxes is at most within
+node at "a at top-left|top|...|bottom-right|center" .ord
+| a's center lies in that third of the page
+node align "align top|bottom|left|right(a, b, ...)" .al
+| that edge is shared, within the grid tolerance
+node rowcol "align row(...) / column(...)" .al
+| centers share y / x
+node chain "Chains"
+| a left-of b left-of c means a left-of b and b left-of c
+| steps may mix: a above b near c
+| attributes apply to every step
+| each step is its own constraint, so diagnostics point at the failing one
+
+node req "require" .kind
+| hard; satisfiable means on the strategy's grid of candidate positions,
+| so a set may fail on the grid although a hand-placed layout meets it
+node pref "prefer weight=N" .kind
+| soft; unmet total weight minimized after the font is fixed: W0205
+
+rel -> leftof, above, near, at, align, rowcol, chain, req, pref
+chain ..> leftof

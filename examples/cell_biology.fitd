@@ -1,7 +1,7 @@
 title "Cellular respiration"
 layout layered dir=right
-page a2
-font 8pt..34pt wrap=16em
+page a4 portrait
+font 6pt..34pt wrap=16em
 
 style process color=#2E7D32
 style output color=#6A1B9A
@@ -41,17 +41,11 @@ node regulation "Regulation" .output
 | ATP and NADH inhibit early steps
 | ADP signals energy demand
 
-glucose -> glycolysis
-glycolysis -> pyruvate "2 pyruvate"
-pyruvate -> krebs
+glucose -> glycolysis -> pyruvate "2 pyruvate" -> krebs
 glycolysis -> carriers
 krebs -> etc
-krebs -> carriers
-carriers -> etc "electrons"
-etc -> gradient
-gradient -> atp "H+ flow"
-etc -> oxygen
-oxygen -> water
+krebs -> carriers -> etc "electrons" -> gradient -> atp "H+ flow"
+etc -> oxygen -> water
 atp -> yield
 glycolysis ..> anaerobic "low oxygen"
 atp ..> regulation "feedback" color=#C62828

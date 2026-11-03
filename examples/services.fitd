@@ -3,7 +3,7 @@
 title "Checkout backend"
 include "shared/service.fitd"
 layout layered dir=down
-page a4 landscape margin=1cm
+page a4 portrait margin=1cm
 font 8pt..26pt wrap=10em
 
 node web "Web and mobile clients" .edge

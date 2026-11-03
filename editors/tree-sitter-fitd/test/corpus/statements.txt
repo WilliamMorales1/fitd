@@ -187,3 +187,23 @@ end -> in
     from: (name)
     operator: (edge_operator)
     to: (name)))
+
+================================================================================
+Arrow chains
+================================================================================
+
+a -> b, c "x" -- d .hub
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (edge_statement
+    from: (name)
+    operator: (edge_operator)
+    to: (name)
+    to: (name)
+    label: (string)
+    operator: (edge_operator)
+    to: (name)
+    (class
+      (name))))

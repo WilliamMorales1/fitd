@@ -306,7 +306,8 @@ fn pieces(line: &str) -> Result<Option<Vec<Piece>>, String> {
     let mut rest = line;
     while let Some(k) = rest.find("${") {
         if rest[..k].ends_with('$') {
-            lit += &rest[..k + 2];
+            lit += &rest[..k - 1];
+            lit += "${";
             rest = &rest[k + 2..];
             continue;
         }
@@ -1061,6 +1062,8 @@ mod tests {
 
     #[test]
     fn comments_are_not_interpolated() {
+        let l = run("node a \"$${x} ${1 + 1}\"\n| $${y}\n");
+        assert_eq!(visible(&l), ["node a \"${x} 2\"", "| ${y}"]);
         let l = run("for i in 1..1\n  node a${i} \"#${i}\" color=#123  # ${nope}\nend\n");
         assert!(l.diags.is_empty(), "{:?}", l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>());
         assert_eq!(visible(&l), ["node a1 \"#1\" color=#123  # ${nope}"]);

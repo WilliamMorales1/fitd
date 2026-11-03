@@ -24,16 +24,13 @@ node minimal "Shrink the case"
 node fix "Fix and add\na regression test"
 node green "Green" .done
 
-fail -> repro
-repro -> flaky "no"
+fail -> repro -> flaky "no"
 repro -> recent "yes"
 flaky -> quarantine
 recent -> bisect "yes"
 recent -> read "no"
 bisect -> minimal
-read -> minimal
-minimal -> fix
-fix -> green
+read -> minimal -> fix -> green
 quarantine ..> repro "retry with a seed"
 
 require flaky left-of recent

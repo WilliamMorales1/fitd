@@ -11,10 +11,7 @@ node c "Step 2" .highlight
 node d "Step 3" .highlight
 node e "End"
 
-a -> b
-b -> c
-c -> d
-d -> e
+a -> b -> c -> d -> e
 
 # Align the highlighted steps in a row
 require align row(b, c, d)

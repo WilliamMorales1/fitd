@@ -1,0 +1,41 @@
+title "How the solver picks a font"
+layout layered dir=down
+page a4 portrait margin=1cm
+
+style probe color=#1565C0
+style fail color=#C62828
+style good color=#2E7D32
+
+node font "Next font"
+| binary search between the floor and the ceiling
+node csp "Probe" .probe
+| forward checking, backjumping, spatial index
+node fits "Fits?" .probe
+node bnb "Branch and bound" .probe
+| fewest unmet prefer weight
+node trade "Trade-off"
+| top font, 5% and 10% smaller, polished in parallel
+| kept above 16pt per meter of page diagonal
+node polish "Polish each"
+| annealing: crossings, nearness, spread
+node best "Best merit" .good
+| readability plus font
+node none "Nothing fits" .fail
+node core "QuickXplain" .fail
+| minimal set of requires: E0110
+
+font -> csp -> fits -> bnb "range closed"
+fits -> none "fails at the floor"
+fits ..> font "yes: go larger; no: smaller"
+bnb -> trade -> polish -> best
+none -> core
+
+node refs "References" color=#455A64
+| Prosser 1993: conflict-directed backjumping
+| Junker, AAAI 2004: QuickXplain
+| Sugiyama, Tagawa, Toda 1981: layered layout
+refs ..> csp
+node links "Dashed links last"
+| with nodes fixed, each link picks a bend
+| or a detour around boxes
+best -> links

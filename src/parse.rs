@@ -107,26 +107,45 @@ impl Parser<'_> {
         Ok(out)
     }
 
-    fn edge(&mut self) -> PResult<StmtKind> {
-        let from = self.name("a node name")?;
-        let (link, directed) = match self.peek() {
-            Tok::Arrow => (false, true),
-            Tok::DashDash => (false, false),
-            Tok::DotArrow => (true, true),
-            Tok::DotDot => (true, false),
-            _ => return Err(self.unexpected("`->`, `--`, `..>`, or `..`")),
-        };
-        self.bump();
-        let to = self.targets()?;
-        let label = match self.peek().clone() {
-            Tok::Str(s) => {
-                self.bump();
-                Some(s)
-            }
+    fn arrow(&self) -> Option<(bool, bool)> {
+        match self.peek() {
+            Tok::Arrow => Some((false, true)),
+            Tok::DashDash => Some((false, false)),
+            Tok::DotArrow => Some((true, true)),
+            Tok::DotDot => Some((true, false)),
             _ => None,
-        };
+        }
+    }
+
+    /// edge reads `a -> b -> c`; each hop becomes one edge, and a hop's targets all feed the next.
+    fn edge(&mut self) -> PResult<Vec<StmtKind>> {
+        let mut froms = vec![self.name("a node name")?];
+        let mut hops = Vec::new();
+        while self.arrow().is_some() {
+            let (link, directed) = self.arrow().unwrap();
+            self.bump();
+            let to = self.targets()?;
+            let label = match self.peek().clone() {
+                Tok::Str(s) => {
+                    self.bump();
+                    Some(s)
+                }
+                _ => None,
+            };
+            hops.push((froms, link, directed, to.clone(), label));
+            froms = to;
+        }
+        if hops.is_empty() {
+            return Err(self.unexpected("`->`, `--`, `..>`, or `..`"));
+        }
         let (classes, attrs) = self.looks()?;
-        Ok(StmtKind::Edge { from, link, directed, to, label, classes, attrs })
+        let mut out = Vec::new();
+        for (froms, link, directed, to, label) in hops {
+            for from in froms {
+                out.push(StmtKind::Edge { from, link, directed, to: to.clone(), label: label.clone(), classes: classes.clone(), attrs: attrs.clone() });
+            }
+        }
+        Ok(out)
     }
 
     /// looks reads the `.style` and `key=value` items that end a node or edge statement.
@@ -172,13 +191,17 @@ impl Parser<'_> {
         Ok(Rel::Chain { nodes, ops })
     }
 
-    fn stmt(&mut self) -> PResult<StmtKind> {
+    fn stmt(&mut self) -> PResult<Vec<StmtKind>> {
+        if *self.peek() == Tok::Ident && matches!(self.peek_at(1), Tok::Arrow | Tok::DashDash | Tok::DotArrow | Tok::DotDot) {
+            return self.edge();
+        }
+        self.stmt1().map(|k| vec![k])
+    }
+
+    fn stmt1(&mut self) -> PResult<StmtKind> {
         if let Tok::Body(s) = self.peek().clone() {
             self.bump();
             return Ok(StmtKind::Body(s));
-        }
-        if *self.peek() == Tok::Ident && matches!(self.peek_at(1), Tok::Arrow | Tok::DashDash | Tok::DotArrow | Tok::DotDot) {
-            return self.edge();
         }
         let kw = self.name("a statement")?;
         Ok(match kw.text.as_str() {
@@ -253,9 +276,9 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
         }
         let lo = p.span().lo;
         match p.stmt() {
-            Ok(kind) if p.at_end() => {
+            Ok(kinds) if p.at_end() => {
                 let hi = p.toks[p.pos - 1].span.hi;
-                stmts.push(Stmt { kind, span: Span::new(lo, hi) });
+                stmts.extend(kinds.into_iter().map(|kind| Stmt { kind, span: Span::new(lo, hi) }));
             }
             Ok(_) => errs.push(Diag::error("E0002", format!("unexpected {} after statement", describe(p.peek()))).primary(p.span(), "expected end of line")),
             Err(d) => errs.push(d),
@@ -294,6 +317,16 @@ mod tests {
         assert!(matches!(&stmts[10].kind, StmtKind::Edge { link: true, directed: false, .. }));
         assert!(matches!(&stmts[15].kind, StmtKind::Edge { directed: true, .. }));
         assert!(matches!(&stmts[12].kind, StmtKind::Constraint { hard: false, rel: Rel::Align { .. }, .. }));
+    }
+
+    #[test]
+    fn parses_arrow_chains() {
+        let (stmts, errs) = parse("a -> b, c \"x\" -- d .hub color=#f00\n");
+        assert!(errs.is_empty());
+        assert_eq!(stmts.len(), 3);
+        assert!(matches!(&stmts[0].kind, StmtKind::Edge { from, to, directed: true, label: Some(_), classes, .. } if from.text == "a" && to.len() == 2 && classes.len() == 1));
+        assert!(matches!(&stmts[2].kind, StmtKind::Edge { from, directed: false, label: None, attrs, .. } if from.text == "c" && attrs.len() == 1));
+        assert_eq!(parse("a -> b ->\n").1.len(), 1);
     }
 
     #[test]

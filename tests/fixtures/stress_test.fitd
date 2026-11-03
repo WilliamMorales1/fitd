@@ -8,10 +8,7 @@ node b "Node B"
 node c "Node C"
 node d "Node D"
 
-a -> b
-b -> c
-c -> d
-d -> a
+a -> b -> c -> d -> a
 
 # Create a contradiction: a left-of b, b left-of c, c left-of a
 require a left-of b

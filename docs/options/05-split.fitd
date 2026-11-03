@@ -1,0 +1,37 @@
+title "fitd split map.fitd [-o DIR]"
+layout layered dir=down
+page a4 portrait margin=1cm
+
+style src color=#1565C0
+style shared color=#EF6C00
+style page color=#2E7D32
+
+node map "map.fitd" .src
+| the original, too big for one page
+| fitd split map.fitd [-o DIR], default map-pages/
+node shared "map-shared.fitd" .shared
+| layout, page, font, theme, styles
+node over "map.fitd (overview)" .page
+| root plus one stub per branch
+for b in a, b, c
+  node p${b} "map-${b}.fitd" .page
+  | branch ${b}, rooted at its top node
+  map -> p${b} -> shared
+end
+map -> over -> shared "include"
+node rules "What crosses pages" color=#C62828
+| an edge between pages is drawn on both, each time to a stub
+| of the far end whose body names its page
+| a group keeps each page's members
+| a chain keeps each run of links within one page
+| an align keeps each page's part of two or more nodes
+| a near or ordering between pages, or a node alone in an align,
+| is left out and listed as a warning
+| comments are not carried over
+node edit "Ordinary source" color=#C62828
+| every page includes the shared file, so each builds alone
+| and a style edited once changes every page
+| edit the split files freely; split again only from the original
+map ..> rules
+shared ..> edit
+group "map-pages/" over, pa, pb, pc, shared

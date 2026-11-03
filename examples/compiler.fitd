@@ -1,7 +1,7 @@
 # The fitd pipeline itself, as a layered flowchart with layout constraints.
 title "How fitd compiles a diagram"
 layout layered dir=down
-page a3 margin=1cm
+page a4 portrait margin=1cm
 font 7pt..40pt wrap=16em
 theme dark link=#FFD54F
 
@@ -52,19 +52,10 @@ node failure "Failure paths" .check
 | parse errors are reported and skipped
 | unsatisfiable requirements stop output
 
-src -> lex
-lex -> parse
-parse -> sema
-sema -> plan
-plan -> measure
-measure -> quality
-plan -> csp
-csp -> bnb, core
+src -> lex -> parse -> sema -> plan -> measure -> quality
+plan -> csp -> bnb, core
 quality -> csp
-bnb -> checker
-checker -> diagnostics
-diagnostics -> emit
-emit -> output
+bnb -> checker -> diagnostics -> emit -> output
 core ..> sema "points back at source"
 failure ..> diagnostics "reported" .check
 

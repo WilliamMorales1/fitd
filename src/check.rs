@@ -204,7 +204,7 @@ mod tests {
             }
         }
         assert!(seen > 20, "found only {seen} codes");
-        let lang = include_str!("../docs/LANGUAGE.md");
+        let lang = include_str!("../docs/language/08-diagnostics.fitd");
         for (code, _) in EXPLAIN {
             let n: u32 = code[1..].parse().unwrap();
             // The table lists some codes as ranges, like `E0101-E0107`.
@@ -212,7 +212,7 @@ mod tests {
                 let range = &lang[i..(i + 11).min(lang.len())];
                 range.len() == 11 && &range[5..6] == "-" && range[1..5].parse::<u32>().is_ok_and(|lo| lo <= n) && range[7..11].parse::<u32>().is_ok_and(|hi| n <= hi)
             });
-            assert!(listed, "{code} missing from docs/LANGUAGE.md");
+            assert!(listed, "{code} missing from docs/language/08-diagnostics.fitd");
         }
     }
 }

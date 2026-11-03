@@ -1,5 +1,5 @@
 /**
- * Tree-sitter grammar for fitd diagram sources. Mirrors the EBNF in docs/LANGUAGE.md: one
+ * Tree-sitter grammar for fitd diagram sources. Mirrors parse.rs and the macro lines of macros.rs: one
  * statement per line, `#` comments except right after `=`, where it starts a color.
  */
 module.exports = grammar({
@@ -52,11 +52,11 @@ module.exports = grammar({
     edge_statement: $ => seq(
       // A node may be named like a macro keyword; the edge operator after it tells.
       field('from', choice($.name, alias(choice('for', 'if', 'else', 'end', 'def', 'use'), $.name))),
-      field('operator', $.edge_operator),
-      $._targets,
-      optional(field('label', $.string)),
+      repeat1($._hop),
       repeat(choice($.class, $.attribute)),
     ),
+    // A hop's targets feed the next hop: `a -> b, c "x" -- d`.
+    _hop: $ => seq(field('operator', $.edge_operator), $._targets, optional(field('label', $.string))),
     group_statement: $ => seq('group', optional(field('title', $.string)), $._targets, repeat($.attribute)),
     constraint_statement: $ => seq(choice('require', 'prefer'), $._relation, repeat($.attribute)),
     include_statement: $ => seq('include', field('path', $.string)),

@@ -265,6 +265,47 @@ pub fn png(svg: &str, fonts: &Fonts, scale: f64) -> Result<Vec<u8>, String> {
     pix.encode_png().map_err(|e| e.to_string())
 }
 
+/// Sheet is one PDF page: page SVGs placed at offsets in points, on a page of `size`, or of
+/// the first SVG's size when None.
+pub struct Sheet<'a> {
+    pub size: Option<(f64, f64)>,
+    pub cells: Vec<(&'a str, &'a Fonts, f64, f64)>,
+}
+
+/// pdf draws sheets of page SVGs into one PDF, with each SVG's measuring fonts embedded as
+/// selectable text.
+pub fn pdf(sheets: &[Sheet]) -> Result<Vec<u8>, String> {
+    use krilla_svg::SurfaceExt;
+    let mut doc = krilla::Document::new();
+    for sheet in sheets {
+        let mut trees = Vec::new();
+        for &(svg, fonts, x, y) in &sheet.cells {
+            let mut opt = usvg_pdf::Options::default();
+            for f in fonts.regular.iter().chain(&fonts.bold) {
+                opt.fontdb_mut().load_font_data(f.data.clone());
+            }
+            let tree = usvg_pdf::Tree::from_str(svg, &opt).map_err(|e| e.to_string())?;
+            // usvg reads `pt` as 4/3 px; PDF units are points.
+            let size = krilla::geom::Size::from_wh(tree.size().width() * 0.75, tree.size().height() * 0.75).ok_or("empty drawing")?;
+            trees.push((tree, size, x as f32, y as f32));
+        }
+        let page_size = match sheet.size {
+            Some((w, h)) => krilla::geom::Size::from_wh(w as f32, h as f32).ok_or("empty sheet")?,
+            None => trees.first().map(|t| t.1).ok_or("empty sheet")?,
+        };
+        let mut page = doc.start_page_with(krilla::page::PageSettings::new(page_size));
+        let mut surface = page.surface();
+        for (tree, size, x, y) in &trees {
+            surface.push_transform(&krilla::geom::Transform::from_translate(*x, *y));
+            surface.draw_svg(tree, *size, krilla_svg::SvgSettings::default()).ok_or("could not draw the SVG")?;
+            surface.pop();
+        }
+        surface.finish();
+        page.finish();
+    }
+    doc.finish().map_err(|e| format!("{e:?}"))
+}
+
 fn tex(s: &str) -> String {
     let mut o = String::new();
     for c in s.chars() {

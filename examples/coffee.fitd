@@ -1,6 +1,6 @@
 # From cherry to cup: a radial map whose center fitd picks, colored by a custom palette.
 title "Coffee"
-page a3 landscape
+page a4 portrait
 font 9pt..32pt wrap=15em
 theme palette="#6D4C41 #2E7D32 #EF6C00 #1565C0 #AD1457"
 

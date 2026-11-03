@@ -1,6 +1,6 @@
 title "The water cycle"
 layout radial root=water
-page a3
+page a4 portrait
 font 8pt..34pt wrap=16em
 theme light root=#0D47A1 link=#546E7A
 
@@ -64,14 +64,11 @@ ice -> evaporation
 ground -> infiltration
 atmosphere -> condensation
 evaporation -> condensation
-transpiration -> condensation
-condensation -> precipitation
-precipitation -> runoff
+transpiration -> condensation -> precipitation -> runoff
 precipitation -> infiltration
 runoff -> ocean
 infiltration -> ground
-runoff -> storage
-storage -> evaporation
+runoff -> storage -> evaporation
 human ..> ground "pumping" .impact
 human ..> storage "withdrawal" .impact
 climate ..> evaporation "warming" .impact

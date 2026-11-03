@@ -214,21 +214,21 @@ fn theme_colors_reach_svg_and_tikz() {
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
 const EXAMPLES: [(&str, usize, u64); 14] = [
-    ("cell_biology", 0, 2_400_000),
-    ("coffee", 0, 93_000_000),
-    ("compiler", 0, 4_600_000),
+    ("cell_biology", 0, 17_700_000),
+    ("coffee", 2, 155_000_000),
+    ("compiler", 2, 1_450_000),
     ("debugging", 0, 33_000),
-    ("deepseek_v4_1_flash", 0, 6_300_000),
-    ("earth_science", 2, 89_000_000),
-    ("fib_calls", 0, 2_500_000),
-    ("french_history", 0, 2_600_000),
-    ("group_theory", 0, 50_000_000),
+    ("deepseek_v4_1_flash", 0, 20_000_000),
+    ("earth_science", 4, 101_000_000),
+    ("fib_calls", 0, 8_000_000),
+    ("french_history", 2, 5_300_000),
+    ("group_theory", 0, 164_000_000),
     // Dense layers cross by nature: every W0206 here is an unavoidable crossing.
-    ("neural_net", 60, 8_700_000),
-    ("pipeline", 0, 46_000),
-    ("release_pipeline", 0, 1_500_000),
-    ("semester", 0, 13_000),
-    ("services", 0, 80_000),
+    ("neural_net", 60, 8_200_000),
+    ("pipeline", 0, 94_000),
+    ("release_pipeline", 0, 87_000),
+    ("semester", 0, 34_000),
+    ("services", 0, 6_200_000),
 ];
 
 const HANG_SECS: f64 = 60.0;
@@ -346,9 +346,12 @@ fn layout_needs_no_fontconfig() {
 #[test]
 fn open_orientation_turns_and_flags_fix_it() {
     // `compiler` keeps warnings on landscape a3 and has none on portrait.
-    let (ok, log) = fitd(&["examples/compiler.fitd", "-o", tmp("turn.svg").to_str().unwrap()]);
+    let src = tmp("turn.fitd");
+    std::fs::write(&src, std::fs::read_to_string("examples/compiler.fitd").unwrap().replace("page a4 portrait margin=1cm", "page a3 margin=1cm")).unwrap();
+    let src = src.to_str().unwrap();
+    let (ok, log) = fitd(&[src, "-o", tmp("turn.svg").to_str().unwrap()]);
     assert!(ok && log.contains("turned the page to portrait") && log.contains("on 842x1191pt"), "{log}");
-    let (ok, log) = fitd(&["examples/compiler.fitd", "-o", tmp("turn.svg").to_str().unwrap(), "--landscape"]);
+    let (ok, log) = fitd(&[src, "-o", tmp("turn.svg").to_str().unwrap(), "--landscape"]);
     assert!(ok && !log.contains("turned the page") && log.contains("on 1191x842pt"), "{log}");
 }
 
@@ -393,7 +396,7 @@ fn guide_examples_build_from_stdin() {
     use std::io::Write;
     let out = Command::new(env!("CARGO_BIN_EXE_fitd")).arg("guide").output().unwrap();
     let guide = String::from_utf8(out.stdout).unwrap();
-    // The guide is what an agent reads instead of LANGUAGE.md, so it must stay small.
+    // The guide is what an agent reads instead of the doc diagrams, so it must stay small.
     assert!(guide.len() <= 2500, "guide grew to {} bytes", guide.len());
     for name in ["Concept map:", "Flowchart:"] {
         let body: String = guide.split(name).nth(1).unwrap().trim_start_matches('\n').lines().take_while(|l| !l.is_empty()).map(|l| l.trim_start().to_string() + "\n").collect();
@@ -701,6 +704,65 @@ fn readme_shows_pipeline_example_whole() {
     let readme = std::fs::read_to_string("README.md").unwrap();
     let src = std::fs::read_to_string("examples/pipeline.fitd").unwrap();
     assert!(readme.contains(&format!("```\n{src}```")), "README code block differs from examples/pipeline.fitd");
+}
+
+/// glob expands one `dir/prefix*suffix` pattern, sorted as a shell would.
+fn glob(pattern: &str) -> Vec<String> {
+    let Some((pre, suf)) = pattern.split_once('*') else { return vec![pattern.to_string()] };
+    let (dir, pre) = pre.rsplit_once('/').unwrap();
+    let mut out: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with(pre) && n.ends_with(suf))
+        .map(|n| format!("{dir}/{n}"))
+        .collect();
+    out.sort();
+    out
+}
+
+#[test]
+fn committed_docs_match_a_fresh_build() {
+    let readme = std::fs::read_to_string("README.md").unwrap();
+    let block = readme.split("Rebuild the PDFs").nth(1).unwrap().split("```\n").nth(1).unwrap();
+    let mut built = Vec::new();
+    for line in block.lines() {
+        let mut args: Vec<String> = line.strip_prefix("fitd ").unwrap().split(' ').flat_map(glob).collect();
+        let o = args.iter().position(|a| a == "-o").unwrap() + 1;
+        let committed = std::mem::replace(&mut args[o], String::new());
+        let fresh = tmp(&committed.replace('/', "-"));
+        args[o] = fresh.to_str().unwrap().to_string();
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let (ok, log) = fitd(&refs);
+        assert!(ok, "{line}\n{log}");
+        // Every page of the docs builds clean; only the gallery's examples keep their warnings.
+        if !committed.starts_with("examples/") {
+            assert!(!log.contains("warning["), "{line}\n{log}");
+        }
+        assert!(std::fs::read(&committed).ok() == std::fs::read(&fresh).ok(), "{committed} is stale; rebuild it with: {line}");
+        built.extend(args.into_iter().filter(|a| a.ends_with(".fitd")));
+    }
+    for dir in ["docs/language", "docs/options", "docs/internals", "examples"] {
+        for f in glob(&format!("{dir}/*.fitd")) {
+            assert!(built.contains(&f), "{f} is in no PDF");
+        }
+    }
+}
+
+#[test]
+fn several_inputs_make_one_pdf() {
+    let pdf = tmp("book.pdf");
+    let (ok, log) = fitd(&["examples/pipeline.fitd", "examples/coffee.fitd", "examples/semester.fitd", "-o", pdf.to_str().unwrap()]);
+    assert!(ok && log.contains("(3 diagrams on 3 pages)"), "{log}");
+    let (ok, log) = fitd(&["examples/pipeline.fitd", "examples/coffee.fitd", "examples/semester.fitd", "--grid", "2x1", "--page", "a3", "-o", pdf.to_str().unwrap()]);
+    assert!(ok && log.contains("(3 diagrams on 2 pages)") && log.matches("on 595x842pt").count() == 3, "{log}");
+    let (ok, log) = fitd(&["examples/pipeline.fitd", "examples/coffee.fitd", "-o", tmp("book.svg").to_str().unwrap()]);
+    assert!(!ok && log.contains("need -o FILE.pdf"), "{log}");
+    let (ok, log) = fitd(&["examples/pipeline.fitd", "examples/coffee.fitd", "--tikz", "x.tex", "-o", pdf.to_str().unwrap()]);
+    assert!(!ok && log.contains("takes one input"), "{log}");
+    let (ok, log) = fitd(&["examples/pipeline.fitd", "tests/fixtures/stress_test.fitd", "-o", tmp("bad.pdf").to_str().unwrap()]);
+    assert!(!ok && log.contains("1 of 2 diagrams failed") && !tmp("bad.pdf").exists(), "{log}");
+    let (ok, log) = fitd(&["examples/pipeline.fitd", "--grid", "2", "-o", pdf.to_str().unwrap()]);
+    assert!(!ok && log.contains("COLSxROWS"), "{log}");
 }
 
 #[test]

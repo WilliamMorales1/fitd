@@ -4,44 +4,35 @@ A small diagram language with a constraint solver for layout. Write nodes, edges
 
 ```
 title "How fitd compiles a diagram"
-layout layered dir=down
-page a4 portrait margin=1cm
+layout layered dir=right
+page 297x210mm margin=1cm
 theme dark link=#FFD54F
 
-style stage color=#42A5F5
-style check color=#EF5350
 style io color=#26A69A shape=circle
 
 node src "Source .fitd" .io
-node parse "Parser" .stage
-| tokens, statements, names
+node parse "Parser"
 node csp "CSP search"
-| largest font that fits the page
+| largest font that fits
 node bnb "Branch and bound"
-| weighs every `prefer`
 node core "QuickXplain"
 | minimal unsat core
-node checker "Checker" .check
-| re-derives overlaps and crossings
+node checker "Checker" color=#EF5350
 node out "SVG, PNG, TikZ" .io
 
-src -> parse
-parse -> csp
-csp -> bnb, core
-bnb -> checker
-checker -> out
+src -> parse -> csp -> bnb, core
+bnb -> checker -> out
 core ..> src "points back at source"
 
 group "Solver" csp, bnb, core color=#AB47BC
 
-require bnb left-of core gap=2em
-require align row(bnb, core)
-prefer out at bottom-left weight=2
+require bnb above core gap=2em
+prefer out at right weight=2
 ```
 
-![examples/pipeline.fitd rendered to PNG](docs/examples/pipeline.png)
+![examples/pipeline.fitd rendered to PNG](docs/pipeline.png)
 
-That is the whole file. [docs/EXAMPLES.md](docs/EXAMPLES.md) has larger ones, including [the full pipeline](examples/compiler.fitd).
+That is the whole file. [examples/gallery.pdf](examples/gallery.pdf) shows larger ones, a page each, including [the full pipeline](examples/compiler.fitd). The [cheat sheet](docs/cheatsheet.pdf) covers the language, and [Docs](#docs) lists the rest.
 
 ## Dependencies
 
@@ -51,7 +42,10 @@ Rust 1.85+ (edition 2024) and Cargo. Crates, fetched by Cargo: `resvg` (SVG/PNG 
 
 ```fish
 cargo build --release
-./target/release/fitd examples/pipeline.fitd -o docs/examples/pipeline.png
+./target/release/fitd examples/pipeline.fitd -o pipeline.png
+./target/release/fitd examples/pipeline.fitd -o pipeline.pdf     # selectable text
+./target/release/fitd examples/*.fitd -o all.pdf                 # one page per diagram
+./target/release/fitd a.fitd b.fitd c.fitd d.fitd --grid 2x2 --page a1 -o sheet.pdf  # four to a page
 ./target/release/fitd examples/compiler.fitd --tikz out/compiler.tex
 ./target/release/fitd guide          # the language on one page
 ./target/release/fitd explain E0110  # explain an error code
@@ -79,8 +73,25 @@ Why not a layout plugin for one of them instead? D2, Mermaid (v11 layouts), and 
 
 ## Docs
 
-- [Language](docs/LANGUAGE.md): grammar, macros, semantics, relations, diagnostics.
-- [Options and theming](docs/OPTIONS.md): command-line flags, colors, fonts.
-- [Agent skill](skills/fitd/SKILL.md): drawing diagrams with fitd from an AI agent.
-- [Examples](docs/EXAMPLES.md): every example with its rendered output.
-- [Internals](docs/INTERNALS.md): pipeline, solver, references, tests.
+The docs are fitd diagrams, collected into PDFs by fitd itself, every page A4. Text in them is selectable and searchable.
+
+| PDF | What is in it |
+| --- | --- |
+| [Cheat sheet](docs/cheatsheet.pdf) | 4 pages: statements, relations, macros, and flags. Start here. |
+| [Language](docs/language.pdf) | 8 pages: statements, lexing, relations, groups, macros, a macro example, how layouts are refused, every diagnostic code. |
+| [Options](docs/options.pdf) | 5 pages: flags and subcommands, theming, `--stable`, `--watch`, `fitd split`. |
+| [Internals](docs/internals.pdf) | 3 pages: the pipeline file by file, how the solver picks a font, tests and benchmarks. |
+| [Example gallery](examples/gallery.pdf) | 14 pages: an index of features, then every file in [examples/](examples/) but the README's `pipeline.fitd`. |
+
+Each page's source sits in [docs/language/](docs/language/), [docs/options/](docs/options/), or [docs/internals/](docs/internals/), numbered in reading order. `fitd guide` prints the language as text on one page, and `fitd explain CODE` prints the long form of any diagnostic. [skills/fitd/SKILL.md](skills/fitd/SKILL.md) covers drawing diagrams from an AI agent.
+
+Rebuild the PDFs after changing a source or fitd itself. `cargo test --release` fails if a committed PDF differs from a fresh build of these commands:
+
+```
+fitd docs/language/*.fitd -o docs/language.pdf
+fitd docs/options/*.fitd -o docs/options.pdf
+fitd docs/internals/*.fitd -o docs/internals.pdf
+fitd docs/language/01-statements.fitd docs/language/03-relations.fitd docs/language/05-macros.fitd docs/options/01-options.fitd -o docs/cheatsheet.pdf
+fitd examples/00-index.fitd examples/cell_biology.fitd examples/coffee.fitd examples/compiler.fitd examples/debugging.fitd examples/deepseek_v4_1_flash.fitd examples/earth_science.fitd examples/fib_calls.fitd examples/french_history.fitd examples/group_theory.fitd examples/neural_net.fitd examples/release_pipeline.fitd examples/semester.fitd examples/services.fitd -o examples/gallery.pdf
+fitd examples/pipeline.fitd -o docs/pipeline.png
+```

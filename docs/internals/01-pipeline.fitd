@@ -1,0 +1,39 @@
+title "From source to drawing"
+layout layered dir=down
+page a4 portrait margin=1cm
+
+style front color=#1565C0
+style solver color=#6A1B9A
+style back color=#2E7D32
+
+def stage(i, name, file, kind)
+  node s${i} "${name}" .${kind}
+  | ${file}
+  if i > 1
+    s${i - 1} -> s${i}
+  end
+end
+
+use stage(1, "Include", "include.rs: splice files line for line; a segment table maps every line back to its file", "front")
+use stage(2, "Expand", "macros.rs: for, if, def, use within a step budget; each input line keeps one raw copy, generated lines map to their template line", "front")
+use stage(3, "Lex", "lex.rs: tokens with byte spans; newlines are tokens", "front")
+use stage(4, "Parse", "parse.rs, ast.rs: recursive descent; a bad line is reported and skipped", "front")
+use stage(5, "Analyze", "sema.rs: declarations, then references; styles, typed values, units, did-you-mean, E0008", "front")
+use stage(6, "Plan", "radial.rs, layered.rs: measure boxes with real font metrics, propose candidate positions", "solver")
+use stage(7, "Solve", "csp.rs, layout/: the largest font that fits; see the next page", "solver")
+use stage(8, "Polish", "quality.rs: annealing for fewer crossings, related nodes close, branches grouped, edges fanned, ink spread", "solver")
+use stage(9, "Check", "check.rs: recompute every property from the finished layout; any error stops output", "back")
+use stage(10, "Emit", "emit.rs: SVG, PNG via resvg, TikZ, all at absolute positions; none re-flows text", "back")
+
+s7 ..> s1 "E0110 core at source lines"
+
+group "Front end" ${names("s", 1, 5)} color=#1565C0
+group "Layout" ${names("s", 6, 8)} color=#6A1B9A
+group "Output" s9, s10 color=#2E7D32
+
+node fonts "Fonts" color=#455A64
+| DejaVu Serif, Sans Bold, Math TeX Gyre compiled in
+| (embedded-fonts feature), so layout needs no fontconfig;
+| only a named family goes through fc-match
+| every SVG names each font file with an FNV-1a hash,
+| so a layout difference between machines traces to fonts

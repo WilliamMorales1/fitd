@@ -1,7 +1,7 @@
 # A small multilayer perceptron: `for` loops write the 32 dense connections.
 title "A 3-4-4-2 perceptron"
 layout layered dir=right
-page a4 landscape margin=1cm
+page a4 portrait margin=1cm
 theme light edge=#90A4AE
 
 style input color=#26A69A shape=circle

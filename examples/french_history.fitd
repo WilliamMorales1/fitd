@@ -1,8 +1,8 @@
 # FREN 4014 Exam 1: external history of French, from Gaulish to the standard (course notes, termes_examen_1).
 title "Histoire externe du français"
 layout layered dir=down
-page a2 portrait
-font 8pt..34pt wrap=16em
+page a4 portrait
+font 6pt..34pt wrap=12em
 
 style selection color=#2E7D32
 style codification color=#1565C0
@@ -72,23 +72,14 @@ group "Ancien français, 842–1350" dialectes, francien color=#8D6E63
 group "Moyen français, 1350–1600" relatin, villers, palsgrave, dubellay, italien color=#00838F
 group "Français moderne, 1600–" malherbe, academie, vaugelas, revolution, ferry, francophonie color=#3949AB
 
-gaulois -> latin
-latin -> francs, roman
-francs -> roman "superstrat"
-roman -> tours
-tours -> strasbourg
-strasbourg -> dialectes
-dialectes -> francien
-francien -> relatin, villers
+gaulois -> latin -> francs, roman
+francs -> roman "superstrat" -> tours -> strasbourg -> dialectes -> francien -> relatin, villers
 villers -> palsgrave, dubellay
 relatin -> italien
-palsgrave -> malherbe
-malherbe -> academie, vaugelas
-vaugelas -> revolution
-revolution -> ferry
-ferry -> francophonie
+palsgrave -> malherbe -> academie, vaugelas
+vaugelas -> revolution -> ferry -> francophonie
 dubellay ..> malherbe "l'opposé" color=#C62828
 palsgrave ..> vaugelas "norme régionale, puis sociale"
 
-require gaulois at top
+prefer gaulois at top
 prefer francophonie at bottom-right

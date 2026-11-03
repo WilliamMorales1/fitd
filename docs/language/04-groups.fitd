@@ -1,0 +1,34 @@
+title "Groups"
+layout layered dir=down
+page a4 portrait margin=1cm
+font 7pt..30pt wrap=12em
+
+node syntax "group \"Title\" a, b, c color=#hex"
+| draws a frame, title on top, around its members
+node hard "A hard constraint, like require"
+| the frame stays on the page and clear of every other node
+| and every other group's frame; edges and links may cross it
+| a group that cannot fit shows up in the E0110 core
+node outer "Nesting is by membership"
+| a group whose members all belong to a larger group
+| is drawn inside it; list every inner node in the outer one too
+node inner "Inner frame"
+| group "Compiler" lex, parse, opt
+| group "Front end" lex, parse
+node exempt "Nested frames"
+| are exempt from keeping clear of each other
+node bad "E0010"
+| two groups share some nodes but not all, or list the same nodes
+node radial "Radial"
+| a frame is a rectangle: fits a hub with its children,
+| far better than nodes from different branches
+node layered "Layered"
+| room is kept for frames at both ends of the flow
+
+syntax -> hard, outer, radial
+hard -> layered
+outer -> inner, bad
+inner -> exempt
+
+group "This frame is a group" outer, inner, exempt, bad color=#1565C0
+group "Inside it, a nested group" inner, exempt color=#6A1B9A

@@ -1,0 +1,44 @@
+title "Three ways a layout is refused"
+layout layered dir=down
+page a4 portrait margin=1cm
+
+style stat color=#1565C0
+style search color=#6A1B9A
+style after color=#2E7D32
+
+node src "Source with require, align, group"
+
+node classes "E0008: merge classes" .stat
+| before any search, each axis on its own
+| top, bottom, row merge nodes vertically;
+| left, right, column horizontally (union-find)
+node cycle "Find a contradiction" .stat
+| an ordering inside one class, or a cycle of orderings
+| between classes, can never hold: boxes have positive size,
+| gaps are non-negative
+| BFS over (node, used-an-ordering) states, so the reported
+| cycle is short and every constraint on it gets a label
+
+node grid "E0110: search fails" .search
+| geometry: sizes, page bounds, candidate positions
+node core "Minimal core" .search
+| QuickXplain: drop any one listed require and the rest hold
+| groups appear in it like requires
+node proved "Proved or budgeted?" .search
+| proved for every candidate position this layout considers,
+| or a probe ran out of checks: the core may be an artifact
+| of --budget, and a larger one is suggested
+| no layout fits makes the same distinction
+node help "Help printed" .search
+| remove one, turn it into prefer, or use a larger page;
+| the default 7pt floor can be lowered with font
+
+node check "Checker" .after
+| an independent pass over the finished drawing
+| re-derives overlap, edges through nodes, crossings,
+| off page, text overflow, font size: E0101-E0107
+| any error stops output; --force writes it anyway
+
+src -> classes, grid, check
+classes -> cycle
+grid -> core -> proved -> help

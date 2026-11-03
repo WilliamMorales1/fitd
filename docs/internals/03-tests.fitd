@@ -1,0 +1,58 @@
+title "Tests and performance"
+page a4 portrait margin=1cm
+root t
+
+style unit color=#1565C0
+style e2e color=#2E7D32
+style perf color=#EF6C00
+
+node t "cargo test --release"
+
+node unit "Unit tests" .unit
+| macro expansion: loops, templates, recursion, the budget, line mapping
+| lexer, parser, semantic checks, geometry
+| solver: queens, pigeonhole, branch and bound, spatial index equivalence
+| layering, QuickXplain
+| every code has a fitd explain page and a node in diagnostics.fitd
+node e2e "End to end" .e2e
+| every example: zero errors, a warning baseline, a CPU-time budget,
+| and two concurrent builds that must match byte for byte
+| every doc diagram: zero errors and zero warnings, shown in the README
+| unsat cores, static contradictions, parse errors,
+| macro diagnostics across includes
+node fix "tests/fixtures/" .e2e
+| inputs that fail or strain the solver on purpose
+| collatz.fitd: a template with no fixed bound
+node fuzz "Fuzzer" .e2e
+| mutated sources, macro lines among them, fed to the
+| front end for 2 seconds
+| FITD_FUZZ_SECS=1800 cargo test --release fuzz runs longer
+t -> unit, e2e, fuzz
+e2e -> fix
+
+node bench "scripts/bench.py" .perf
+| builds every example and fixture, median of three runs
+| ThinkPad X280: i7-8650U, 4 cores, 8 threads, 16 GB, Linux 7.3, rustc 1.99.1
+node ci "CI gate" .perf
+| --check bench/baseline.tsv fails when any file needs over
+| 25% more solver checks; checks are deterministic, so this
+| holds on any machine
+| --time also gates CPU time, only meaningful on the machine
+| that wrote the baseline (--write); one run can vary by a
+| third under thermal throttling, so keep three runs
+t -> bench -> ci
+
+def row(id, file, wall, cpu, checks, font)
+  node ${id} "${file}" .perf
+  | wall ${wall} s, CPU ${cpu} s
+  | ${checks} checks, font ${font}
+  bench -> ${id}
+end
+use row("b1", "cell_biology", "0.38", "0.96", "2,143,098", "16.9pt")
+use row("b2", "compiler", "1.90", "4.70", "4,028,513", "9.1pt; mostly the turned-page retry")
+use row("b3", "earth_science", "3.60", "14.27", "80,934,070", "14.5pt")
+use row("b4", "french_history", "0.42", "0.42", "2,317,945", "11.7pt")
+use row("b5", "group_theory", "1.62", "4.26", "44,886,959", "17.3pt")
+use row("b6", "fixtures/complex_constraints", "0.09", "0.22", "388,135", "30.1pt")
+use row("b7", "fixtures/missing_glyph", "0.07", "0.18", "0", "48.0pt")
+use row("b8", "fixtures/stress_test", "0.00", "0.00", "0", "none: fails by design")

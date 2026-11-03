@@ -1,0 +1,19 @@
+title "fitd map.fitd --watch"
+layout layered dir=right
+page a4 portrait margin=1cm
+
+style fast color=#1565C0
+style slow color=#6A1B9A
+
+node save "Save"
+node draft "Draft build" .fast
+| at once, coarse font search
+node wait "1.5 s quiet"
+node full "Full build" .slow
+| trade-off and full polish
+node out "Output replaced" .slow
+| atomically, never half a file
+
+save -> draft -> wait -> full -> out
+draft ..> out "first"
+save ..> full "a newer save kills it"

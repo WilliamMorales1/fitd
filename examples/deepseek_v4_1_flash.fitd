@@ -1,7 +1,7 @@
 # DeepSeek-V4.1-Flash (September 2026), from its model card and arXiv 2609.19969.
 title "DeepSeek-V4.1-Flash"
 layout layered dir=down
-page a3 portrait
+page a4 portrait
 font 8pt..32pt wrap=15em
 
 style io color=#455A64 shape=circle
@@ -58,24 +58,16 @@ node post "Post-training" .train
 | reasoning effort 1-100
 
 prompt -> vit, embed
-vit -> proj
-proj -> enc_swa "visual embeddings"
-embed -> enc_swa
-enc_swa -> enc
-enc -> dec "prefill: 8B active"
-dec -> head "decode: 16B active"
-head -> spark
-spark -> out
+vit -> proj -> enc_swa "visual embeddings"
+embed -> enc_swa -> enc -> dec "prefill: 8B active" -> head "decode: 16B active" -> spark -> out
 
 # Undirected tree edges hang each memory part beside the layers it serves.
 enc_swa -- replay
 enc -- kv
 dec .. kv
-prompt -- engram "token-based lookup"
-engram .. enc
+prompt -- engram "token-based lookup" .. enc
 engram .. dec
-enc_swa -- mhc
-mhc .. dec
+enc_swa -- mhc .. dec
 pre -> post
 
 group enc_swa, enc, dec color=#1E88E5

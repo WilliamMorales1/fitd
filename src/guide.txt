@@ -1,25 +1,26 @@
-fitd: .fitd text -> SVG/PNG/TikZ. The solver picks positions and the largest font that fits.
+fitd: .fitd text -> SVG/PNG/PDF/TikZ at the largest font that fits.
 
-Build:  fitd FILE.fitd -o out.svg|out.png [--tikz out.tex] [--short]
+Build:  fitd FILE.fitd -o out.svg|.png|.pdf [--tikz out.tex] [--short]
+Book:   fitd A.fitd B.fitd -o out.pdf  (a page each)
 Stdin:  fitd - -o out.svg <<'EOF' ... EOF
-Exit 0 = written. Diagnostics go to stderr; --short: one line each.
+Exit 0 = written. Diagnostics on stderr; --short: 1 line each.
 
 Syntax: one statement per line, # comment. Only `node` lines and edges are needed.
   node ID "Title" .style        # ID: letters, digits, _, inner -; title defaults to ID
   | body line                   # detail text under the node above, any number
-  a -> b, c "label"             # hierarchy or flow edge (-- undirected)
+  a -> b, c "label" -> d        # flow edge (-- undirected); hops chain
   a ..> b "label"               # cross link, dashed (.. undirected)
   title "Text"
   layout radial root=ID         # default: concept/mind map around a root
   layout layered dir=down|right bands=N # flowchart; long flows wrap, bands=1 never
-  page a0..a4|WxHmm|WxHpt portrait|landscape margin=1cm   # default a1; no flag: may turn
+  page a0..a4|WxHmm portrait|landscape margin=1cm   # default a1; no flag: may turn
   font 8pt..30pt wrap=16em      # range searched; one size fixes it, so give a range
   theme light|dark|mono
   style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle
-  group "Title" a, b, c color=#hex   # framed, nothing else inside; a group of a subset nests inside
+  group "Title" a, b, c color=#hex   # framed; a group of a subset nests inside
   require REL                   # must hold, or build fails with E0110
   prefer REL weight=2           # soft, warns W0205 if unmet
-  include "part.fitd"           # splice in a file, path relative to this one
+  include "part.fitd"           # splice a file, path relative to this one
   for i in 1..3 / if X / def f(a) ... end; use f(1); ${i}: macros
 REL:
   a left-of b gap=2em | right-of | above | below   # chains: a above b above c

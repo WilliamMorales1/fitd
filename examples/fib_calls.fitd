@@ -2,7 +2,7 @@
 # argument, so the repeated subproblems that memoization removes stand out.
 title "Calls made by fib(5)"
 layout layered dir=down
-page a4 landscape margin=1cm
+page a4 portrait margin=1cm
 font 8pt..28pt
 
 style n0 color=#B0BEC5

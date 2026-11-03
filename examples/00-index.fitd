@@ -1,0 +1,99 @@
+title "Examples, and the features each one shows"
+page a4 portrait margin=1cm
+font 6pt..30pt
+root ex
+
+style radial color=#2E7D32
+style down color=#1565C0
+style right color=#6A1B9A
+
+node ex "examples/*.fitd"
+| each builds alone with no flags; gallery.pdf holds them all,
+| one page each after this one, in alphabetical order
+| every one: -> and ..> edges and edge labels
+| all but group_theory: style on nodes
+| all but group_theory and debugging: font LO..HI wrap=
+| semester, services, fib_calls, neural_net: $${expr} in names, titles, styles, bodies
+
+node radial "Radial maps" .radial
+node down "Layered, dir=down" .down
+node right "Layered, dir=right" .right
+ex -> radial, down, right
+
+node cell_biology "cell_biology.fitd" .right
+| cell biology flowchart
+| fill=, shape=circle, edge color=
+| group in layered layout, below, near ... within=
+| at places, prefer ... weight=
+right -> cell_biology
+node coffee "coffee.fitd" .radial
+| coffee map with a palette and a group
+| landscape, theme palette=, fill=, text=
+| shape=box, undirected -- and .., edge color=
+| group in radial layout, left-of, align row
+| at places, prefer ... weight=
+radial -> coffee
+node compiler "compiler.fitd" .down
+| the full compiler pipeline, dark
+| page ... margin=, theme dark
+| theme color overrides, shape=circle, edge .style
+| group in layered layout, left-of, gap=
+| near ... within=, align row, prefer ... weight=
+down -> compiler
+node debugging "debugging.fitd" .down
+| mono decision flow at a fixed font
+| bands=N, page ... portrait, page ... margin=
+| font SIZE (fixed), theme mono, fill=
+| shape=circle, shape=box, \n in titles, right-of
+| below, gap=, align top
+down -> debugging
+node deepseek_v4_1_flash "deepseek_v4_1_flash.fitd" .down
+| DeepSeek-V4.1-Flash architecture, from its model card and paper; memory parts on undirected edges
+| page ... portrait, shape=circle
+| undirected -- and .., group in layered layout
+| untitled group
+down -> deepseek_v4_1_flash
+node earth_science "earth_science.fitd" .radial
+| the water cycle
+| layout radial root=, theme color overrides
+| fill=, edge .style, near ... within=, at places
+| prefer ... weight=
+radial -> earth_science
+node fib_calls "fib_calls.fitd" .down
+| calls made by naive fib(5); change 5 to 6 and the tree grows to 25 calls
+| if / else if / else, def and use templates
+| recursive template
+down -> fib_calls
+node french_history "french_history.fitd" .down
+| real course notes: a timeline with a frame per period
+| page ... portrait, edge color=
+| group in layered layout, at places
+down -> french_history
+node group_theory "group_theory.fitd" .radial
+| group theory notes with no settings at all; math markup
+| root statement, \n in titles
+radial -> group_theory
+node neural_net "neural_net.fitd" .right
+| a 3-4-4-2 perceptron: 32 dense connections from two loops; W0206 by design
+| for over a range, names(...)
+right -> neural_net
+node release_pipeline "release_pipeline.fitd" .right
+| banded flow with include, arrow chains, and chained constraints
+| bands=N, page WxH, page ... margin=
+| theme color overrides, include, fill=, text=
+| shape=circle, shape=box, undirected -- and ..
+| edge color=, group in layered layout, left-of
+| right-of, above, chained relation
+| mixed chain with near ... within=, align column
+| at places, prefer ... weight=
+right -> release_pipeline
+node semester "semester.fitd" .right
+| a 14-week course plan from one loop over topics
+| for over a list, with an index
+| if / else if / else
+right -> semester
+node services "services.fitd" .down
+| checkout backend: a def in shared/service.fitd per service, five use lines replace twenty statements
+| include, for over a list, with an index
+| def and use templates
+down -> services

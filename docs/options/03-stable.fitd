@@ -1,0 +1,35 @@
+title "--stable map.fitd.lock"
+layout layered dir=down
+page a4 portrait margin=1cm
+
+style lock color=#EF6C00
+
+node why "Why"
+| the solver is global: one new node can move every
+| other one and change the font
+node read "Read the lock" .lock
+| font, page, and every node center
+| plain text, diffs well, can be committed
+node try "Try locked spots first"
+| nodes added since the lock are placed freely;
+| removed ones are dropped
+node charge "Charge every move"
+| about one edge crossing per node that leaves
+| its spot, plus a pull per em of distance
+node fonts "Polish two fonts"
+| the locked font, while it still fits,
+| and the new largest; better merit wins
+node write "Write the lock" .lock
+node result "Effect"
+| adding one leaf keeps the font and every spot;
+| deleting a large branch lets the font grow
+| the build log counts the nodes that kept their spots
+node skip "Ignored or skipped"
+| a lock for another page size is ignored with a note
+| the warning-driven retry is skipped: it would move everything
+| delete the lock to lay out afresh
+
+why -> read -> try -> charge -> fonts -> write
+fonts -> result
+read ..> skip
+write ..> read "next build"

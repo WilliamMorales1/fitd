@@ -30,10 +30,11 @@ use layout::{Config, Failure};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
-  fitd <input[.fitd]|-> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
+  fitd <input[.fitd]|-> [-o out.svg|out.png|out.pdf] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
               [--portrait|--landscape] [--bands N] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
               [--short] [--budget CHECKS] [--expand-budget STEPS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
               [--stable LOCK] [--watch]
+  fitd <a.fitd> <b.fitd> ... -o out.pdf   one PDF, a page per input, in order
   fitd explain <CODE>
   fitd lsp              language server on stdin/stdout
   fitd import <file.dot|file.mmd|file.d2> [-o out.fitd]   translate Graphviz, Mermaid, or D2
@@ -108,7 +109,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
 }
 
 /// VALUED lists the build flags that take a value, so `watch` can find the input among them.
-const VALUED: &[&str] = &["-o", "--tikz", "--page", "--bands", "--margin", "--min-font", "--max-font", "--wrap", "--budget", "--expand-budget", "--scale", "--theme", "--font-family", "--stable"];
+const VALUED: &[&str] = &["--grid", "-o", "--tikz", "--page", "--bands", "--margin", "--min-font", "--max-font", "--wrap", "--budget", "--expand-budget", "--scale", "--theme", "--font-family", "--stable"];
 
 /// How often `watch` looks at the input, and how long the input must stay unchanged before
 /// the full build follows the draft.
@@ -131,6 +132,9 @@ fn watch(args: &[String]) -> Result<ExitCode, String> {
         } else if a == "-" {
             return Err("--watch needs a file, not stdin".into());
         } else if !a.starts_with('-') {
+            if input.is_some() {
+                return Err("--watch takes one input".into());
+            }
             input = Some(a.clone());
         }
     }
@@ -183,7 +187,92 @@ fn watch(args: &[String]) -> Result<ExitCode, String> {
     }
 }
 
+/// build compiles one input to the output its extension names, or several inputs to one PDF:
+/// a page each, or with `--grid CxR` that many to a page, each laid out for its own cell.
 fn build(args: &[String]) -> Result<ExitCode, String> {
+    let mut inputs = Vec::new();
+    let mut grid = None;
+    let mut it = args.iter().enumerate();
+    while let Some((i, a)) = it.next() {
+        if a == "--grid" {
+            let v = it.next().map(|(_, v)| v.as_str()).ok_or("--grid needs a value")?;
+            let cr = v.split_once('x').and_then(|(c, r)| Some((c.parse::<usize>().ok()?, r.parse::<usize>().ok()?)));
+            grid = Some(cr.filter(|&(c, r)| c > 0 && r > 0).ok_or(format!("--grid needs COLSxROWS, such as 2x1, not `{v}`"))?);
+        } else if VALUED.contains(&a.as_str()) {
+            it.next();
+        } else if a == "-" || !a.starts_with('-') {
+            inputs.push(i);
+        }
+    }
+    if inputs.len() < 2 && grid.is_none() {
+        return build_one(args, None);
+    }
+    let out = args.iter().position(|a| a == "-o").and_then(|i| args.get(i + 1));
+    let out = out.filter(|o| o.to_ascii_lowercase().ends_with(".pdf")).ok_or("several inputs, or --grid, need -o FILE.pdf")?;
+    if let Some(a) = args.iter().find(|a| matches!(a.as_str(), "--tikz" | "--stable" | "-")) {
+        return Err(format!("`{a}` takes one input, not several"));
+    }
+    // With a grid, --page and the orientation flags size the sheet, and each cell is the page
+    // its diagram is laid out on.
+    let sheet = match grid {
+        Some(_) => {
+            let spec = args.iter().position(|a| a == "--page").and_then(|i| args.get(i + 1)).map_or("a1", String::as_str);
+            let (w, h) = page(spec, false)?;
+            Some(if args.iter().any(|a| a == "--portrait") {
+                (w.min(h), w.max(h))
+            } else if args.iter().any(|a| a == "--landscape") {
+                (w.max(h), w.min(h))
+            } else {
+                (w, h)
+            })
+        }
+        None => None,
+    };
+    let (cols, rows) = grid.unwrap_or((1, 1));
+    let mut pages = Vec::new();
+    let mut failed = 0;
+    for (n, &i) in inputs.iter().enumerate() {
+        eprintln!("--- {} of {}: {}", n + 1, inputs.len(), args[i]);
+        let mut one = Vec::new();
+        let mut skip = false;
+        for (j, a) in args.iter().enumerate() {
+            if std::mem::take(&mut skip) || (j != i && inputs.contains(&j)) {
+                continue;
+            }
+            if sheet.is_some() && matches!(a.as_str(), "--page" | "--grid" | "--portrait" | "--landscape") {
+                skip = a == "--page" || a == "--grid";
+                continue;
+            }
+            one.push(a.clone());
+        }
+        if let Some((w, h)) = sheet {
+            one.extend(["--page".into(), format!("{:.3}x{:.3}pt", w / cols as f64, h / rows as f64)]);
+        }
+        if build_one(&one, Some(&mut pages))? != ExitCode::SUCCESS {
+            failed += 1;
+        }
+    }
+    if failed > 0 {
+        eprintln!("error: {failed} of {} diagrams failed; no output written", inputs.len());
+        return Ok(ExitCode::FAILURE);
+    }
+    let per = cols * rows;
+    let sheets: Vec<emit::Sheet> = pages
+        .chunks(per)
+        .map(|chunk| emit::Sheet {
+            size: sheet,
+            cells: chunk.iter().enumerate().map(|(k, (svg, fonts, (w, h)))| (svg.as_str(), fonts, (k % cols) as f64 * w, (k / cols) as f64 * h)).collect(),
+        })
+        .collect();
+    write(out, &emit::pdf(&sheets)?)?;
+    let plural = |n: usize, w: &str| format!("{n} {w}{}", if n == 1 { "" } else { "s" });
+    eprintln!("wrote {out} ({} on {})", plural(pages.len(), "diagram"), plural(sheets.len(), "page"));
+    Ok(ExitCode::SUCCESS)
+}
+
+/// build_one compiles one input. With `pages`, it adds the page to them instead of writing
+/// any file.
+fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f64, f64))>>) -> Result<ExitCode, String> {
     let mut input = None;
     let (mut svg_out, mut tikz_out) = (None, None);
     let (mut page_spec, mut portrait, mut landscape, mut force, mut draft, mut short) = (None, false, false, false, false, false);
@@ -417,12 +506,18 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
         eprintln!("error: aborting due to {errors} previous errors; no output written (use --force to write anyway)");
         return Ok(ExitCode::FAILURE);
     }
+    if let Some(pages) = pages {
+        pages.push((emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h), &th), fonts, (cfg.page_w, cfg.page_h)));
+        return Ok(ExitCode::SUCCESS);
+    }
     let stem = input.strip_suffix(".fitd").unwrap_or(&input).to_string();
     let out = svg_out.unwrap_or(format!("{stem}.svg"));
     let bytes = if out.to_ascii_lowercase().ends_with(".png") {
         // A PNG is cropped to the drawing, with the margin as padding, not sized to the page.
         let svg = emit::svg(&g, &t, &fonts, &lay, emit::bounds(&g, &lay).inflate(cfg.margin), &th);
         emit::png(&svg, &fonts, scale)?
+    } else if out.to_ascii_lowercase().ends_with(".pdf") {
+        emit::pdf(&[emit::Sheet { size: None, cells: vec![(&emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h), &th), &fonts, 0.0, 0.0)] }])?
     } else {
         emit::svg(&g, &t, &fonts, &lay, Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h), &th).into_bytes()
     };

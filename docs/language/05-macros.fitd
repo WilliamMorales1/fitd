@@ -1,0 +1,64 @@
+title "Macros"
+page a4 portrait margin=1cm
+root mac
+
+style line color=#6A1B9A
+style expr color=#1565C0
+style safe color=#C62828
+
+node mac "Macros"
+| expand after include and before parsing,
+| so the rest of the language never sees them
+| a file with no macro lines passes through unchanged
+
+node forr "for NAME in LO..HI" .line
+| once per integer, inclusive; none when LO > HI
+node forl "for NAME in a, b, \"two words\"" .line
+| once per item: words (hyphens allowed), numbers, strings
+| for I, NAME in ...: I counts from 1
+node iff "if EXPR / else if EXPR / else / end" .line
+| runs the first arm whose condition is true
+node deff "def NAME(a, b) ... end" .line
+| a template, top level only; usable before its def
+| and from included files
+node use "use NAME(EXPR, ...)" .line
+| expands a template with its parameters bound
+node interp "$${EXPR}" .line
+| replaced by the value anywhere in a line, strings and bodies too,
+| but not in # comments; $$${ is a literal $${
+node kw "Keywords"
+| recognized only at the start of a line, never before an edge
+| operator, so a node named end still works in end -> start
+
+node expr "Expressions" .expr
+| integers and strings
+| + - * / % (floor division, non-negative remainder)
+| == != < <= > >= (ordering on numbers only), and, or, ( )
+| + joins strings when either side is one
+| zero and the empty string are false
+node names "names(prefix, lo, hi)" .expr
+| gives prefix1, prefix2, ... for node lists
+node scope "Scope" .expr
+| values come from for variables and template parameters; no assignment
+| a template sees its own parameters and loop variables,
+| plus those set at the top level
+| a loop variable keeps its last value after the loop
+
+node budget "Termination" .safe
+| templates plus if are Turing complete; collatz.fitd iterates
+| the Collatz map, an open problem
+| --expand-budget steps (default 100000): E0013
+| each directive run and line written is one step
+| templates nest at most 200 deep: E0012
+node diag "Diagnostics" .safe
+| generated lines are shown expanded, at the template line
+| that wrote them; columns count in the expanded text
+| macro errors name the use sites that led there
+| an error repeated by every call is reported once
+| a line that fails to expand writes nothing,
+| so a following | body may report E0002
+
+mac -> forr, forl, iff, deff, kw, expr, budget, diag
+deff -> use
+mac -> interp
+expr -> names, scope
