@@ -62,6 +62,30 @@ Model architecture: DeepSeek-V4.1-Flash (September 2026), drawn only from its [m
 
 ![DeepSeek-V4.1-Flash](examples/deepseek_v4_1_flash.png)
 
+## [`semester.fitd`](../examples/semester.fitd)
+
+A 14-week course plan from one `for w, topic in ...` loop over a list of topics. `if` / `else if` styles the exams, the break, and every fourth week as a project deadline, and `if w > 1` links each week to the one before. By hand that is 14 `node` lines, their bodies, and 13 edges; here it is one loop.
+
+![Compilers, fall term](examples/semester.png)
+
+## [`services.fitd`](../examples/services.fitd)
+
+A backend whose services all share one shape: a `def service(id, label, store)` template in [`shared/service.fitd`](../examples/shared/service.fitd), reached through `include`, draws each service, its store, the edge between them, and a `require ... above`. Five `use` lines replace twenty statements, and a `for s in users, cart, ...` loop wires the gateway.
+
+![Checkout backend](examples/services.png)
+
+## [`fib_calls.fitd`](../examples/fib_calls.fitd)
+
+The call tree of naive `fib(5)`, written the way the function itself is: a recursive `def` with an `if` for the base case. Each node takes the style `.n${n}`, so the repeated subproblems share a color. Change `use fib("f", 5)` to 6 and the tree grows to 25 calls with no other edit.
+
+![Calls made by fib(5)](examples/fib_calls.png)
+
+## [`neural_net.fitd`](../examples/neural_net.fitd)
+
+A 3-4-4-2 perceptron. Two `for` loops and `${names("h", 1, 4)}` write all 32 dense connections, the groups, and the column alignments. Every pair of dense layers crosses, so the build reports W0206 crossing warnings by design.
+
+![A 3-4-4-2 perceptron](examples/neural_net.png)
+
 ## Feature index
 
 | Feature | Examples |
@@ -69,8 +93,8 @@ Model architecture: DeepSeek-V4.1-Flash (September 2026), drawn only from its [m
 | `layout radial`, center chosen by fitd | coffee |
 | `layout radial root=` | earth_science |
 | `root` statement | group_theory |
-| `layout layered dir=down` | pipeline, compiler, french_history, debugging, deepseek_v4_1_flash |
-| `layout layered dir=right` | cell_biology, release_pipeline |
+| `layout layered dir=down` | pipeline, compiler, french_history, debugging, deepseek_v4_1_flash, services, fib_calls |
+| `layout layered dir=right` | cell_biology, release_pipeline, semester, neural_net |
 | `bands=N` | release_pipeline, debugging |
 | `page` paper name | most |
 | `page ... portrait` / `landscape` | french_history, debugging, deepseek_v4_1_flash / coffee |
@@ -82,7 +106,7 @@ Model architecture: DeepSeek-V4.1-Flash (September 2026), drawn only from its [m
 | `theme mono` | debugging |
 | theme color overrides | earth_science, compiler, release_pipeline |
 | `theme palette=` | coffee |
-| `include` | release_pipeline |
+| `include` | release_pipeline, services |
 | `style` on nodes | all but group_theory |
 | `fill=` | cell_biology, earth_science, coffee, debugging, release_pipeline |
 | `text=` | coffee, release_pipeline |
@@ -108,6 +132,13 @@ Model architecture: DeepSeek-V4.1-Flash (September 2026), drawn only from its [m
 | `align top` | debugging |
 | `at` places | cell_biology, earth_science, french_history, coffee, release_pipeline |
 | `prefer ... weight=` | compiler, cell_biology, earth_science, coffee, release_pipeline |
+| `for` over a range | neural_net |
+| `for` over a list, with an index | semester, services |
+| `if` / `else if` / `else` | semester, fib_calls |
+| `def` and `use` templates | services, fib_calls |
+| recursive template | fib_calls |
+| `${expr}` in names, titles, styles, bodies | all four above |
+| `names(...)` | neural_net |
 
 ## Rebuilding
 

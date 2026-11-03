@@ -7,12 +7,15 @@
 use crate::{diag, parse, sema, tree};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-const SEEDS: [&str; 7] = [
+const SEEDS: [&str; 10] = [
     include_str!("../examples/cell_biology.fitd"),
     include_str!("../examples/compiler.fitd"),
     include_str!("../examples/earth_science.fitd"),
     include_str!("../examples/french_history.fitd"),
     include_str!("../examples/group_theory.fitd"),
+    include_str!("../examples/fib_calls.fitd"),
+    include_str!("../examples/semester.fitd"),
+    include_str!("../tests/fixtures/collatz.fitd"),
     include_str!("../tests/fixtures/stress_test.fitd"),
     include_str!("../tests/fixtures/complex_constraints.fitd"),
 ];
@@ -24,11 +27,14 @@ const WORDS: &[&str] = &[
     "center", "gap=", "weight=", "within=", "shape=", "circle", "color=", "fill=", "->", "--", "..>", "..", "|", "\"", "(", ")", ",", ".", "=", "#",
     "#FFF", "#12345G", "\n", " ", "\t", "\r\n", "2em", "12pt", "0pt", "-3pt", "1e9pt", "99999999999999999999pt", "594x420mm", "0x0pt", "a3", "a9",
     "x", "é", "\u{0}", "\u{200b}", "^{", "_{", "}", "{", "..40pt", "7pt..", "a", "b", "a b", "weight=0", "weight=-1", "within=0em",
+    "let n = 2\n", "for i in 1..3\n", "for s in a, b\n", "end\n", "if i > 1\n", "else\n", "else if n\n", "def t(a)\n", "use t(1)\n", "use t(\"x\")\n",
+    "${", "${i}", "${n + 1}", "$${", "${names(\"s\", 1, 3)}", "${1 / 0}",
 ];
 
 fn front_end(text: &str) {
-    let src = diag::Source::new("fuzz.fitd", text);
-    let (stmts, mut diags) = parse::parse(text);
+    let crate::macros::Loaded { src, parse, mut diags } = crate::macros::expand_text("fuzz.fitd", text, 2_000);
+    let (stmts, more) = parse::parse(&parse);
+    diags.extend(more);
     let (g, more) = sema::analyze(&stmts);
     diags.extend(more);
     diags.sort_by_key(diag::Diag::pos);

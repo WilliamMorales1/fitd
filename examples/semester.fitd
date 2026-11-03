@@ -1,0 +1,28 @@
+# A 14-week course plan. One loop writes every week from a list of topics; `if` marks the exams,
+# the break, and project deadlines, and links each week to the next.
+title "Compilers, fall term"
+layout layered dir=right bands=3
+page a4 landscape margin=1cm
+font 8pt..24pt wrap=9em
+
+style week color=#78909C
+style exam color=#E53935
+style project color=#8E24AA
+style rest color=#BDBDBD
+
+for w, topic in "Regular languages", "Lexers", "Grammars", "LL parsing", "LR parsing", "Syntax trees", "Midterm", "Name resolution", "Break", "Type checking", "IR design", "Optimization", "Code generation", "Final exam"
+  if topic == "Midterm" or topic == "Final exam"
+    node w${w} "${topic}" .exam
+  else if topic == "Break"
+    node w${w} "${topic}" .rest
+  else if w % 4 == 0
+    node w${w} "${topic}" .project
+    | project ${w / 4} due
+  else
+    node w${w} "${topic}" .week
+  end
+  | week ${w}
+  if w > 1
+    w${w - 1} -> w${w}
+  end
+end

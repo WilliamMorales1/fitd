@@ -1,0 +1,18 @@
+# The Collatz sequence from 6, as a while loop: a template that calls itself until k reaches 1.
+# Nobody has proved that this recursion stops for every start, so expansion needs a budget.
+layout layered dir=right bands=2
+page a4 landscape
+
+def collatz(k)
+  node n${k} "${k}"
+  if k != 1
+    if k % 2 == 0
+      let next = k / 2
+    else
+      let next = 3 * k + 1
+    end
+    n${k} -> n${next}
+    use collatz(next)
+  end
+end
+use collatz(6)

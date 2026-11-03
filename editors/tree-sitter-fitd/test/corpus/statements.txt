@@ -136,3 +136,58 @@ node b "x"
   (node_statement
     id: (name)
     title: (string)))
+
+================================================================================
+Macro lines
+================================================================================
+
+let n = 3
+for i, s in a, b
+node s${i} "Step ${i}"
+if i < n
+s${i} -> s${i}x
+else if i == 2
+else
+end
+def box(id, label)
+use box("a", 1)
+node in "Input"
+end -> in
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_statement
+    name: (name)
+    value: (expression))
+  (for_statement
+    var: (name)
+    var: (name)
+    items: (expression))
+  (node_statement
+    id: (name)
+    title: (string))
+  (if_statement
+    condition: (expression))
+  (edge_statement
+    from: (name)
+    operator: (edge_operator)
+    to: (name))
+  (else_statement
+    condition: (expression))
+  (else_statement)
+  (end_statement)
+  (def_statement
+    name: (name)
+    parameter: (name)
+    parameter: (name))
+  (use_statement
+    name: (name)
+    arguments: (arguments))
+  (node_statement
+    id: (name)
+    title: (string))
+  (edge_statement
+    from: (name)
+    operator: (edge_operator)
+    to: (name)))

@@ -213,17 +213,22 @@ fn theme_colors_reach_svg_and_tikz() {
 /// busy core run slower per CPU second, so a CPU budget failed under load with identical
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
-const EXAMPLES: [(&str, usize, u64); 10] = [
+const EXAMPLES: [(&str, usize, u64); 14] = [
     ("cell_biology", 0, 2_400_000),
     ("coffee", 0, 93_000_000),
     ("compiler", 0, 4_600_000),
     ("debugging", 0, 33_000),
     ("deepseek_v4_1_flash", 0, 6_300_000),
     ("earth_science", 2, 89_000_000),
+    ("fib_calls", 0, 2_500_000),
     ("french_history", 0, 2_600_000),
     ("group_theory", 0, 50_000_000),
+    // Dense layers cross by nature: every W0206 here is an unavoidable crossing.
+    ("neural_net", 60, 8_700_000),
     ("pipeline", 0, 46_000),
     ("release_pipeline", 0, 1_500_000),
+    ("semester", 0, 13_000),
+    ("services", 0, 80_000),
 ];
 
 const HANG_SECS: f64 = 60.0;
@@ -696,4 +701,27 @@ fn readme_shows_pipeline_example_whole() {
     let readme = std::fs::read_to_string("README.md").unwrap();
     let src = std::fs::read_to_string("examples/pipeline.fitd").unwrap();
     assert!(readme.contains(&format!("```\n{src}```")), "README code block differs from examples/pipeline.fitd");
+}
+
+#[test]
+fn macros_expand_loops_templates_and_recursion() {
+    let svg = tmp("collatz.svg");
+    let (ok, log) = fitd(&["tests/fixtures/collatz.fitd", "-o", svg.to_str().unwrap()]);
+    assert!(ok && log.contains(" 0 errors") && log.contains("9 nodes, 8 edges"), "{log}");
+    let s = std::fs::read_to_string(&svg).unwrap();
+    assert!(s.contains(">16<") && s.contains(">1<"), "{s}");
+    let (ok, log) = fitd(&["tests/fixtures/collatz.fitd", "-o", svg.to_str().unwrap(), "--expand-budget", "20", "--short"]);
+    assert!(!ok && log.contains("error[E0013]: macro expansion ran past 20 steps"), "{log}");
+
+    let dir = tmp("macros");
+    std::fs::create_dir_all(dir.join("parts")).unwrap();
+    std::fs::write(dir.join("parts/t.fitd"), "def box(id)\n  node ${id}\n  ${id} -> ghost\nend\n").unwrap();
+    let main = dir.join("main.fitd");
+    std::fs::write(&main, "include \"parts/t.fitd\"\nfor s in a, b\n  use box(s)\nend\nuse box(\"c\", 2)\ndef f(n)\n  use f(n + 1)\nend\nuse f(0)\nif 1\n").unwrap();
+    let (ok, log) = fitd(&[main.to_str().unwrap(), "-o", dir.join("m.svg").to_str().unwrap(), "--short"]);
+    // A generated line reports at the template line, in the file that holds the template.
+    assert!(!ok && log.contains("parts/t.fitd:3:8: error[E0001]: unknown node `ghost`"), "{log}");
+    assert!(log.contains("main.fitd:5:1: error[E0012]: `box` takes 1 argument (id), found 2"), "{log}");
+    assert!(log.contains("main.fitd:7:3: error[E0012]: templates nest more than"), "{log}");
+    assert!(log.contains("main.fitd:10:1: error[E0002]: `if` has no matching `end`"), "{log}");
 }

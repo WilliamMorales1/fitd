@@ -12,6 +12,7 @@ mod graph;
 mod layered;
 mod layout;
 mod lex;
+mod macros;
 mod lsp;
 mod metrics;
 mod parse;
@@ -31,7 +32,7 @@ use std::process::ExitCode;
 const USAGE: &str = "usage:
   fitd <input[.fitd]|-> [-o out.svg|out.png] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
               [--portrait|--landscape] [--bands N] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
-              [--short] [--budget CHECKS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
+              [--short] [--budget CHECKS] [--expand-budget STEPS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
               [--stable LOCK] [--watch]
   fitd explain <CODE>
   fitd lsp              language server on stdin/stdout
@@ -107,7 +108,7 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
 }
 
 /// VALUED lists the build flags that take a value, so `watch` can find the input among them.
-const VALUED: &[&str] = &["-o", "--tikz", "--page", "--bands", "--margin", "--min-font", "--max-font", "--wrap", "--budget", "--scale", "--theme", "--font-family", "--stable"];
+const VALUED: &[&str] = &["-o", "--tikz", "--page", "--bands", "--margin", "--min-font", "--max-font", "--wrap", "--budget", "--expand-budget", "--scale", "--theme", "--font-family", "--stable"];
 
 /// How often `watch` looks at the input, and how long the input must stay unchanged before
 /// the full build follows the draft.
@@ -189,6 +190,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     let mut bands = None;
     let (mut margin, mut min_font, mut max_font, mut wrap) = (None, None, None, None);
     let mut budget = 20_000_000;
+    let mut expand_budget = macros::DEFAULT_BUDGET;
     let mut scale = 2.0;
     let (mut theme_name, mut family, mut lock) = (None, None, None);
     let mut it = args.iter();
@@ -210,6 +212,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
             "--max-font" => max_font = Some(num(val()?)?),
             "--wrap" => wrap = Some(num(val()?)?),
             "--budget" => budget = num(val()?)? as u64,
+            "--expand-budget" => expand_budget = val()?.parse::<u64>().map_err(|_| "--expand-budget needs a whole number")?,
             "--scale" => scale = num(val()?)?,
             "--theme" => theme_name = Some(val()?),
             "--font-family" => family = Some(val()?),
@@ -231,9 +234,9 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     } else {
         std::fs::read_to_string(&input).map_err(|e| format!("{input}: {e}"))?
     };
-    let (src, mut diags) = include::expand(&input, &text);
+    let macros::Loaded { src, parse: parse_text, mut diags } = macros::load(&input, &text, expand_budget);
     let show = |diags: &[Diag]| eprint!("{}", if short { diag::render_short(&src, diags) } else { diag::render(&src, diags) });
-    let (stmts, parse_diags) = parse::parse(&src.text);
+    let (stmts, parse_diags) = parse::parse(&parse_text);
     diags.extend(parse_diags);
     let (mut g, sema_diags) = sema::analyze(&stmts);
     diags.extend(sema_diags);

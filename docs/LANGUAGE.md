@@ -59,6 +59,50 @@ A statement that fails to parse is reported and skipped to the end of its line, 
 
 `include "parts/cells.fitd"` splices that file in, line for line, where the statement stands; the path is relative to the including file. Included files may include others. Diagnostics name the file and line each statement came from. Including a file that is already being included is a cycle (E0011), as is a file that cannot be read; the include is then skipped. Including one file twice declares its nodes twice (E0003). A style declared in an included file is never reported unused (W0203), so one file of styles can serve many diagrams.
 
+## Macros
+
+Macros write repetitive or recursive structure. They expand after `include` and before parsing, so the rest of the language never sees them. A file with no macro lines is passed through unchanged.
+
+```
+let n = 4                        # integer or "string" variables
+for i in 1..n                    # inclusive range; also `for s in a, b, "two words"`
+  node s${i} "Step ${i}"         # ${expr} interpolates into any line
+  if i < n                       # also `else if COND` and `else`
+    s${i} -> s${i + 1}
+  end
+end
+group "All" ${names("s", 1, n)}  # s1, s2, s3, s4
+
+def fib(id, k)                   # a template; may call itself
+  node ${id} "fib(${k})"
+  if k >= 2
+    use fib(id + "a", k - 1)
+    use fib(id + "b", k - 2)
+    ${id} -> ${id}a, ${id}b
+  end
+end
+use fib("f", 5)
+```
+
+| Line | Meaning |
+|---|---|
+| `let NAME = EXPR` | Sets a variable. Inside a template it is local to that call; elsewhere it is global. |
+| `for NAME in LO..HI` | Runs the body once per integer from LO to HI inclusive (none when LO > HI). |
+| `for NAME in a, b, c` | Runs the body once per item: words (hyphens allowed), numbers, or quoted strings. |
+| `for I, NAME in ...` | Same, with `I` counting from 1. |
+| `if EXPR` / `else if EXPR` / `else` / `end` | Runs the first arm whose condition is true. |
+| `def NAME(a, b)` ... `end` | Defines a template, at the top level only. A template may be used before its `def`, and from included files. |
+| `use NAME(EXPR, ...)` | Expands a template with its parameters bound. |
+| `${EXPR}` | Replaced by the value, anywhere in a line, including strings and `\|` bodies. `$${` is a literal `${`. |
+
+Expressions have integers and strings: `+ - * / %` (floor division and a non-negative remainder), `== != < <= > >=`, `and or not`, parentheses, and the functions `min(a, b)`, `max(a, b)`, `abs(n)`, `len(s)`, and `names(prefix, lo, hi)`, which gives `prefix1, prefix2, ...` for node lists. `+` joins strings when either side is one. Zero and the empty string are false.
+
+Macro keywords are recognized only at the start of a line and never before an edge operator, so a node named `end` or `for` still works in `end -> start`.
+
+Templates and `if` make the macro language Turing complete, so expansion may not stop on its own (`tests/fixtures/collatz.fitd` iterates the Collatz map, whose termination for every start is an open problem). Expansion therefore stops after `--expand-budget` steps (default 100000; each directive run and line written is one step) with E0013, and templates may nest at most 200 deep (E0012).
+
+Diagnostics on generated lines show the expanded text at the template line that wrote it. Macro errors point at the macro line and name the `use` sites that led there.
+
 ## Semantics
 
 Analysis runs in two passes. The first collects `node` and `style` declarations (and attaches `|` bodies), so edges and constraints may name nodes declared further down. The second resolves every reference, applies styles in order (node attributes win), and types every value.
@@ -135,6 +179,8 @@ Codes run `E00xx` (front end), `E01xx` (layout), `W02xx` (warnings). `fitd expla
 | E0009 | unknown layout, relation, side, place, shape, or flag |
 | E0010 | two groups share some nodes without one holding the other |
 | E0011 | `include` cycle or unreadable file |
+| E0012 | macro error: unknown variable or template, wrong argument count, type error, division by zero, nesting too deep |
+| E0013 | macro expansion ran past `--expand-budget` steps |
 | E0101-E0107 | checker: overlap, edge through node, crossing, off page, text overflow, font too small, child nearer center |
 | E0108 | layout breaks a `require` or a `group` (a solver bug if it ever appears) |
 | E0109 | an edge label is covered by a node, overlaps another label, or is clipped (a solver bug if it ever appears) |

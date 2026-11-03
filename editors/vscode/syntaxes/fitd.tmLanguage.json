@@ -5,6 +5,8 @@
   "fileTypes": ["fitd"],
   "patterns": [
     { "include": "#body" },
+    { "include": "#macro" },
+    { "include": "#interpolation" },
     { "include": "#comment" },
     { "include": "#declaration" },
     { "include": "#statement" },
@@ -22,8 +24,51 @@
       "match": "^\\s*(\\|)(.*)$",
       "captures": {
         "1": { "name": "punctuation.definition.body.fitd" },
-        "2": { "name": "string.unquoted.body.fitd" }
+        "2": { "name": "string.unquoted.body.fitd", "patterns": [{ "include": "#interpolation" }] }
       }
+    },
+    "macro": {
+      "comment": "Macro lines; a keyword followed by an edge operator is a node name instead.",
+      "patterns": [
+        {
+          "match": "^\\s*(def|use)\\s+([\\w]+)",
+          "captures": {
+            "1": { "name": "keyword.control.macro.fitd" },
+            "2": { "name": "entity.name.function.template.fitd" }
+          }
+        },
+        {
+          "match": "^\\s*(for)\\s+([\\w\\s,]+?)\\s+(in)\\b",
+          "captures": {
+            "1": { "name": "keyword.control.macro.fitd" },
+            "2": { "name": "variable.other.fitd" },
+            "3": { "name": "keyword.control.macro.fitd" }
+          }
+        },
+        {
+          "match": "^\\s*(let)\\s+(\\w+)",
+          "captures": {
+            "1": { "name": "keyword.control.macro.fitd" },
+            "2": { "name": "variable.other.fitd" }
+          }
+        },
+        {
+          "match": "^\\s*(if|else|end)\\b(?!\\s*(->|--|\\.\\.))",
+          "name": "keyword.control.macro.fitd"
+        }
+      ]
+    },
+    "interpolation": {
+      "begin": "\\$\\{",
+      "end": "\\}",
+      "name": "meta.interpolation.fitd",
+      "beginCaptures": { "0": { "name": "punctuation.section.interpolation.begin.fitd" } },
+      "endCaptures": { "0": { "name": "punctuation.section.interpolation.end.fitd" } },
+      "patterns": [
+        { "include": "#string" },
+        { "match": "\\b[0-9]+\\b", "name": "constant.numeric.fitd" },
+        { "match": "\\b[A-Za-z_]\\w*\\b", "name": "variable.other.fitd" }
+      ]
     },
     "comment": {
       "comment": "`#` right after `=` is a color, anywhere else a comment.",
@@ -58,6 +103,7 @@
       "name": "string.quoted.double.fitd",
       "patterns": [
         { "match": "\\\\.", "name": "constant.character.escape.fitd" },
+        { "include": "#interpolation" },
         { "match": "[\\^_]\\{", "name": "keyword.operator.script.fitd" }
       ]
     },

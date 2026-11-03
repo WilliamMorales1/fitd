@@ -22,8 +22,8 @@ pub struct Split {
 /// split reads the map at `path` (whose text is `text`) and lays it out over pages named after
 /// `stem`. Fails when the map has errors or its root has fewer than two branches.
 pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
-    let (src, mut diags) = crate::include::expand(path, text);
-    let (stmts, parse_diags) = crate::parse::parse(&src.text);
+    let crate::macros::Loaded { parse, mut diags, .. } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
+    let (stmts, parse_diags) = crate::parse::parse(&parse);
     diags.extend(parse_diags);
     let (g, sema_diags) = crate::sema::analyze(&stmts);
     diags.extend(sema_diags);
@@ -48,7 +48,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         }
     };
     let file = |p: Page| if p == OVERVIEW { format!("{stem}.fitd") } else { format!("{stem}-{}.fitd", g.nodes[heads[p]].id) };
-    let snippet = |lo: usize, hi: usize| src.text[lo..hi].trim_end().to_string();
+    let snippet = |lo: usize, hi: usize| parse[lo..hi].trim_end().to_string();
 
     let mut shared = String::new();
     let mut title = None;
@@ -165,7 +165,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         match &st.kind {
             // Each end's page draws the edge to a stub of the other end.
             StmtKind::Edge { from, to, .. } => {
-                let op = src.text[from.span.hi..to[0].span.lo].trim().to_string();
+                let op = parse[from.span.hi..to[0].span.lo].trim().to_string();
                 let tail = snippet(to.last().unwrap().span.hi, st.span.hi);
                 for t in to {
                     let line = format!("{} {op} {}{tail}", from.text, t.text);

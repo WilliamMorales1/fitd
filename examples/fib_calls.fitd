@@ -1,0 +1,24 @@
+# The call tree of naive fib(5), written by a recursive template. Each call is colored by its
+# argument, so the repeated subproblems that memoization removes stand out.
+title "Calls made by fib(5)"
+layout layered dir=down
+page a4 landscape margin=1cm
+font 8pt..28pt
+
+style n0 color=#B0BEC5
+style n1 color=#90A4AE
+style n2 color=#FFB74D
+style n3 color=#4FC3F7
+style n4 color=#81C784
+style n5 color=#BA68C8
+
+def fib(id, n)
+  node ${id} "fib(${n})" .n${n}
+  if n >= 2
+    use fib(id + "a", n - 1)
+    use fib(id + "b", n - 2)
+    ${id} -> ${id}a, ${id}b
+  end
+end
+
+use fib("f", 5)

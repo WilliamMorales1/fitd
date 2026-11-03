@@ -1,0 +1,26 @@
+# A web backend: one template draws each service with its own store, and a loop wires the
+# gateway to all of them.
+title "Checkout backend"
+include "shared/service.fitd"
+layout layered dir=down
+page a4 landscape margin=1cm
+font 8pt..26pt wrap=10em
+
+node web "Web and mobile clients" .edge
+node gw "API gateway" .edge
+| auth, rate limits, routing
+web -> gw
+
+use service("users", "Users", "Postgres")
+use service("cart", "Cart", "Redis")
+use service("orders", "Orders", "Postgres")
+use service("pay", "Payments", "Ledger")
+use service("stock", "Inventory", "Postgres")
+
+for s in users, cart, orders, pay, stock
+  gw -> ${s}
+end
+orders ..> pay "charge"
+orders ..> stock "reserve"
+
+require align row(users, cart, orders, pay, stock)

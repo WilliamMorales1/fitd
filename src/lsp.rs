@@ -102,8 +102,8 @@ type Diags = HashMap<String, Vec<Value>>;
 /// front_end runs include, lex, parse, and sema, which include the static contradiction
 /// check (E0008).
 fn front_end(path: &str, text: &str) -> Diags {
-    let (src, mut diags) = crate::include::expand(path, text);
-    let (stmts, parse_diags) = crate::parse::parse(&src.text);
+    let crate::macros::Loaded { src, parse, mut diags } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
+    let (stmts, parse_diags) = crate::parse::parse(&parse);
     diags.extend(parse_diags);
     diags.extend(crate::sema::analyze(&stmts).1);
     diags.retain(|d| !crate::include::unused_shared_style(&src, d));
@@ -209,8 +209,8 @@ struct Decl {
 /// declared lists node ids and style names, for definitions and completion, including those
 /// declared in included files.
 fn declared(path: &str, text: &str) -> (Vec<Decl>, Vec<Decl>) {
-    let (src, _) = crate::include::expand(path, text);
-    let (stmts, _) = crate::parse::parse(&src.text);
+    let crate::macros::Loaded { src, parse, .. } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
+    let (stmts, _) = crate::parse::parse(&parse);
     let decl = |n: Name| {
         let (path, range) = spliced_range(&src, n.span);
         Decl { name: n.text, path, range }

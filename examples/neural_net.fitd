@@ -1,0 +1,29 @@
+# A small multilayer perceptron: `for` loops write the 32 dense connections.
+title "A 3-4-4-2 perceptron"
+layout layered dir=right
+page a4 landscape margin=1cm
+theme light edge=#90A4AE
+
+style input color=#26A69A shape=circle
+style hidden color=#5C6BC0 shape=circle
+style output color=#EF5350 shape=circle
+
+for i in 1..3
+  node x${i} "x${i}" .input
+  x${i} -> ${names("h", 1, 4)}
+end
+for j in 1..4
+  node h${j} "h${j}" .hidden
+  node g${j} "g${j}" .hidden
+  h${j} -> ${names("g", 1, 4)}
+  g${j} -> y1, y2
+end
+node y1 "cat" .output
+node y2 "dog" .output
+
+group "Input" ${names("x", 1, 3)}
+group "Hidden 1" ${names("h", 1, 4)}
+group "Hidden 2" ${names("g", 1, 4)}
+require align column(${names("x", 1, 3)})
+require align column(${names("h", 1, 4)})
+require align column(${names("g", 1, 4)})

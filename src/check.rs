@@ -23,6 +23,8 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ("E0009", "An unknown keyword value: layout, relation, alignment side, place, shape, or page flag."),
     ("E0010", "Two `group` statements share some nodes, but neither holds every node of the other, or both list the same nodes. Groups may nest: a group whose nodes all belong to a larger group is framed inside it. Partial overlap cannot be drawn with rectangles, since each frame must hold its own members and nothing else."),
     ("E0011", "An `include` names a file that is already being included (a cycle), or a file that cannot be read. The include is skipped. Paths are relative to the including file."),
+    ("E0012", "A macro line failed while expanding: an unknown variable, function, or template, a wrong number of arguments, a string where a number is needed, division by zero, overflow, or templates nested more than 200 deep (usually recursion with no base case). The notes list the `use` lines that led there."),
+    ("E0013", "Macro expansion ran past its step budget (default 100000, set with `--expand-budget`). Each directive run and each line written costs one step. Usually a recursive template with no base case or a huge `for` range; templates can run forever, so the budget is what guarantees a build stops."),
     ("E0101", "Two nodes claim overlapping regions. Each node owns its box exclusively, like a mutable borrow."),
     ("E0102", "An edge passes through a node that is neither of its endpoints, so a reader cannot tell where it goes."),
     ("E0103", "Two tree edges cross. Radial trees must stay planar so each branch reads as one direction."),

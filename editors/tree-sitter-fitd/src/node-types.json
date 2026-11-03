@@ -132,6 +132,32 @@
     }
   },
   {
+    "type": "def_statement",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "name",
+            "named": true
+          }
+        ]
+      },
+      "parameter": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "name",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "edge_operator",
     "named": true,
     "fields": {}
@@ -195,6 +221,27 @@
         }
       ]
     }
+  },
+  {
+    "type": "else_statement",
+    "named": true,
+    "fields": {
+      "condition": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "expression",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "end_statement",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "flag",
@@ -264,6 +311,32 @@
     }
   },
   {
+    "type": "for_statement",
+    "named": true,
+    "fields": {
+      "items": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "expression",
+            "named": true
+          }
+        ]
+      },
+      "var": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": "name",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "group_statement",
     "named": true,
     "fields": {
@@ -297,6 +370,22 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "if_statement",
+    "named": true,
+    "fields": {
+      "condition": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "expression",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -339,6 +428,32 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "let_statement",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "name",
+            "named": true
+          }
+        ]
+      },
+      "value": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "expression",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -494,7 +609,19 @@
           "named": true
         },
         {
+          "type": "def_statement",
+          "named": true
+        },
+        {
           "type": "edge_statement",
+          "named": true
+        },
+        {
+          "type": "else_statement",
+          "named": true
+        },
+        {
+          "type": "end_statement",
           "named": true
         },
         {
@@ -502,7 +629,15 @@
           "named": true
         },
         {
+          "type": "for_statement",
+          "named": true
+        },
+        {
           "type": "group_statement",
+          "named": true
+        },
+        {
+          "type": "if_statement",
           "named": true
         },
         {
@@ -511,6 +646,10 @@
         },
         {
           "type": "layout_statement",
+          "named": true
+        },
+        {
+          "type": "let_statement",
           "named": true
         },
         {
@@ -535,6 +674,10 @@
         },
         {
           "type": "title_statement",
+          "named": true
+        },
+        {
+          "type": "use_statement",
           "named": true
         }
       ]
@@ -608,6 +751,32 @@
     }
   },
   {
+    "type": "use_statement",
+    "named": true,
+    "fields": {
+      "arguments": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "arguments",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "name",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "\n",
     "named": false
   },
@@ -652,6 +821,10 @@
     "named": false
   },
   {
+    "type": "arguments",
+    "named": true
+  },
+  {
     "type": "at",
     "named": false
   },
@@ -669,11 +842,39 @@
     "extra": true
   },
   {
+    "type": "def",
+    "named": false
+  },
+  {
+    "type": "else",
+    "named": false
+  },
+  {
+    "type": "end",
+    "named": false
+  },
+  {
+    "type": "expression",
+    "named": true
+  },
+  {
     "type": "font",
     "named": false
   },
   {
+    "type": "for",
+    "named": false
+  },
+  {
     "type": "group",
+    "named": false
+  },
+  {
+    "type": "if",
+    "named": false
+  },
+  {
+    "type": "in",
     "named": false
   },
   {
@@ -682,6 +883,10 @@
   },
   {
     "type": "layout",
+    "named": false
+  },
+  {
+    "type": "let",
     "named": false
   },
   {
@@ -726,6 +931,10 @@
   },
   {
     "type": "title",
+    "named": false
+  },
+  {
+    "type": "use",
     "named": false
   }
 ]

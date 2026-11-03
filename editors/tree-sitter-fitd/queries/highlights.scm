@@ -2,6 +2,7 @@
 (name) @variable
 
 ["title" "root" "layout" "page" "font" "theme" "style" "node" "group" "require" "prefer" "include" "align" "at"] @keyword
+["let" "for" "in" "if" "else" "end" "def" "use"] @keyword.control
 
 (edge_operator) @operator
 ["=" ".." "." "," "(" ")"] @punctuation.delimiter
@@ -23,3 +24,8 @@
 (theme_statement preset: (name) @constant.builtin)
 
 (node_statement id: (name) @label)
+(def_statement name: (name) @function)
+(use_statement name: (name) @function.call)
+(def_statement parameter: (name) @variable.parameter)
+(expression) @embedded
+(arguments) @embedded

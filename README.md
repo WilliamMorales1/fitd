@@ -71,6 +71,7 @@ Those languages have far wider adoption and tooling; `fitd import` translates Gr
 - Weighted preferences: `prefer ... weight=N` trades soft wishes against each other explicitly.
 - A fixed page, filled: the solver maximizes the font that fits the page you name, instead of growing the canvas.
 - Verified output: an independent checker re-derives overlaps, crossings, clipping, and overflow from the finished drawing.
+- Macros: `for` loops, `if`, `let`, recursive `def`/`use` templates, and `${expr}` interpolation expand before parsing, so numbered steps, repeated components, and recursion trees take a few lines ([semester](examples/semester.fitd), [services](examples/services.fitd), [fib_calls](examples/fib_calls.fitd)). Errors on generated lines point at the template line.
 - Unsat cores at source lines: when `require`s conflict, a minimal conflicting set is reported, rustc style, at the lines that wrote them.
 
 Why not a layout plugin for one of them instead? D2, Mermaid (v11 layouts), and Graphviz all accept external layout engines, but each measures text before layout and renders after it. A plugin receives boxes already sized, so it cannot search for the largest font that fits the page, and the checker would verify a drawing other than the one written. D2 also rejects unknown keywords and Mermaid has no attribute syntax, so `require` and `prefer` would live in comments. The language front end is about a quarter of the code; the solver and checker, which a plugin would cripple, are the rest.

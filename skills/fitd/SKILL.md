@@ -34,6 +34,10 @@ If the user wants the source kept, write it to `NAME.fitd` and build with `fitd 
 - Process, pipeline, timeline, decision flow: `layout layered dir=down` or `dir=right`. Long flows wrap into bands; `bands=1` forbids wrapping.
 - `->` edges build the hierarchy or flow. `..>` draws a dashed cross link that does not change the structure. Use cross links for "relates to" connections. `--` and `..` are the same without an arrowhead, for relations with no direction.
 
+## Repetition
+
+When many nodes share one shape (numbered steps, one box per service, layers, recursion trees), write a loop or a template instead of copying lines: `for i in 1..n` or `for i, x in a, b, c` ... `end`, `def NAME(args)` ... `end` with `use NAME(...)`, and `${expr}` inside any line. Errors on generated lines are reported at the template line.
+
 ## Start minimal
 
 Only `node` lines and edges are required. Leave out `page`, `font`, `theme`, and constraints at first: the defaults (A1 page, light theme, font searched) usually work. Add a `require` only when the user asks for a specific placement, because each one can make the layout unsatisfiable. Prefer `prefer` over `require` when the placement is a wish, not a rule.
@@ -77,4 +81,4 @@ The chosen font is often not the largest that fits. fitd also lays out at 5% and
 
 ## Examples
 
-`examples/` in the fitd repo holds full diagrams: `compiler.fitd` and `cell_biology.fitd` (layered flowcharts with groups and styles), `group_theory.fitd` and `earth_science.fitd` (radial maps), `french_history.fitd` (a layered timeline with group frames), `coffee.fitd` (radial with a palette and a group), `release_pipeline.fitd` (banded flow, `include`, theme overrides, chained constraints), `debugging.fitd` (mono decision flow at a fixed font), `deepseek_v4_1_flash.fitd` (model architecture, undirected edges). `docs/EXAMPLES.md` ends with a feature index. Read one when the user asks for a feature the guide only names.
+`examples/` in the fitd repo holds full diagrams: `compiler.fitd` and `cell_biology.fitd` (layered flowcharts with groups and styles), `group_theory.fitd` and `earth_science.fitd` (radial maps), `french_history.fitd` (a layered timeline with group frames), `coffee.fitd` (radial with a palette and a group), `release_pipeline.fitd` (banded flow, `include`, theme overrides, chained constraints), `debugging.fitd` (mono decision flow at a fixed font), `deepseek_v4_1_flash.fitd` (model architecture, undirected edges), and four that use macros (`let`, `for`, `if`, `def`/`use`, `${expr}`; see "Macros" in `docs/LANGUAGE.md`): `semester.fitd` (a timeline from a list loop), `services.fitd` (a template per service), `fib_calls.fitd` (a recursive template), `neural_net.fitd` (dense layers from loops). `docs/EXAMPLES.md` ends with a feature index. Read one when the user asks for a feature the guide only names.
