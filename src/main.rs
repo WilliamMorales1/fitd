@@ -391,7 +391,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<(String, metrics::Fonts, (f
     }
     let fonts = metrics::Fonts::load(family.as_deref().or(set.family.as_deref()))?;
     show(&fonts.notes.iter().map(|n| Diag::info(n.clone())).collect::<Vec<_>>());
-    let name = theme_name.as_deref().or(set.theme.as_deref()).unwrap_or("light");
+    let name = theme_name.as_deref().or(set.theme.as_deref()).unwrap_or("dark");
     let th = theme::Theme::preset(name).ok_or(format!("unknown theme `{name}` (expected one of: {})", theme::PRESETS.join(", ")))?.with(&set.theme_over);
     layout::measure_groups(&mut g, &fonts);
     let mut lay = match layout::solve(&g, &t, &fonts, &cfg) {

@@ -2,8 +2,8 @@ title "fitd map.fitd --watch"
 layout layered dir=right
 page 320x180mm margin=1cm
 
-style fast color=#1565C0
-style slow color=#6A1B9A
+style fast color=#0969DA
+style slow color=#8250DF
 
 node save "Save"
 node draft "Draft build" .fast

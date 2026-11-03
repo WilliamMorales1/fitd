@@ -2,10 +2,10 @@ title "fitd FILE [flags]"
 page 320x180mm margin=1cm
 root cli
 
-style out color=#1565C0
-style geo color=#2E7D32
-style search color=#6A1B9A
-style flow color=#EF6C00
+style out color=#0969DA
+style geo color=#1A7F37
+style search color=#8250DF
+style flow color=#BC4C00
 
 node cli "fitd FILE"
 | flags override settings in the file

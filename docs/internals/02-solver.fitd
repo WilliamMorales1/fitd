@@ -2,9 +2,9 @@ title "How the solver picks a font"
 layout layered dir=down
 page 320x180mm margin=1cm
 
-style probe color=#1565C0
-style fail color=#C62828
-style good color=#2E7D32
+style probe color=#0969DA
+style fail color=#CF222E
+style good color=#1A7F37
 
 node font "Next font"
 | binary search between the floor and the ceiling
@@ -30,7 +30,7 @@ fits ..> font "yes: go larger; no: smaller"
 bnb -> trade -> polish -> best
 none -> core
 
-node refs "References" color=#455A64
+node refs "References" color=#57606A
 | Prosser 1993: conflict-directed backjumping
 | Junker, AAAI 2004: QuickXplain
 | Sugiyama, Tagawa, Toda 1981: layered layout

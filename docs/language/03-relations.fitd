@@ -2,9 +2,9 @@ title "Relations: predicates on final boxes (y points up)"
 page 320x180mm margin=1cm
 root rel
 
-style ord color=#1565C0
-style al color=#6A1B9A
-style kind color=#C62828
+style ord color=#0969DA
+style al color=#8250DF
+style kind color=#CF222E
 
 node rel "REL"
 

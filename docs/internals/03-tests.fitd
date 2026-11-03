@@ -2,9 +2,9 @@ title "Tests and performance"
 page 320x180mm margin=1cm
 root t
 
-style unit color=#1565C0
-style e2e color=#2E7D32
-style perf color=#EF6C00
+style unit color=#0969DA
+style e2e color=#1A7F37
+style perf color=#BC4C00
 
 node t "cargo test --release"
 

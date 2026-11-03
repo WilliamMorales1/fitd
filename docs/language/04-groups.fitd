@@ -30,5 +30,5 @@ hard -> layered
 outer -> inner, bad
 inner -> exempt
 
-group "This frame is a group" outer, inner, exempt, bad color=#1565C0
-group "Inside it, a nested group" inner, exempt color=#6A1B9A
+group "This frame is a group" outer, inner, exempt, bad color=#0969DA
+group "Inside it, a nested group" inner, exempt color=#8250DF

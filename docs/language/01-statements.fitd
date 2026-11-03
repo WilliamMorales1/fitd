@@ -2,9 +2,9 @@ title "Statements: one per line"
 page 320x180mm margin=1cm
 root file
 
-style content color=#8D6E63
-style setting color=#2E7D32
-style rule color=#1565C0
+style content color=#6E7781
+style setting color=#1A7F37
+style rule color=#0969DA
 
 node file "A .fitd file"
 | analyzed in two passes: declarations, then references

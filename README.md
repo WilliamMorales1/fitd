@@ -6,9 +6,9 @@ A small diagram language with a constraint solver for layout. Write nodes, edges
 title "How fitd compiles a diagram"
 layout layered dir=right
 page 297x210mm margin=1cm
-theme dark link=#FFD54F
+theme dark link=#D29922
 
-style io color=#26A69A shape=circle
+style io color=#1F883D shape=circle
 
 node src "Source .fitd" .io
 node parse "Parser"
@@ -17,14 +17,14 @@ node csp "CSP search"
 node bnb "Branch and bound"
 node core "QuickXplain"
 | minimal unsat core
-node checker "Checker" color=#EF5350
+node checker "Checker" color=#F85149
 node out "SVG, PNG, TikZ" .io
 
 src -> parse -> csp -> bnb, core
 bnb -> checker -> out
 core ..> src "points back at source"
 
-group "Solver" csp, bnb, core color=#AB47BC
+group "Solver" csp, bnb, core color=#AB7DF7
 
 require bnb above core gap=2em
 prefer out at right weight=2

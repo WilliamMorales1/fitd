@@ -9,7 +9,7 @@ node lex "Lexing"
 
 node comment "# comment"
 | runs to the end of the line
-| except right after =, where # starts a color: color=#1565C0
+| except right after =, where # starts a color: color=#0969DA
 node names "Names"
 | letters, digits, _, and inner hyphens: left-of, top-left
 | a hyphen never swallows an arrow: a->b is three tokens

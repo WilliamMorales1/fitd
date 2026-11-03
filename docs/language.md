@@ -33,7 +33,7 @@ Source: [01-statements.fitd](language/01-statements.fitd)
 
 ## Lexing
 
-Newlines end statements, so a line that fails to parse is reported and skipped; later errors still show. Names are letters, digits, `_`, and inner hyphens (`top-left`). A `#` starts a comment, except right after `=`, where it starts a color (`color=#1565C0`). Lengths always carry a unit (`pt mm cm in em`); an `em` is the body font, chosen by the solver, so `gap=2em` scales with it. Command-line flags override settings in the file.
+Newlines end statements, so a line that fails to parse is reported and skipped; later errors still show. Names are letters, digits, `_`, and inner hyphens (`top-left`). A `#` starts a comment, except right after `=`, where it starts a color (`color=#0969DA`). Lengths always carry a unit (`pt mm cm in em`); an `em` is the body font, chosen by the solver, so `gap=2em` scales with it. Command-line flags override settings in the file.
 
 ![Lines, names, values](language/02-lexical.png)
 

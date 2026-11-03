@@ -2,9 +2,9 @@ title "Macros"
 page 320x180mm margin=1cm
 root mac
 
-style line color=#6A1B9A
-style expr color=#1565C0
-style safe color=#C62828
+style line color=#8250DF
+style expr color=#0969DA
+style safe color=#CF222E
 
 node mac "Macros"
 | expand after include and before parsing,

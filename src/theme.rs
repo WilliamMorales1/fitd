@@ -42,8 +42,8 @@ fn strs(xs: &[&str]) -> Vec<String> {
 impl Theme {
     pub fn preset(name: &str) -> Option<Theme> {
         let (bg, text, edge, link, label, root, palette, tint) = match name {
-            "light" => ("#FFFFFF", "#111111", "#555555", "#777777", "#555555", "#EEEEEE", &["#8C5A2B", "#2E7D32", "#1565C0", "#6A1B9A", "#C62828", "#00838F", "#EF6C00", "#455A64"], 0.08),
-            "dark" => ("#1E1E1E", "#E6E6E6", "#AAAAAA", "#8A8A8A", "#B0B0B0", "#333333", &["#D7A86E", "#81C784", "#64B5F6", "#BA68C8", "#E57373", "#4DD0E1", "#FFB74D", "#90A4AE"], 0.16),
+            "light" => ("#FFFFFF", "#1F2328", "#57606A", "#6E7781", "#57606A", "#F6F8FA", &["#9A6700", "#1A7F37", "#0969DA", "#8250DF", "#CF222E", "#1F883D", "#BC4C00", "#57606A"], 0.08),
+            "dark" => ("#0D1117", "#E6EDF3", "#8B949E", "#6E7681", "#8B949E", "#21262D", &["#D29922", "#3FB950", "#4493F8", "#AB7DF8", "#F85149", "#56D364", "#DB6D28", "#8B949E"], 0.16),
             "mono" => ("#FFFFFF", "#000000", "#444444", "#666666", "#444444", "#E0E0E0", &["#202020", "#404040", "#5A5A5A", "#303030", "#4A4A4A", "#606060", "#383838", "#505050"], 0.06),
             _ => return None,
         };
@@ -109,12 +109,12 @@ mod tests {
         }
         let o = Overrides { background: Some("#000".into()), palette: Some(vec!["#f00".into()]), ..Default::default() };
         let t = Theme::preset("light").unwrap().with(&o);
-        assert_eq!((t.background.as_str(), t.text.as_str(), t.palette.len()), ("#000", "#111111", 1));
+        assert_eq!((t.background.as_str(), t.text.as_str(), t.palette.len()), ("#000", "#1F2328", 1));
     }
 
     #[test]
     fn contrast_text() {
-        assert_eq!(on("#1565C0"), "#FFFFFF");
+        assert_eq!(on("#0969DA"), "#FFFFFF");
         assert_eq!(on("#FFB74D"), "#111111");
         assert_eq!(rgb("#abc"), "AABBCC");
         assert!(!is_color("#12345") && !is_color("red"));

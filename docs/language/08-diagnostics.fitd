@@ -2,9 +2,9 @@ title "Diagnostic codes"
 page 320x180mm margin=1cm
 root diag
 
-style front color=#1565C0
-style layout color=#C62828
-style warn color=#EF6C00
+style front color=#0969DA
+style layout color=#CF222E
+style warn color=#BC4C00
 
 node diag "Diagnostics"
 | rustc style, at the source lines that caused them

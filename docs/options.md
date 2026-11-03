@@ -19,7 +19,7 @@ Source: [01-options.fitd](options/01-options.fitd)
 
 ## Theming
 
-Every theme option has a default. `theme dark` suits screens, `theme mono` prints in grayscale; individual keys (`background`, `text`, `edge`, `link`, `label`, `root`, `palette`) override the preset. On nodes, edges, and groups, `color`, `fill`, and `text` set border, solid fill, and text color. `family=` needs the font installed, and changes measured widths.
+Every theme option has a default. The default is `dark` for comfortable screen viewing; `theme light` suits bright rooms and `theme mono` prints in grayscale. Individual keys (`background`, `text`, `edge`, `link`, `label`, `root`, `palette`) override the preset. On nodes, edges, and groups, `color`, `fill`, and `text` set border, solid fill, and text color. `family=` needs the font installed, and changes measured widths.
 
 ![Theming](options/02-theming.png)
 

@@ -2,9 +2,9 @@ title "Three ways a layout is refused"
 layout layered dir=down
 page 320x180mm margin=1cm
 
-style stat color=#1565C0
-style search color=#6A1B9A
-style after color=#2E7D32
+style stat color=#0969DA
+style search color=#8250DF
+style after color=#1A7F37
 
 node src "Source with require, align, group"
 

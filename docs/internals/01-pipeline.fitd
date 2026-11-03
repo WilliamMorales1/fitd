@@ -2,9 +2,9 @@ title "From source to drawing"
 layout layered dir=down
 page 360x203mm margin=1cm
 
-style front color=#1565C0
-style solver color=#6A1B9A
-style back color=#2E7D32
+style front color=#0969DA
+style solver color=#8250DF
+style back color=#1A7F37
 
 def stage(i, name, file, kind)
   node s${i} "${name}" .${kind}
@@ -27,11 +27,11 @@ use stage(10, "Emit", "emit.rs: SVG, PNG via resvg, TikZ, all at absolute positi
 
 s7 ..> s1 "E0110 core at source lines"
 
-group "Front end" ${names("s", 1, 5)} color=#1565C0
-group "Layout" ${names("s", 6, 8)} color=#6A1B9A
-group "Output" s9, s10 color=#2E7D32
+group "Front end" ${names("s", 1, 5)} color=#0969DA
+group "Layout" ${names("s", 6, 8)} color=#8250DF
+group "Output" s9, s10 color=#1A7F37
 
-node fonts "Fonts" color=#455A64
+node fonts "Fonts" color=#57606A
 | DejaVu Serif, Sans Bold, Math TeX Gyre compiled in
 | (embedded-fonts feature), so layout needs no fontconfig;
 | only a named family goes through fc-match

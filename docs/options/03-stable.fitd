@@ -2,7 +2,7 @@ title "--stable map.fitd.lock"
 layout layered dir=down
 page 320x180mm margin=1cm
 
-style lock color=#EF6C00
+style lock color=#BC4C00
 
 node why "Why"
 | the solver is global: one new node can move every
