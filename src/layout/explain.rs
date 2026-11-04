@@ -1,4 +1,3 @@
-
 pub(super) fn quickxplain(
     feasible: &mut dyn FnMut(&[usize]) -> bool,
     base: &[usize],

@@ -1,4 +1,3 @@
-
 use crate::{diag, parse, sema, tree};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 

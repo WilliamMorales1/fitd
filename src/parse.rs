@@ -1,4 +1,3 @@
-
 use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
 use crate::lex::{Tok, Token, describe, lex};

@@ -1,4 +1,3 @@
-
 use crate::geom::Rect;
 use crate::graph::{Graph, Place, Relation};
 use crate::layout::{Boxed, Cand, Config, Drawn, EdgeStyle, Kind, Plan, Role};

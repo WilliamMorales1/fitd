@@ -1,4 +1,3 @@
-
 use crate::diag::{Diag, Span};
 
 #[derive(Clone, PartialEq, Debug)]

@@ -1,4 +1,3 @@
-
 use crate::diag::Diag;
 use crate::geom::Rect;
 use crate::geom::{P, segment_hits_rect, segments_cross};

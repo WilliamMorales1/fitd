@@ -1,4 +1,3 @@
-
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Default)]
@@ -231,7 +230,6 @@ impl Doc {
         (o, self.dropped.into_iter().collect())
     }
 }
-
 
 #[derive(Clone, Debug, PartialEq)]
 enum DTok {
@@ -640,7 +638,6 @@ fn from_dot(text: &str) -> Result<Doc, String> {
     Ok(p.doc)
 }
 
-
 fn mermaid_node(s: &str) -> Option<(String, Option<String>, bool, &str)> {
     let s = s.trim_start();
     let mut end = 0;
@@ -877,7 +874,6 @@ fn from_mermaid(text: &str) -> Result<Doc, String> {
     }
     Ok(doc)
 }
-
 
 enum D2Seg {
     Stmt(String, usize, bool),

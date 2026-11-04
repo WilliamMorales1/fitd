@@ -1,4 +1,3 @@
-
 use super::*;
 
 pub(super) fn aligned(side: Side, a: &Rect, b: &Rect, tol: f64) -> bool {

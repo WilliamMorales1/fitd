@@ -1,4 +1,3 @@
-
 use crate::ast::StmtKind;
 use crate::diag::{Diag, Seg, Source, Span};
 use std::path::{Path, PathBuf};

@@ -1,4 +1,3 @@
-
 use crate::diag::{Diag, Seg, Source, Span};
 use std::collections::HashMap;
 

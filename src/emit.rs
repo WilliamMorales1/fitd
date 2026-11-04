@@ -1,4 +1,3 @@
-
 use crate::geom::{P, Rect};
 use crate::graph::{Graph, LayoutKind, Relation};
 use crate::layout::{

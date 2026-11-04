@@ -1,4 +1,3 @@
-
 use crate::diag::Span;
 
 #[derive(Clone, Debug)]

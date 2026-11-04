@@ -1,4 +1,3 @@
-
 pub const PRESETS: &[&str] = &["light", "dark", "mono"];
 
 #[derive(Clone, Debug, PartialEq)]

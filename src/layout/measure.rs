@@ -1,4 +1,3 @@
-
 use super::*;
 
 pub fn label_size(fonts: &Fonts, text: &str, body: f64) -> (f64, f64) {

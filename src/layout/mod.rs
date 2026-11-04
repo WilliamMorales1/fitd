@@ -1,4 +1,3 @@
-
 use crate::csp::{self, Outcome, Problem};
 use crate::geom::{P, Rect, segment_hits_rect, segments_cross};
 pub use crate::graph::Shape;

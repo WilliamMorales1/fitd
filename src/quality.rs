@@ -1,4 +1,3 @@
-
 use crate::geom::{P, Rect, segment_hits_rect, segments_cross};
 
 pub struct Input<'a> {

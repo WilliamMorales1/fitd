@@ -1,4 +1,3 @@
-
 use crate::ast::{Attr, Name, Rel, StmtKind};
 use crate::diag::Level;
 use std::collections::{BTreeMap, BTreeSet};

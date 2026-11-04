@@ -1,4 +1,3 @@
-
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const UNSET: u32 = u32::MAX;
