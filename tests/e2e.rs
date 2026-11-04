@@ -1301,13 +1301,21 @@ fn split_pages_each_build_alone() {
 }
 
 #[test]
-fn readme_shows_pipeline_example_whole() {
+fn readme_example_builds() {
     let readme = std::fs::read_to_string("README.md").unwrap();
-    let src = std::fs::read_to_string("docs/pipeline.fitd").unwrap();
-    assert!(
-        readme.contains(&format!("```\n{src}```")),
-        "README code block differs from docs/pipeline.fitd"
-    );
+    let src = readme
+        .split_once("```fitd\n")
+        .and_then(|(_, rest)| rest.split_once("\n```"))
+        .map(|(src, _)| src)
+        .expect("README must contain a fitd example");
+    let input = tmp("readme-example.fitd");
+    std::fs::write(&input, src).unwrap();
+    let (ok, log) = fitd(&[
+        input.to_str().unwrap(),
+        "-o",
+        tmp("readme-example.svg").to_str().unwrap(),
+    ]);
+    assert!(ok, "{log}");
 }
 
 /// glob expands one `dir/prefix*suffix` pattern, sorted as a shell would.

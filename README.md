@@ -2,92 +2,82 @@
 
 [![CI](https://github.com/WilliamMorales1/fitd/actions/workflows/ci.yml/badge.svg)](https://github.com/WilliamMorales1/fitd/actions/workflows/ci.yml)
 
-fitd turns plain-text diagrams into SVG, PNG, PDF, or TikZ. It lays out the diagram, chooses a font size that fits the page, applies layout constraints, and checks the finished drawing before writing it.
+fitd is a text-based diagram compiler. It converts `.fitd` source into SVG, PNG, PDF, or TikZ and searches for a layout that satisfies declared constraints while maximizing font size on a fixed page.
 
-```
-title "How fitd compiles a diagram"
-layout layered dir=right
-page 297x210mm margin=1cm
-theme dark link=#D29922
+```fitd
+title "Photosynthesis"
+layout radial root=leaf
+page a4 portrait margin=12mm
 
-style io color=#1F883D shape=circle
+node sun "Light"
+node leaf "Leaf"
+| converts light into stored energy
+node sugar "Glucose"
 
-node src "Source .fitd" .io
-node parse "Parser"
-node csp "CSP search"
-| largest font that fits
-node bnb "Branch and bound"
-node core "QuickXplain"
-| minimal unsat core
-node checker "Checker" color=#F85149
-node out "SVG, PNG, TikZ" .io
-
-src -> parse -> csp -> bnb, core
-bnb -> checker -> out
-core ..> src "points back at source"
-
-group "Solver" csp, bnb, core color=#AB7DF7
-
-require bnb above core gap=2em
-prefer out at right weight=2
+sun -> leaf
+leaf -> sugar "produces"
+require sun above leaf
 ```
 
-![docs/pipeline.fitd rendered to PNG](docs/pipeline.png)
+## Installation
 
-This is a complete input file. More examples are in [examples/](examples/), with rendered output in `examples/out/`. See the [language guide](docs/language.md), [options](docs/options.md), and [internals](docs/internals.md) for details.
+Requires Rust 1.85 or newer and Cargo.
 
-## Dependencies
-
-Rust 1.85+ (edition 2024) and Cargo. Crates, fetched by Cargo: `resvg` (SVG/PNG rendering), `ttf-parser` (font metrics), `serde_json` (LSP and lock files). DejaVu fonts are compiled in; a custom `family` needs fontconfig (`fc-match`). Compiling `--tikz` output needs a LaTeX install with TikZ.
-
-## Install
-
-Build from source with Rust 1.85 or newer:
-
-```fish
+```sh
 cargo install --path .
 ```
 
-Tagged releases provide binaries for Linux, macOS, and Windows on the [Releases page](https://github.com/WilliamMorales1/fitd/releases).
+Prebuilt binaries for Linux, macOS, and Windows are available from [GitHub Releases](https://github.com/WilliamMorales1/fitd/releases).
 
 ## Usage
 
-```fish
-cargo build --release
-./target/release/fitd docs/pipeline.fitd -o pipeline.png
-./target/release/fitd docs/pipeline.fitd -o pipeline.pdf     # selectable text
-./target/release/fitd examples/*.fitd -o all.pdf                 # one page per diagram
-./target/release/fitd a.fitd b.fitd c.fitd d.fitd --grid 2x2 --page a1 -o sheet.pdf  # four to a page
-./target/release/fitd examples/compiler.fitd --tikz out/compiler.tex
-./target/release/fitd guide          # the language on one page
-./target/release/fitd explain E0110  # explain an error code
-./target/release/fitd examples/compiler.fitd --watch   # rebuild on save: draft, then full
-./target/release/fitd split examples/group_theory.fitd  # overview plus one page per branch
-./target/release/fitd examples/fib_calls.fitd -o fib.png  # macros: a recursive template
+```sh
+fitd diagram.fitd -o diagram.svg
+fitd diagram.fitd -o diagram.png
+fitd diagram.fitd -o diagram.pdf
+fitd diagram.fitd --tikz diagram.tex
+fitd first.fitd second.fitd -o book.pdf
+fitd guide
+fitd explain E0110
 ```
 
-Editor support includes `fitd lsp`, a VS Code TextMate grammar, and a Tree-sitter grammar for Neovim and Helix. The language server reports source diagnostics, completes node and style names, and supports definitions across included files.
+Output format is selected from output filename extension. Multiple inputs with PDF output produce one page per input. Diagnostics are written to standard error. `--short` prints one line per diagnostic.
 
-Tests: `cargo test --release`.
+## Language
 
-## Docs
+`.fitd` files contain one statement per line. Node declarations and edges form basic diagrams; optional statements configure page, typography, themes, groups, layouts, and constraints. The [language reference](docs/language.md) specifies grammar and semantics.
 
-- [Language](docs/language.md): grammar, semantics, relations, diagnostics.
-- [Options and theming](docs/options.md): command-line flags, colors, fonts.
-- [Agent skill](skills/fitd/SKILL.md): drawing diagrams with fitd from an AI agent.
-- [Internals](docs/internals.md): pipeline, solver, references, tests.
+```fitd
+node input "Input"
+node check "Valid?"
+node output "Save"
+input -> check
+check -> output "yes"
+require input left-of check gap=2em
+```
 
-## Why fitd?
+## Documentation
 
-`fitd import` reads Graphviz (`.dot`), Mermaid (`.mmd`), and D2 (`.d2`) files. It converts common nodes, labels, edges, groups, and containers, and reports features with no direct equivalent.
+- [Language reference](docs/language.md): grammar, statements, macros, semantics, diagnostics.
+- [Options](docs/options.md): command-line options, themes, watch mode, split output.
+- [Internals](docs/internals.md): compiler pipeline, solver, testing, benchmarks.
+- [Examples](examples/): source files demonstrating language features.
+- [Agent skill](skills/fitd/SKILL.md): instructions for generating diagrams with fitd.
 
-fitd adds:
+## Features
 
-- Hard constraints: `require a left-of b`, `align row(...)`, `a at top-left` hold in the output or the build fails.
-- Weighted preferences: `prefer ... weight=N` trades soft wishes against each other explicitly.
-- A fixed page, filled: the solver maximizes the font that fits the page you name, instead of growing the canvas.
-- Verified output: an independent checker re-derives overlaps, crossings, clipping, and overflow from the finished drawing.
-- Macros: `for` loops, `if`, recursive `def`/`use` templates, and `${expr}` interpolation expand before parsing, so numbered steps, repeated components, and recursion trees take a few lines ([semester](examples/semester.fitd), [neural_net](examples/neural_net.fitd), [fib_calls](examples/fib_calls.fitd)). Errors on generated lines point at the template line.
-- Unsat cores at source lines: when `require`s conflict, a minimal conflicting set is reported, rustc style, at the lines that wrote them.
+- Hard constraints through `require`; weighted preferences through `prefer`.
+- Fixed-page layout with font-size search.
+- Independent output checking for overlaps, crossings, clipping, and overflow.
+- Macros for loops, conditions, templates, and interpolation.
+- Source diagnostics and minimal conflicting sets for unsatisfiable constraints.
+- Import support for Graphviz DOT, Mermaid, and D2.
+- Language server and Tree-sitter and VS Code syntax support.
 
-Why not a layout plugin for one of them instead? D2, Mermaid (v11 layouts), and Graphviz all accept external layout engines, but each measures text before layout and renders after it. A plugin receives boxes already sized, so it cannot search for the largest font that fits the page, and the checker would verify a drawing other than the one written. D2 also rejects unknown keywords and Mermaid has no attribute syntax, so `require` and `prefer` would live in comments. The language front end is about a quarter of the code; the solver and checker, which a plugin would cripple, are the rest.
+## Development
+
+```sh
+cargo test --release
+```
+
+`python3 bench/bench.py --check bench/baseline.tsv` checks deterministic solver-work baselines. Set `FITD_FUZZ_SECS` to extend the test fuzzer.

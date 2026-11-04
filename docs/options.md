@@ -1,50 +1,76 @@
-# Options
+# Command-line reference
 
+## Invocation
+
+```text
+fitd INPUT [-o OUTPUT] [OPTIONS]
+fitd INPUT... -o OUTPUT.pdf
+fitd import INPUT.dot|INPUT.mmd|INPUT.d2 [-o OUTPUT.fitd]
+fitd split INPUT.fitd [-o DIRECTORY]
+fitd explain CODE
+fitd guide
+fitd lsp
 ```
-fitd FILE.fitd [-o out.svg|.png|.pdf] [--tikz out.tex] [--page a4|WxHmm] [flags]
-fitd A.fitd B.fitd -o book.pdf
-fitd - -o out.svg < map.fitd
-fitd split map.fitd
-```
 
-Command-line flags override settings in the file. Set `FITD_DEBUG=1` to print solver probes. Exit code 0 means output was written. Diagnostics go to stderr; use `--short` for one line per diagnostic.
+`INPUT` is a `.fitd` path or `-` for standard input. Standard input requires `-o`. Multiple inputs are supported for PDF output; each input becomes one page in argument order. Options override settings in source.
 
-## Flags and subcommands
+Exit status is zero when output is written. Diagnostics go to standard error. Errors normally prevent output; `--force` writes output despite checker errors. `--short` prints one line per diagnostic.
 
-`-o` selects the format by extension. SVG keeps the page size, PNG is cropped to the drawing, and PDF keeps text selectable. Multiple inputs with a PDF output create one page per input. `--tikz` also writes standalone LaTeX. `--force` writes output despite checker errors.
+## Build options
 
-![fitd FILE [flags]](options/01-options.png)
+| Option | Description |
+| --- | --- |
+| `-o PATH` | Output path. Extension selects SVG, PNG, or PDF. PNG is cropped to drawing bounds; SVG and PDF retain page dimensions. |
+| `--tikz PATH` | Write TikZ source to `PATH`. |
+| `--page SIZE` | Override page size. Accepts `a0` through `a4` or `WIDTHxHEIGHT` with optional unit. |
+| `--portrait` | Set portrait orientation. |
+| `--landscape` | Set landscape orientation. |
+| `--margin PT` | Set page margin in points. |
+| `--min-font PT` | Set lower font-size search bound in points. |
+| `--max-font PT` | Set upper font-size search bound in points. |
+| `--wrap EM` | Set text wrapping width in em units. |
+| `--bands N` | Set maximum bands for layered layout. |
+| `--theme NAME` | Select `dark`, `light`, or `mono` theme. |
+| `--font-family NAME` | Select installed font family. |
+| `--budget CHECKS` | Set layout search check budget. Default: 20,000,000. |
+| `--expand-budget STEPS` | Set macro expansion budget. Default: 100,000. |
+| `--scale PX` | Set PNG raster scale in pixels per point. Default: 2. |
+| `--stable PATH` | Read or write layout lock file at `PATH`. |
+| `--force` | Write output despite checker errors. |
+| `--draft` | Use reduced search effort. |
+| `--short` | Print diagnostics in one-line form. |
+| `--watch` | Rebuild after input changes. Accepts one file input, not standard input. |
+| `--grid COLSxROWS` | Arrange multiple diagrams in a PDF grid. |
 
-Source: [01-options.fitd](options/01-options.fitd)
+`FITD_DEBUG=1` prints solver probes. CLI values override corresponding source settings.
 
-## Theming
+## Output formats
 
-Every theme option has a default. The default is `dark` for comfortable screen viewing; `theme light` suits bright rooms and `theme mono` prints in grayscale. Individual keys (`background`, `text`, `edge`, `link`, `label`, `root`, `palette`) override the preset. On nodes, edges, and groups, `color`, `fill`, and `text` set border, solid fill, and text color. `family=` needs the font installed, and changes measured widths.
+Output format is selected from file extension. SVG preserves page dimensions. PDF preserves page dimensions and selectable text. PNG is cropped to drawing bounds. `--tikz` writes a separate TikZ file; compiling TikZ requires a LaTeX installation with TikZ.
 
-![Theming](options/02-theming.png)
+For multiple input files and PDF output, fitd writes one page per input. `--grid COLSxROWS` arranges multiple diagrams on each page. PDF options apply to all inputs.
 
-Source: [02-theming.fitd](options/02-theming.fitd)
+## Themes and fonts
 
-## --stable
+Theme presets are `dark`, `light`, and `mono`. Source-level overrides use `theme` attributes. Supported theme keys are `background`, `text`, `edge`, `link`, `label`, `root`, and `palette`.
 
-Adding one node to a global solver can move everything. `--stable map.fitd.lock` stores font, page, and node centers, tries those spots first, and charges for every move, so adding a leaf keeps the font and every position. The lock is plain text and diffs well. A lock for another page size is ignored with a note.
+Node, edge, and group attributes include `color`, `fill`, and `text` where supported. `family` selects font family in source; `--font-family` overrides it. A requested family must be available through fontconfig. Without embedded fonts, fontconfig is required for font discovery.
 
-![--stable](options/03-stable.png)
+## Stable layouts
 
-Source: [03-stable.fitd](options/03-stable.fitd)
+`--stable PATH` reads prior font, page, and node-center positions and writes updated values to lock file. Search prefers locked positions and penalizes movement. A lock created for a different page size is ignored with a diagnostic.
 
-## --watch
+## Watch mode
 
-`fitd map.fitd --watch` rebuilds on save: a coarse draft first, then the full build after 1.5 s of quiet. A newer save cancels a running full build. Output is replaced atomically.
+`--watch` requires one file input. Each change starts a draft build. A full build starts after input remains unchanged for 1.5 seconds. A new change cancels active full build. Output replacement is atomic.
 
-![--watch](options/04-watch.png)
+## Split command
 
-Source: [04-watch.fitd](options/04-watch.fitd)
+`fitd split INPUT [-o DIRECTORY]` writes shared settings, an overview source file, and one source file per top-level branch. Generated files include shared settings with `include`. Edges crossing page boundaries appear on both pages with endpoint stubs. Constraints spanning pages are omitted and reported as warnings. Run split again from original input to regenerate files.
 
-## fitd split
+## Other commands
 
-`fitd split map.fitd [-o DIR]` writes a shared settings file, an overview page, and one page per branch, all ordinary source that includes the shared file. Edit them freely; split again only from the original. Edges between pages are drawn on both with a stub naming the far page. Constraints that span pages are left out and listed as warnings.
-
-![fitd split](options/05-split.png)
-
-Source: [05-split.fitd](options/05-split.fitd)
+- `fitd explain CODE` prints extended diagnostic information.
+- `fitd guide` prints concise language syntax and examples.
+- `fitd import INPUT` converts Graphviz DOT, Mermaid, or D2 input to `.fitd` source.
+- `fitd lsp` starts language server using standard input and output.

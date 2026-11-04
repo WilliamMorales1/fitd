@@ -1,29 +1,39 @@
-# Internals
+# Implementation notes
 
-The compiler is split into front end, layout, checking, and output code under `src/`.
+Source code is organized under `src/` by compiler stage and layout subsystem.
 
-## Pipeline
+## Compilation pipeline
 
-The pipeline is: include files, expand macros, lex, parse, analyze, plan, solve, polish, check, and emit. Diagnostics keep their original file and line through includes and macro expansion. The checker recomputes the final layout before any output is written.
+Compilation performs these stages:
 
-![From source to drawing](internals/01-pipeline.png)
+1. Resolve and splice `include` files.
+2. Expand macros and preserve source mappings.
+3. Tokenize source and parse statements.
+4. Resolve declarations and validate attribute types.
+5. Construct layout variables and constraints.
+6. Search candidate layouts and optimize preferences.
+7. Refine selected layout.
+8. Recompute geometric checks on final drawing.
+9. Emit requested output formats.
 
-Source: [01-pipeline.fitd](internals/01-pipeline.fitd)
+Include and macro expansion preserve original file and line information for diagnostics. Output is written only after parsing, semantic analysis, layout, and checking complete, unless `--force` is supplied.
 
-## Solver
+## Layout search
 
-The solver searches font sizes and tests the hard constraints at each size. Branch and bound minimizes unmet `prefer` weights. Several candidate layouts are polished and scored for readability. If no layout fits, QuickXplain reports a minimal conflicting set of `require` statements as E0110.
+The solver searches font sizes within configured bounds. At each size, it checks hard constraints and optimizes weighted `prefer` constraints. Branch-and-bound minimizes total unmet preference weight. A bounded search may stop before proving satisfiability or unsatisfiability; diagnostics distinguish budget exhaustion from proven conflict.
 
-References: Prosser 1993 (conflict-directed backjumping), Junker, AAAI 2004 (QuickXplain), Sugiyama, Tagawa, Toda 1981 (layered layout).
+Candidate layouts are refined and scored using readability criteria. Final geometry is passed to an independent checker, which recomputes node overlap, edge crossing, page clipping, and overflow checks.
 
-![How the solver picks a font](internals/02-solver.png)
+When hard constraints are unsatisfiable, QuickXplain extracts a minimal conflicting set for E0110 where search establishes the conflict. Static ordering contradictions may be detected before layout search.
 
-Source: [02-solver.fitd](internals/02-solver.fitd)
+## Algorithms and references
+
+- Prosser, P. *Hybrid Algorithms for the Constraint Satisfaction Problem*. Computational Intelligence 9(3), 1993. Conflict-directed backjumping.
+- Junker, U. *QuickXplain: Preferred Explanations and Relaxations for Over-Constrained Problems*. AAAI 2004. Minimal conflict extraction.
+- Sugiyama, K., Tagawa, S., and Toda, M. *Methods for Visual Understanding of Hierarchical System Structures*. IEEE Transactions on Systems, Man, and Cybernetics 11(2), 1981. Layered graph layout.
 
 ## Tests and benchmarks
 
-`cargo test --release` runs unit tests, end-to-end tests for examples and fixtures, a short fuzzer, and checks that committed images still match fresh builds. Set `FITD_FUZZ_SECS` to extend the fuzz run. `python3 bench/bench.py --check bench/baseline.tsv` detects solver regressions using deterministic check counts.
+`cargo test --release` runs unit tests, end-to-end tests, fixtures, a short fuzzer, and comparisons between committed documentation renders and fresh builds. Set `FITD_FUZZ_SECS` to change fuzzer duration.
 
-![Tests and performance](internals/03-tests.png)
-
-Source: [03-tests.fitd](internals/03-tests.fitd)
+`python3 bench/bench.py --check bench/baseline.tsv` checks deterministic solver-work counts against committed baseline. Benchmarks track checks rather than elapsed time to reduce machine-dependent variation.
