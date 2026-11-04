@@ -4,6 +4,8 @@ Source code is organized under `src/` by compiler stage and layout subsystem.
 
 ## Compilation pipeline
 
+![Compiler stages, source mapping, and error path](internals/01-pipeline.png)
+
 Compilation performs these stages:
 
 1. Resolve and splice `include` files.
@@ -19,6 +21,8 @@ Compilation performs these stages:
 Include and macro expansion preserve original file and line information for diagnostics. Output is written only after parsing, semantic analysis, layout, and checking complete, unless `--force` is supplied.
 
 ## Layout search
+
+![Font search, satisfiability probes, preference optimization, and polish](internals/02-solver.png)
 
 The solver searches font sizes within configured bounds. At each size, it checks hard constraints and optimizes weighted `prefer` constraints. Branch-and-bound minimizes total unmet preference weight. A bounded search may stop before proving satisfiability or unsatisfiability; diagnostics distinguish budget exhaustion from proven conflict.
 

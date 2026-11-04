@@ -152,6 +152,8 @@ node leaf "Leaf" .plant
 
 ### Constraints
 
+![Constraint relations and hard versus soft requirements](language/03-relations.png)
+
 `require RELATION` declares hard constraint. A failed hard constraint prevents normal output. Static contradictions may be reported before search; unsatisfiable constraint sets produce E0110 and a minimal conflicting set when established.
 
 `prefer RELATION [attributes]` declares soft constraint. `weight=N` sets relative preference weight. An unmet preference produces W0205 and does not by itself block output.
@@ -170,6 +172,8 @@ prefer output at right weight=2
 
 ### Macros
 
+![Macro directives, expressions, scope, and expansion limits](language/05-macros.png)
+
 Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, and `${expression}` interpolation. Directives use indentation for readability; block boundaries are marked by `end`. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
 
 ```fitd
@@ -179,6 +183,10 @@ end
 ```
 
 ## Semantic validation and diagnostics
+
+![Static contradictions, layout-search conflicts, and final drawing checks](language/07-checks.png)
+
+![Diagnostic code families and individual codes](language/08-diagnostics.png)
 
 Node identifiers must be declared with `node` before being referenced by edges, groups, or constraints. Node and style declarations must be unique. Styles must exist when referenced. Layouts, relation operators, positions, attributes, and attribute values are validated according to statement context.
 

@@ -43,6 +43,8 @@ fitd explain E0110
 
 Output format is selected from output filename extension. Multiple inputs with PDF output produce one page per input. Diagnostics are written to standard error. `--short` prints one line per diagnostic.
 
+![Compiler pipeline from source through layout and checking to output](docs/pipeline.png)
+
 ## Language
 
 `.fitd` files contain one statement per line. Node declarations and edges form basic diagrams; optional statements configure page, typography, themes, groups, layouts, and constraints. The [language reference](docs/language.md) specifies grammar and semantics.
@@ -60,7 +62,7 @@ require input left-of check gap=2em
 
 - [Language reference](docs/language.md): grammar, statements, macros, semantics, diagnostics.
 - [Options](docs/options.md): command-line options, themes, watch mode, split output.
-- [Internals](docs/internals.md): compiler pipeline, solver, testing, benchmarks.
+- [Internals](docs/internals.md): solver and implementation details, testing, benchmarks.
 - [Examples](examples/): source files demonstrating language features.
 - [Agent skill](skills/fitd/SKILL.md): instructions for generating diagrams with fitd.
 

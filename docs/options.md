@@ -58,13 +58,19 @@ Node, edge, and group attributes include `color`, `fill`, and `text` where suppo
 
 ## Stable layouts
 
+![How stable layouts reuse locked positions and fonts](options/03-stable.png)
+
 `--stable PATH` reads prior font, page, and node-center positions and writes updated values to lock file. Search prefers locked positions and penalizes movement. A lock created for a different page size is ignored with a diagnostic.
 
 ## Watch mode
 
+![Draft and full rebuild sequence in watch mode](options/04-watch.png)
+
 `--watch` requires one file input. Each change starts a draft build. A full build starts after input remains unchanged for 1.5 seconds. A new change cancels active full build. Output replacement is atomic.
 
 ## Split command
+
+![Split output, shared settings, page branches, and cross-page links](options/05-split.png)
 
 `fitd split INPUT [-o DIRECTORY]` writes shared settings, an overview source file, and one source file per top-level branch. Generated files include shared settings with `include`. Edges crossing page boundaries appear on both pages with endpoint stubs. Constraints spanning pages are omitted and reported as warnings. Run split again from original input to regenerate files.
 
