@@ -1,8 +1,3 @@
-//! Randomized robustness test of the front end: mutated sources must never panic the lexer,
-//! parser, semantic analysis, tree building, or diagnostic rendering.
-//!
-//! `cargo test --release fuzz` runs it for 2 seconds; set `FITD_FUZZ_SECS` to run longer.
-//! A failure prints the seed and saves the input, so it can be replayed.
 
 use crate::{diag, parse, sema, tree};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -20,7 +15,6 @@ const SEEDS: [&str; 10] = [
     include_str!("../tests/fixtures/complex_constraints.fitd"),
 ];
 
-/// Tokens and fragments worth splicing in: keywords, operators, units, and odd values.
 const WORDS: &[&str] = &[
     "node",
     "title",
@@ -151,7 +145,6 @@ impl Rng {
     }
 }
 
-/// mutate applies a few random edits to a seed source, keeping it valid UTF-8.
 fn mutate(seed: u64) -> String {
     let mut r = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
     let mut s: Vec<char> = SEEDS[r.below(SEEDS.len())].chars().collect();
@@ -167,7 +160,6 @@ fn mutate(seed: u64) -> String {
                 s.splice(at..at, w);
             }
             2 if !s.is_empty() => {
-                // Copy a random slice elsewhere: duplicate declarations and constraints.
                 let from = r.below(s.len());
                 let piece: Vec<char> = s[from..(from + r.below(80)).min(s.len())].to_vec();
                 s.splice(at..at, piece);
@@ -192,7 +184,6 @@ fn fuzz_front_end() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(2);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
-    // Half the cores, so a long run leaves the machine usable.
     let threads = (std::thread::available_parallelism().map_or(2, |n| n.get()) / 2).max(1) as u64;
     let runs: u64 = std::thread::scope(|s| {
         let handles: Vec<_> = (0..threads)

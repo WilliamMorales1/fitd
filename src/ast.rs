@@ -1,4 +1,3 @@
-//! Syntax tree. Every name and value keeps its span so later passes can point at it.
 
 use crate::diag::Span;
 
@@ -12,7 +11,6 @@ pub struct Name {
 pub enum Value {
     Name(Name),
     Str(String, Span),
-    /// Unparsed number with its unit, such as `7pt` or `2296x1524pt`; sema gives it a type.
     Num(String, Span),
     Color(String, Span),
     Range(Box<Value>, Box<Value>),
@@ -36,12 +34,8 @@ pub struct Attr {
 
 #[derive(Clone, Debug)]
 pub enum Rel {
-    /// `a left-of b`, `a near b`, and the other two-node relations; `a left-of b left-of c`
-    /// chains them, so `ops[i]` relates `nodes[i]` to `nodes[i + 1]`.
     Chain { nodes: Vec<Name>, ops: Vec<Name> },
-    /// `align top(a, b, c)`.
     Align { side: Name, items: Vec<Name> },
-    /// `a at top-left`.
     At { a: Name, place: Name },
 }
 
@@ -53,7 +47,6 @@ pub enum StmtKind {
         kind: Name,
         attrs: Vec<Attr>,
     },
-    /// `page a1 portrait margin=24pt`: the size, then flags, then attributes.
     Page {
         size: Value,
         flags: Vec<Name>,
@@ -67,7 +60,6 @@ pub enum StmtKind {
         name: Name,
         attrs: Vec<Attr>,
     },
-    /// `theme dark background=#000`: an optional preset, then overrides.
     Theme {
         preset: Option<Name>,
         attrs: Vec<Attr>,
@@ -88,7 +80,6 @@ pub enum StmtKind {
         classes: Vec<Name>,
         attrs: Vec<Attr>,
     },
-    /// `group "Front end" lex, parse, sema color=#1565C0`.
     Group {
         title: Option<String>,
         items: Vec<Name>,
@@ -99,8 +90,6 @@ pub enum StmtKind {
         rel: Rel,
         attrs: Vec<Attr>,
     },
-    /// `include "parts/cells.fitd"`; spliced in before parsing (`include::expand`), so later
-    /// passes skip it.
     Include(String),
 }
 

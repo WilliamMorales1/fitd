@@ -1,5 +1,3 @@
-//! Semantic analysis: resolves names, applies styles, types attribute values, and rejects
-//! constraint sets that contradict each other before any search runs.
 
 use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
@@ -12,7 +10,6 @@ use std::collections::HashMap;
 
 const MM: f64 = 72.0 / 25.4;
 
-/// paper returns a named ISO size in points, landscape.
 pub fn paper(name: &str) -> Option<(f64, f64)> {
     let mm = match name.to_ascii_lowercase().as_str() {
         "a0" => (1189.0, 841.0),
@@ -36,7 +33,6 @@ fn unit(u: &str) -> Option<Length> {
     })
 }
 
-/// length parses `12pt`, `5mm`, or `2em`; `bare` is the unit assumed when none is written.
 pub fn length(s: &str, bare: Option<&str>) -> Result<Length, String> {
     let cut = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
     let x: f64 = s[..cut]
@@ -53,7 +49,6 @@ pub fn length(s: &str, bare: Option<&str>) -> Result<Length, String> {
     }
 }
 
-/// page_size parses a paper name or `WxH` with one trailing unit, such as `594x420mm`.
 pub fn page_size(s: &str, bare: Option<&str>) -> Result<(f64, f64), String> {
     if let Some(p) = paper(s) {
         return Ok(p);
@@ -107,7 +102,6 @@ struct Sema {
     diags: Vec<Diag>,
     ids: HashMap<String, usize>,
     nodes: Vec<Node>,
-    /// Statement span of each node's declaration, for "first defined here" labels.
     decl: Vec<Span>,
 }
 
@@ -161,7 +155,6 @@ impl Sema {
     }
 }
 
-/// color reads a `#RGB` or `#RRGGBB` value, reporting anything else.
 fn color(v: &Value, diags: &mut Vec<Diag>) -> Option<String> {
     match v {
         Value::Color(c, _) | Value::Str(c, _) if theme::is_color(c) => Some(c.clone()),
@@ -186,7 +179,6 @@ struct Look {
     shape: Option<Shape>,
 }
 
-/// look applies `color`, `fill`, `text`, and `shape` attributes to a node or style.
 fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
     for a in attrs {
         match (a.key.text.as_str(), &a.value) {
@@ -209,7 +201,6 @@ fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
 
 type Styles = HashMap<String, (Span, Vec<Attr>, bool)>;
 
-/// apply_styles applies `.style` classes in order, marking each style used.
 fn apply_styles(s: &mut Sema, styles: &mut Styles, classes: &[Name], l: &mut Look) {
     for c in classes {
         match styles.get_mut(&c.text) {
@@ -265,7 +256,6 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     };
     let mut styles: Styles = HashMap::new();
 
-    // Pass 1: declarations, so edges and constraints may name nodes declared further down.
     let mut last_node = None;
     for st in stmts {
         match &st.kind {
@@ -317,11 +307,9 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
         }
     }
 
-    // Pass 2: everything that refers to a declaration.
     let mut set = Settings::default();
     let (mut title, mut root, mut edges, mut constraints) = (None, None, Vec::new(), Vec::new());
     let mut seen_setting: HashMap<&str, Span> = HashMap::new();
-    // Each group's constraint index and the spans of its listed members.
     let mut grouped: Vec<(usize, Vec<Span>)> = Vec::new();
     for st in stmts {
         let key = match &st.kind {
@@ -478,7 +466,6 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 (n.color, n.fill, n.text, n.shape) = (l.color, l.fill, l.text, l.shape);
             }
             StmtKind::Style { attrs, .. } => {
-                // Checked once here; each use re-applies them silently.
                 look(attrs, &mut Look::default(), &mut s.diags);
             }
             StmtKind::Theme { preset, attrs } => {
@@ -504,7 +491,6 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 } else {
                     EdgeKind::Tree
                 };
-                // An edge has a stroke only, so it takes just the color of its styles.
                 let mut l = Look::default();
                 apply_styles(&mut s, &mut styles, classes, &mut l);
                 for a in attrs {
@@ -603,8 +589,6 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     (g, s.diags)
 }
 
-/// nest_groups drops each group that shares nodes with an earlier one without one holding the
-/// other (E0010), then gives every group copies of the groups directly inside it.
 fn nest_groups(
     constraints: &mut Vec<Constraint>,
     grouped: &[(usize, Vec<Span>)],
@@ -641,7 +625,6 @@ fn nest_groups(
         .map(|g| g.0)
         .filter(|ci| !kept.contains(ci))
         .collect();
-    // Smaller groups first, so each group's nested copies are complete before its parent takes them.
     kept.sort_by_key(|&ci| items(&constraints[ci]).len());
     for (k, &ci) in kept.iter().enumerate() {
         let mine = items(&constraints[ci]);
@@ -765,8 +748,6 @@ fn constraint(s: &mut Sema, hard: bool, rel: &Rel, attrs: &[Attr], span: Span) -
                         continue;
                     }
                 };
-                // A chain step gets its relation word as span: steps share nodes, so spans
-                // covering `a left-of b` would overlap and stack on separate rows.
                 let link = if ops.len() == 1 { span } else { op.span };
                 rels.push((r, link));
             }
@@ -811,7 +792,7 @@ fn constraint(s: &mut Sema, hard: bool, rel: &Rel, attrs: &[Attr], span: Span) -
     };
     let mut out = vec![];
     for (rel, span) in rels {
-        let nodes = rel.nodes();
+        let nodes: Vec<_> = rel.nodes().collect();
         if let Some(dup) = nodes
             .iter()
             .enumerate()
@@ -836,11 +817,6 @@ fn constraint(s: &mut Sema, hard: bool, rel: &Rel, attrs: &[Attr], span: Span) -
     out
 }
 
-/// contradictions finds hard ordering constraints that no layout can meet, without search.
-///
-/// Alignments merge nodes into classes per axis (union-find). An ordering between two nodes
-/// of one class, or a cycle of orderings between classes, is a contradiction: a strict order
-/// with a positive gap cannot loop back, and aligned boxes cannot sit strictly apart.
 fn contradictions(cs: &[Constraint]) -> Vec<Diag> {
     let mut out = Vec::new();
     for vertical in [false, true] {
@@ -849,7 +825,6 @@ fn contradictions(cs: &[Constraint]) -> Vec<Diag> {
             .flat_map(|c| c.rel.nodes())
             .max()
             .map_or(0, |m| m + 1);
-        // Alignment graph: node pairs joined by an alignment, labeled by constraint index.
         let mut same: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
         let mut order: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
         for (ci, c) in cs.iter().enumerate().filter(|(_, c)| c.hard) {
@@ -888,13 +863,8 @@ fn contradictions(cs: &[Constraint]) -> Vec<Diag> {
     out
 }
 
-/// find_cycle searches the graph whose vertices are alignment classes and whose arcs are
-/// orderings. It returns the constraint indices along one cycle, including the alignments
-/// that connect consecutive arcs.
 fn find_cycle(same: &[Vec<(usize, usize)>], order: &[Vec<(usize, usize)>]) -> Option<Vec<usize>> {
     let n = same.len();
-    // A state is a node plus whether an ordering arc has been used yet; a cycle must use one.
-    // BFS from each start keeps the reported cycle short.
     for start in 0..n {
         let mut prev: HashMap<(usize, bool), ((usize, bool), usize)> = HashMap::new();
         let mut q = std::collections::VecDeque::from([(start, false)]);

@@ -13,6 +13,7 @@ default = ["embedded-fonts"]
 embedded-fonts = []
 
 [dependencies]
+thiserror = "1.0"
 krilla = { version = "0.8.2", default-features = false }
 krilla-svg = "0.8.1"
 # krilla-svg reads trees from this usvg, older than the one resvg uses for PNG.

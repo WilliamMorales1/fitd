@@ -1,8 +1,6 @@
-//! Annealing on readability once every hard constraint holds.
 
 use super::*;
 
-/// Readable holds what the readability score needs that stays fixed while nodes move.
 pub struct Readable {
     pub tree: Vec<(usize, usize)>,
     pub links: Vec<(usize, usize)>,
@@ -21,7 +19,6 @@ impl Readable {
                 .map(|e| (e.a, e.b))
                 .collect()
         };
-        // Branch grouping only means something when branches own directions, as in radial.
         let branch = (0..t.parent.len())
             .map(|v| {
                 if kind == LayoutKind::Radial {
@@ -62,19 +59,12 @@ impl Readable {
     }
 }
 
-/// Moves tried by `polish`, and how far one move may go, in ems.
 pub(super) const POLISH_MOVES: usize = 150_000;
 
 pub(super) const POLISH_REACH: f64 = 10.0;
 
-/// Readability penalty per unit of unmet `prefer` weight; high, since a `prefer` is the
-/// author's stated intent and the aesthetics are only general guidance.
 pub(super) const SOFT_PENALTY: f64 = 1000.0;
 
-/// polish moves one node at a time to a nearby candidate spot, keeping every hard constraint,
-/// and anneals on readability plus unmet `prefer` weight. The walk is seeded, so the result is
-/// deterministic. With an anchor, a node pays for leaving its locked spot. Returns the final
-/// soft cost.
 pub(super) fn polish(
     sc: &Scene,
     ctx: &Readable,
@@ -116,7 +106,6 @@ pub(super) fn polish(
     if movable.is_empty() {
         return soft_cost;
     }
-    // Tree neighbors of each node's index, so a move can snap onto a neighbor's center line.
     let mut idx = vec![
         usize::MAX;
         ctx.tree
@@ -146,10 +135,7 @@ pub(super) fn polish(
         rng ^= rng << 17;
         (rng % k as u64) as usize
     };
-    // Temperature falls geometrically from about one em of edge to almost nothing.
     let (t0, t1): (f64, f64) = (2.0, 0.01);
-    // Spots within reach of each node's current spot; a node keeps its spot through most
-    // moves, so the grid query is cached until it moves.
     let mut near: Vec<(u32, Vec<u32>)> = vec![(csp::UNSET, Vec::new()); nv];
     for k in 0..moves {
         let temp = t0 * (t1 / t0).powf(k as f64 / moves as f64);
@@ -173,7 +159,6 @@ pub(super) fn polish(
         if let (Some(down), false) = (ctx.flow, nbr[i].is_empty())
             && next(3) == 0
         {
-            // Snap onto the center line of a random tree neighbor: random picks rarely land exactly.
             let w = nbr[i][next(nbr[i].len())];
             let c = sc.at[w][val[w] as usize];
             let off = |a: u32| {

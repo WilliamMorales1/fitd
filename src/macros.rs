@@ -1,32 +1,21 @@
-//! Macros: `for`, `if`, `def`, `use`, and `${expr}` expand to plain statements after
-//! `include` and before parsing. Every input line appears once in the expanded text as its raw
-//! copy, blanked for the parser when it is a directive, so diagnostics can point at it; each
-//! generated line maps back to the template line it came from.
 
 use crate::diag::{Diag, Seg, Source, Span};
 use std::collections::HashMap;
 
-/// DEFAULT_BUDGET caps expansion steps (directives run plus lines generated).
 pub const DEFAULT_BUDGET: u64 = 100_000;
 const MAX_DEPTH: usize = 200;
 
-/// Loaded is a file after include splicing and macro expansion.
 pub struct Loaded {
-    /// src is what diagnostics render against: raw directive lines stay visible here.
     pub src: Source,
-    /// parse is `src.text` with directive lines blanked, byte for byte, so spans agree.
     pub parse: String,
     pub diags: Vec<Diag>,
 }
 
-/// load splices includes into `text`, read from `path`, then expands its macros within
-/// `budget` steps.
 pub fn load(path: &str, text: &str, budget: u64) -> Loaded {
     let (a, inc) = crate::include::expand(path, text);
     expand(a, inc, budget)
 }
 
-/// expand_text expands macros in `text` with no include splicing.
 #[cfg(test)]
 pub fn expand_text(path: &str, text: &str, budget: u64) -> Loaded {
     expand(Source::new(path, text), Vec::new(), budget)
@@ -287,7 +276,6 @@ impl P {
         }
     }
 
-    /// args reads a comma list up to `)`, after the `(` is consumed.
     fn args(&mut self) -> Result<Vec<Expr>, String> {
         let mut out = Vec::new();
         if self.op(")") {
@@ -328,7 +316,6 @@ enum Piece {
     Expr(Expr),
 }
 
-/// pieces splits a line at each `${expr}`; `$${` is a literal `${`. None means no interpolation.
 fn pieces(line: &str) -> Result<Option<Vec<Piece>>, String> {
     if !line.contains("${") {
         return Ok(None);
@@ -369,8 +356,6 @@ fn pieces(line: &str) -> Result<Option<Vec<Piece>>, String> {
     Ok(Some(out))
 }
 
-/// comment_start finds where a statement line's comment begins, as the lexer does: `#` outside
-/// strings and `${...}`, and not right after `=`, where it starts a color.
 fn comment_start(line: &str) -> usize {
     let (mut in_str, mut depth, mut prev) = (false, 0, ' ');
     let mut it = line.char_indices().peekable();
@@ -401,21 +386,16 @@ enum Iter {
 
 #[derive(Clone, Debug)]
 enum Kind {
-    /// A line copied as is: a statement, comment, or blank.
     Plain,
     Text(Vec<Piece>),
-    /// `for x in ...` or `for i, x in ...`; the last name takes the items, the first counts from 1.
     For(Vec<String>, Iter, Vec<Item>),
-    /// Arms in order; a `None` condition is `else`.
     If(Vec<(Option<Expr>, Vec<Item>)>),
     Use(String, Vec<Expr>),
-    /// A `def` block, or a line that failed to parse; neither emits anything.
     Skip,
 }
 
 #[derive(Clone, Debug)]
 struct Item {
-    /// lo and hi are the first and last input lines (0-based) the item spans.
     lo: usize,
     hi: usize,
     kind: Kind,
@@ -447,7 +427,6 @@ fn is_kw_line(t: &str) -> Option<(&str, &str)> {
     }
     let rest = &t[w.len()..];
     let r = rest.trim_start();
-    // `end -> x` is an edge from a node named `end`; `end-x` is a hyphenated name.
     if rest.starts_with('-') || r.starts_with("->") || r.starts_with("--") || r.starts_with("..") {
         return None;
     }
@@ -460,7 +439,6 @@ fn classify(line: &str) -> Result<Line, String> {
         return Ok(Line::Item(Kind::Plain));
     }
     let Some((w, rest)) = is_kw_line(t) else {
-        // A trailing comment is copied as is, so `${` in it is just text.
         let cut = if t.starts_with('|') {
             line.len()
         } else {
@@ -561,7 +539,6 @@ fn for_line(rest: &str) -> Result<Line, String> {
     Ok(Line::For(var, Iter::List(list(items)?)))
 }
 
-/// list reads `for` items: words (hyphens allowed), numbers, or quoted strings.
 fn list(s: &str) -> Result<Vec<Val>, String> {
     let mut out = Vec::new();
     let cs: Vec<char> = s.chars().collect();
@@ -609,7 +586,6 @@ fn list(s: &str) -> Result<Vec<Val>, String> {
     Ok(out)
 }
 
-/// Builder turns input lines into items; errors carry the input line they belong to.
 struct Builder<'a> {
     lines: &'a [&'a str],
     i: usize,
@@ -721,15 +697,12 @@ impl Builder<'_> {
     }
 }
 
-/// Expander runs items, writing the expanded text.
 struct Expander<'a> {
     lines: &'a [&'a str],
     defs: &'a HashMap<String, Def>,
     text: String,
     parse: String,
-    /// origin is the input line (0-based) of each output line.
     origin: Vec<usize>,
-    /// raw is where each input line's raw copy starts in the output.
     raw: Vec<usize>,
     frames: Vec<HashMap<String, Val>>,
     calls: Vec<(String, usize)>,
@@ -936,7 +909,6 @@ impl Expander<'_> {
                 self.raw(item);
             }
             if self.item(item, top).is_err() && self.out_of_budget {
-                // Later lines still need raw copies, so diagnostics can point at them.
                 if top {
                     items[k + 1..].iter().for_each(|it| self.raw(it));
                 }
@@ -1067,7 +1039,6 @@ impl Expander<'_> {
     }
 }
 
-/// at_marker stands for an input line in a note until `expand` knows its file and line.
 fn at_marker(line: usize) -> String {
     format!("\u{1}{line}\u{1}")
 }
@@ -1082,11 +1053,8 @@ fn cmp(op: &str, o: std::cmp::Ordering) -> bool {
     }
 }
 
-/// expand runs the macros of `a`, the include-spliced source. `inc` holds the include
-/// diagnostics, whose spans point into `a`.
 fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
     let lines: Vec<&str> = a.text.split('\n').collect();
-    // The last piece after a final newline is empty, not a line.
     let lines = if a.text.ends_with('\n') {
         &lines[..lines.len() - 1]
     } else {
@@ -1174,7 +1142,6 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
     }
     let mut seen = std::collections::HashSet::new();
     for (line, mut d) in b.errs.into_iter().chain(x.errs) {
-        // A template line fails the same way at every call; report it once.
         if !seen.insert((line, d.msg.clone())) {
             continue;
         }
@@ -1252,7 +1219,6 @@ mod tests {
                 "group s1, s2, s3"
             ]
         );
-        // Generated lines map back to the template line they came from.
         let k = l
             .src
             .text

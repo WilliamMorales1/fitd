@@ -1,5 +1,3 @@
-//! Colors the emitters draw with. A preset supplies every value; a `theme` statement may
-//! override any of them.
 
 pub const PRESETS: &[&str] = &["light", "dark", "mono"];
 
@@ -7,21 +5,14 @@ pub const PRESETS: &[&str] = &["light", "dark", "mono"];
 pub struct Theme {
     pub background: String,
     pub text: String,
-    /// Directed arrows of layered diagrams.
     pub edge: String,
-    /// Dashed cross links.
     pub link: String,
-    /// Edge label text.
     pub label: String,
-    /// Fill of the radial root circle.
     pub root: String,
-    /// Branch colors, assigned to the root's children in order.
     pub palette: Vec<String>,
-    /// Opacity of a box's accent-color tint over the background.
     pub tint: f64,
 }
 
-/// Overrides holds the theme values written in the file; unset ones keep the preset's.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Overrides {
     pub background: Option<String>,
@@ -122,13 +113,11 @@ impl Theme {
     }
 }
 
-/// is_color accepts `#RGB` and `#RRGGBB`.
 pub fn is_color(s: &str) -> bool {
     s.strip_prefix('#')
         .is_some_and(|h| (h.len() == 3 || h.len() == 6) && h.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
-/// rgb expands a color accepted by `is_color` to six uppercase hex digits.
 pub fn rgb(c: &str) -> String {
     let h = c.trim_start_matches('#');
     let h = if h.len() == 3 {
@@ -152,7 +141,6 @@ fn luminance(c: &str) -> f64 {
     0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4)
 }
 
-/// on picks near-black or white text, whichever contrasts more with `fill` (WCAG ratio).
 pub fn on(fill: &str) -> &'static str {
     let l = luminance(fill);
     if (l + 0.05) / 0.05 >= 1.05 / (l + 0.05) {

@@ -9,13 +9,11 @@ pub struct Link {
     pub label: Option<String>,
 }
 
-/// Tree is the generality hierarchy: depth 0 is the most general idea.
 pub struct Tree {
     pub root: usize,
     pub parent: Vec<Option<usize>>,
     pub children: Vec<Vec<usize>>,
     pub depth: Vec<usize>,
-    /// BFS order; every parent precedes its children.
     pub order: Vec<usize>,
     pub links: Vec<Link>,
     pub notes: Vec<Diag>,
@@ -30,7 +28,6 @@ impl Tree {
         }
     }
 
-    /// branch returns the depth-1 ancestor that decides a node's color.
     pub fn branch(&self, mut v: usize) -> Option<usize> {
         while let Some(p) = self.parent[v] {
             if p == self.root {
@@ -57,7 +54,6 @@ fn bfs_dist(adj: &[Vec<usize>], s: usize) -> Vec<Option<usize>> {
     d
 }
 
-/// center picks the node of minimum eccentricity (ties: highest degree), the most "central" idea.
 fn center(adj: &[Vec<usize>]) -> usize {
     let score = |v: usize| {
         let d = bfs_dist(adj, v);

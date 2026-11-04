@@ -14,7 +14,6 @@ impl Script {
         if self == Script::Normal { 1.0 } else { 0.7 }
     }
 
-    /// shift is the baseline offset in ems, positive upward.
     pub fn shift(self) -> f64 {
         match self {
             Script::Normal => 0.0,
@@ -28,7 +27,6 @@ pub struct Font {
     pub family: String,
     pub bold: bool,
     pub path: String,
-    /// Face index inside a font collection (`.ttc`).
     pub index: u32,
     pub data: Vec<u8>,
 }
@@ -36,24 +34,18 @@ pub struct Font {
 #[derive(Clone, Debug)]
 pub struct Run {
     pub text: String,
-    /// Index into the regular or bold fallback chain.
     pub font: usize,
     pub script: Script,
 }
 
-/// Fonts measures text with real advance widths so layout never needs a TeX round trip.
 pub struct Fonts {
     pub regular: Vec<Font>,
     pub bold: Vec<Font>,
-    // Mutexes, not RefCells, so layouts at several fonts can be measured in parallel.
     cache: Mutex<HashMap<(bool, char), (f64, usize)>>,
     pub missing: Mutex<BTreeSet<char>>,
-    /// Things worth telling the user about how fonts were chosen.
     pub notes: Vec<String>,
 }
 
-/// EMBEDDED is the default font set, compiled in so the layout does not depend on which fonts
-/// (or whether fontconfig) are installed.
 #[cfg(feature = "embedded-fonts")]
 const EMBEDDED: [(&str, &str, &[u8]); 4] = [
     (
@@ -66,7 +58,6 @@ const EMBEDDED: [(&str, &str, &[u8]); 4] = [
         "DejaVuSerif-Bold.ttf",
         include_bytes!("../fonts/DejaVuSerif-Bold.ttf"),
     ),
-    // Bold symbols the serif lacks (such as ≇) read better in bold sans than in regular math.
     (
         "DejaVu Sans",
         "DejaVuSans-Bold.ttf",
@@ -79,7 +70,6 @@ const EMBEDDED: [(&str, &str, &[u8]); 4] = [
     ),
 ];
 
-/// fallbacks is the chain behind any named family, as indices into EMBEDDED.
 #[cfg(feature = "embedded-fonts")]
 fn fallbacks(bold: bool) -> Vec<Font> {
     let chain: &[usize] = if bold { &[1, 2, 3] } else { &[0, 3] };
@@ -110,7 +100,6 @@ fn fontconfig() -> bool {
         .is_ok_and(|o| o.status.success())
 }
 
-/// fnv1a hashes font files for the SVG fingerprint; stable across builds and platforms.
 fn fnv1a(data: &[u8]) -> u64 {
     data.iter().fold(0xcbf29ce484222325, |h, &b| {
         (h ^ b as u64).wrapping_mul(0x100000001b3)
@@ -160,7 +149,6 @@ fn locate(pattern: &str) -> Option<Font> {
 
 #[cfg(not(feature = "embedded-fonts"))]
 fn chain(patterns: &[&str]) -> Vec<Font> {
-    // Each lookup spawns fc-match, so they run at once.
     let found: Vec<Option<Font>> = std::thread::scope(|s| {
         let handles: Vec<_> = patterns
             .iter()
@@ -180,7 +168,6 @@ fn chain(patterns: &[&str]) -> Vec<Font> {
     out
 }
 
-/// spans splits `^{...}` and `_{...}` markup from plain text.
 pub fn spans(s: &str) -> Vec<(Script, String)> {
     let cs: Vec<char> = s.chars().collect();
     let (mut out, mut cur, mut i) = (Vec::new(), String::new(), 0);
@@ -217,7 +204,6 @@ pub fn spans(s: &str) -> Vec<(Script, String)> {
 }
 
 impl Fonts {
-    /// load puts `family`, when given and installed, ahead of the default fallback chain.
     pub fn load(family: Option<&str>) -> Result<Fonts, String> {
         let mut fonts = Fonts {
             regular: Vec::new(),
@@ -231,7 +217,6 @@ impl Fonts {
                 fonts.notes.push(format!("font family `{fam}` ignored: fc-match is not installed, so only the built-in DejaVu Serif is available"));
             }
             Some(fam) => {
-                // fc-match always answers, so a substitute for a missing family must be rejected here.
                 let wanted = |f: &Font| f.family.eq_ignore_ascii_case(fam);
                 match locate(&format!("{fam}:weight=regular")).filter(wanted) {
                     Some(f) => fonts.regular.push(f),
@@ -264,8 +249,6 @@ impl Fonts {
         Ok(fonts)
     }
 
-    /// fingerprint names each font file in use with a hash of its bytes, so a layout difference
-    /// between machines can be traced to fonts.
     pub fn fingerprint(&self) -> String {
         let mut seen: Vec<(u64, u32)> = Vec::new();
         let mut out = Vec::new();
@@ -309,7 +292,6 @@ impl Fonts {
         v
     }
 
-    /// runs splits text into same-font, same-script pieces for emitters.
     pub fn runs(&self, text: &str, bold: bool) -> Vec<Run> {
         let mut out: Vec<Run> = Vec::new();
         for (script, s) in spans(text) {

@@ -1,21 +1,3 @@
-//! Readability score of a finished layout, from the graph-drawing literature.
-//!
-//! Each term is a penalty (lower is better). Lengths are in a fixed unit, the legibility
-//! floor's em, not the body font's, so layouts at different fonts compare fairly. Terms, most
-//! important first:
-//!
-//! - Crossings (Purchase 1997: the aesthetic with the largest effect on understanding): tree
-//!   edges crossing each other (only possible in layered layouts), cross links over edges,
-//!   and links tunneling through unrelated boxes (Dunne and Shneiderman), at the link's best
-//!   bend.
-//! - Proximity (Gestalt; stress-based layout): related nodes sit close. Tree edges and cross
-//!   links are charged their gap, squared, which also evens out edge lengths (Huang and Eades).
-//! - Grouping: a node should be nearer its own branch than any other branch, or the eye
-//!   groups it with the wrong one.
-//! - Angular resolution (Dunne and Shneiderman): edges at a node do not fan out too narrowly.
-//! - Alignment (Purchase, Pilcher, and Plimmer 2012): in a flowchart, edges run straight
-//!   along the flow, so nodes line up on a grid.
-//! - Spread: ink is evenly distributed over the page, without large holes or dense knots.
 
 use crate::geom::{P, Rect, segment_hits_rect, segments_cross};
 
@@ -23,12 +5,9 @@ pub struct Input<'a> {
     pub rects: &'a [Rect],
     pub tree: &'a [(usize, usize)],
     pub links: &'a [(usize, usize)],
-    /// Branch of each node (the root's child it descends from), if the layout has branches.
     pub branch: &'a [Option<usize>],
-    /// Flow axis of a layered layout (true: down), whose edges should run straight along it.
     pub flow: Option<bool>,
     pub page: Rect,
-    /// Length unit in points, the same for every layout being compared.
     pub unit: f64,
 }
 
@@ -42,7 +21,6 @@ pub struct Score {
     pub spread: f64,
 }
 
-/// Weights per term: a crossing costs as much as a few extra ems of every edge.
 const W_CROSS: f64 = 40.0;
 const W_PROX: f64 = 1.0;
 const W_LINK: f64 = 0.3;
@@ -51,7 +29,6 @@ const W_ANGLE: f64 = 20.0;
 const W_ALIGN: f64 = 300.0;
 const W_SPREAD: f64 = 4000.0;
 
-/// Cells across the page's long side for the spread term.
 const CELLS: usize = 8;
 
 impl Score {
@@ -60,7 +37,6 @@ impl Score {
     }
 }
 
-/// gap is the empty distance between two boxes, 0 when they touch or overlap.
 pub fn gap(a: &Rect, b: &Rect) -> f64 {
     let dx = (a.x0 - b.x1).max(b.x0 - a.x1).max(0.0);
     let dy = (a.y0 - b.y1).max(b.y0 - a.y1).max(0.0);
@@ -71,10 +47,8 @@ fn center(r: &Rect) -> P {
     ((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0)
 }
 
-/// Bends tried for a link, a subset of the router's.
 const BENDS: [f64; 5] = [0.0, 0.22, -0.22, 0.4, -0.4];
 
-/// curve samples a link bent by `bow`: the router's curve (see `layout::curve`), coarsely.
 fn curve(c: &[P], a: usize, b: usize, bow: f64) -> [P; 5] {
     let (pa, pb) = (c[a], c[b]);
     let m = ((pa.0 + pb.0) / 2.0, (pa.1 + pb.1) / 2.0);
@@ -111,10 +85,7 @@ fn bbox(pts: &[P]) -> Rect {
     )
 }
 
-/// rails are the two routes of a link in a flowchart around every box between its ends, one
-/// on each side, as the router's detours would take: out across the flow, along it, and back.
 fn rails(x: &Input, c: &[P], a: usize, b: usize, down: bool) -> [[P; 4]; 2] {
-    // (along, across) coordinates and back.
     let split = |p: P| if down { (p.1, p.0) } else { (p.0, p.1) };
     let join = |m: f64, k: f64| if down { (k, m) } else { (m, k) };
     let (ma, mb) = (split(c[a]).0, split(c[b]).0);
@@ -139,14 +110,11 @@ fn rails(x: &Input, c: &[P], a: usize, b: usize, down: bool) -> [[P; 4]; 2] {
     [side(k0 - x.unit), side(k1 + x.unit)]
 }
 
-/// link_hits counts what a link bent by `bow` crosses: edges, plus unrelated boxes it tunnels
-/// through, which hide where it goes.
 fn link_hits(x: &Input, c: &[P], a: usize, b: usize, bow: f64) -> usize {
     path_hits(x, c, a, b, &curve(c, a, b, bow))
 }
 
 fn path_hits(x: &Input, c: &[P], a: usize, b: usize, pts: &[P]) -> usize {
-    // Most edges and boxes are nowhere near the path; its bounding box rules them out.
     let bb = bbox(pts);
     let mut hits = 0;
     for &(p, q) in x.tree.iter().chain(x.links) {
@@ -181,21 +149,16 @@ fn score(x: &Input) -> Score {
     Incremental::new(x).score()
 }
 
-/// Terms is every per-item piece of the score, so a move recomputes only the items it touches.
 #[derive(Default)]
 struct Terms {
     rects: Vec<Rect>,
     c: Vec<P>,
-    /// Whether tree edges k < l cross, at k * E + l, and how many pairs do.
     cross: Vec<bool>,
     ncross: usize,
-    /// Per link, what it crosses at its best bend, and a box around all its bends.
     link_hits: Vec<usize>,
     link_bb: Vec<Rect>,
     prox: Vec<f64>,
     link_prox: Vec<f64>,
-    /// Per tree edge (p, v): v's gap to p, and its smallest gap to another branch with the node
-    /// that has it.
     own: Vec<f64>,
     other: Vec<(f64, usize)>,
     angles: Vec<f64>,
@@ -221,7 +184,6 @@ impl Terms {
     }
 }
 
-/// Incremental keeps the score of a layout whose boxes move one at a time.
 pub struct Incremental<'a> {
     tree: &'a [(usize, usize)],
     links: &'a [(usize, usize)],
@@ -229,7 +191,6 @@ pub struct Incremental<'a> {
     flow: Option<bool>,
     page: Rect,
     unit: f64,
-    /// Tree edges, links, and tree neighbors at each node.
     edges_at: Vec<Vec<usize>>,
     links_at: Vec<Vec<usize>>,
     nbrs: Vec<Vec<usize>>,
@@ -397,7 +358,6 @@ impl<'a> Incremental<'a> {
             page: self.page,
             unit: self.unit,
         };
-        // The router later picks a bend, or in a flowchart a detour; charge the link its best.
         t.link_hits[j] = BENDS
             .iter()
             .map(|&bow| link_hits(&x, &t.c, a, b, bow))
@@ -416,7 +376,6 @@ impl<'a> Incremental<'a> {
         t.link_bb[j] = bbox(&all);
     }
 
-    /// cells is the spread grid: columns, rows, and cell size.
     fn cells(&self) -> (usize, usize, f64) {
         let (pw, ph) = (self.page.x1 - self.page.x0, self.page.y1 - self.page.y0);
         let cell = pw.max(ph) / CELLS as f64;
@@ -463,18 +422,15 @@ impl<'a> Incremental<'a> {
             .sum();
         s.angles = t.angles.iter().sum();
         if self.flow.is_some() {
-            // A flowchart's shape follows its flow, so even coverage is not a goal there.
             s.alignment = t.align.iter().sum();
             return s;
         }
-        // Coverage per cell; the penalty is the variance across cells.
         let mean = t.cover.iter().sum::<f64>() / t.cover.len() as f64;
         s.spread = W_SPREAD * t.cover.iter().map(|k| (k - mean).powi(2)).sum::<f64>()
             / t.cover.len() as f64;
         s
     }
 
-    /// try_move scores the layout with box `u` moved to `r`; `accept` then keeps the move.
     pub fn try_move(&mut self, u: usize, r: Rect) -> Score {
         let mut t = std::mem::take(&mut self.trial);
         t.copy_from(&self.cur);
@@ -521,8 +477,6 @@ impl<'a> Incremental<'a> {
         for &v in &self.nbrs[u] {
             t.angles[v] = self.angle(&t.c, v);
         }
-        // A link's count changes only if it ends at `u`, or `u`'s box or an edge at `u` came
-        // near the link, before or after the move.
         let (was, now) = (center(&old), t.c[u]);
         let seg = |p: P, q: P| Rect {
             x0: p.0.min(q.0),
@@ -668,7 +622,6 @@ mod tests {
 
     #[test]
     fn child_closer_to_other_branch_is_penalized() {
-        // Hubs 1 and 2; leaf 3 hangs off 1 but sits beside 2.
         let r = [
             Rect::centered((0.0, 0.0), 4.0, 4.0),
             Rect::centered((-20.0, 0.0), 4.0, 4.0),

@@ -1,4 +1,3 @@
-//! SVG, PNG and TikZ backends. All draw from the same solved geometry; none re-flows text.
 
 use crate::geom::{P, Rect};
 use crate::graph::{Graph, LayoutKind, Relation};
@@ -11,16 +10,13 @@ use crate::tree::Tree;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-/// Paint is how one node is drawn: accent stroke, fill, and text color.
 struct Paint {
     accent: String,
     fill: String,
-    /// Opacity of `fill` over the background.
     opacity: f64,
     text: String,
 }
 
-/// accents gives each node its own color, else its radial branch's, else the theme text color.
 fn accents(g: &Graph, t: &Tree, th: &Theme, radial: bool) -> Vec<String> {
     let mut hub_color = BTreeMap::new();
     for (i, &h) in t.children[t.root].iter().enumerate() {
@@ -71,7 +67,6 @@ fn paints(g: &Graph, t: &Tree, lay: &Layout, th: &Theme) -> Vec<Paint> {
         .collect()
 }
 
-/// clipped shortens a straight edge to the borders of its two nodes, so arrowheads show.
 fn clipped(lay: &Layout, e: &Drawn) -> (P, P) {
     let (a, b) = (e.a, e.b);
     let (pa, pb) = lay.ends(e);
@@ -90,7 +85,6 @@ fn clipped(lay: &Layout, e: &Drawn) -> (P, P) {
     (lerp(exit(a, 0.0, 1.0)), lerp(exit(b, 1.0, 0.0)))
 }
 
-/// link_points returns the drawn polyline of an edge, in layout coordinates.
 fn edge_points(lay: &Layout, e: &Drawn) -> Vec<P> {
     match e.style {
         EdgeStyle::Link => lay.path(e),
@@ -102,8 +96,6 @@ fn edge_points(lay: &Layout, e: &Drawn) -> Vec<P> {
     }
 }
 
-/// stroke is the color the source gave an edge, if any. Edges are matched by endpoints, the
-/// same direction first, since the radial tree may orient an edge either way.
 fn stroke<'a>(g: &'a Graph, e: &Drawn) -> Option<&'a str> {
     let find = |a: usize, b: usize| g.edges.iter().find(|x| (x.a, x.b) == (a, b));
     find(e.a, e.b)
@@ -111,7 +103,6 @@ fn stroke<'a>(g: &'a Graph, e: &Drawn) -> Option<&'a str> {
         .and_then(|x| x.color.as_deref())
 }
 
-/// headed says whether an edge gets an arrowhead: every one but a `--` or `..` edge.
 fn headed(g: &Graph, e: &Drawn) -> bool {
     let find = |a: usize, b: usize| g.edges.iter().find(|x| (x.a, x.b) == (a, b));
     find(e.a, e.b)
@@ -119,14 +110,12 @@ fn headed(g: &Graph, e: &Drawn) -> bool {
         .is_none_or(|x| x.directed)
 }
 
-/// Group is a frame to draw: its border, title, and color.
 struct Group<'a> {
     rect: Rect,
     title: Option<&'a str>,
     color: Option<&'a str>,
 }
 
-/// groups lists the frames outermost first, so nested frames are drawn over their parents.
 fn groups<'a>(g: &'a Graph, lay: &Layout) -> Vec<Group<'a>> {
     let mut rels: Vec<&Relation> = g
         .constraints
@@ -149,8 +138,6 @@ fn groups<'a>(g: &'a Graph, lay: &Layout) -> Vec<Group<'a>> {
         .collect()
 }
 
-/// bounds is the smallest rectangle, in layout coordinates, holding every node, edge, label,
-/// and group frame.
 pub fn bounds(g: &Graph, lay: &Layout) -> Rect {
     let mut r = Rect {
         x0: f64::MAX,
@@ -214,7 +201,6 @@ fn svg_line(out: &mut String, fonts: &Fonts, l: &TextLine, x: f64, y: f64, fill:
     out.push_str("</text>\n");
 }
 
-/// svg draws the part of the layout inside `view`, which becomes the whole image.
 pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Theme) -> String {
     let paint = paints(g, t, lay, th);
     let b = lay.body;
@@ -234,7 +220,6 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
         fonts.fingerprint().replace("--", "- -")
     );
     o.push_str("<defs>");
-    // Arrowheads take their edge's color, so each edge color gets its own marker.
     let mut markers = vec![
         ("arr".to_string(), th.edge.as_str()),
         ("lnk".to_string(), th.link.as_str()),
@@ -382,7 +367,6 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
             svg_line(&mut o, fonts, l, left + l.x, top + l.baseline, &p.text);
         }
     }
-    // Labels last, so nothing is ever drawn over them.
     for e in &lay.edges {
         let (Some(label), Some(r)) = (&e.label, lay.label_rect(e)) else {
             continue;
@@ -409,7 +393,6 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
     o
 }
 
-/// png rasterizes an SVG from `svg` at `scale` pixels per point, using the measuring fonts.
 const MAX_PIXELS: u64 = 256_000_000;
 
 pub fn png(svg: &str, fonts: &Fonts, scale: f64) -> Result<Vec<u8>, String> {
@@ -419,13 +402,11 @@ pub fn png(svg: &str, fonts: &Fonts, scale: f64) -> Result<Vec<u8>, String> {
     }
     let tree = resvg::usvg::Tree::from_str(svg, &opt).map_err(|e| e.to_string())?;
     let size = tree.size();
-    // usvg reads `pt` as 4/3 px, so scale from its pixel size back to points.
     let k = (scale * 0.75) as f32;
     let (pw, ph) = (
         (size.width() * k).ceil() as u32,
         (size.height() * k).ceil() as u32,
     );
-    // tiny-skia accepts far more than memory holds; 256 Mpx is already a 1 GB buffer.
     if pw as u64 * ph as u64 > MAX_PIXELS {
         return Err(format!(
             "image too large: {pw}x{ph}px (limit {} Mpx); lower --scale",
@@ -442,15 +423,11 @@ pub fn png(svg: &str, fonts: &Fonts, scale: f64) -> Result<Vec<u8>, String> {
     pix.encode_png().map_err(|e| e.to_string())
 }
 
-/// Sheet is one PDF page: page SVGs placed at offsets in points, on a page of `size`, or of
-/// the first SVG's size when None.
 pub struct Sheet<'a> {
     pub size: Option<(f64, f64)>,
     pub cells: Vec<(&'a str, &'a Fonts, f64, f64)>,
 }
 
-/// pdf draws sheets of page SVGs into one PDF, with each SVG's measuring fonts embedded as
-/// selectable text.
 pub fn pdf(sheets: &[Sheet]) -> Result<Vec<u8>, String> {
     use krilla_svg::SurfaceExt;
     let mut doc = krilla::Document::new();
@@ -462,7 +439,6 @@ pub fn pdf(sheets: &[Sheet]) -> Result<Vec<u8>, String> {
                 opt.fontdb_mut().load_font_data(f.data.clone());
             }
             let tree = usvg_pdf::Tree::from_str(svg, &opt).map_err(|e| e.to_string())?;
-            // usvg reads `pt` as 4/3 px; PDF units are points.
             let size = krilla::geom::Size::from_wh(
                 tree.size().width() * 0.75,
                 tree.size().height() * 0.75,
@@ -506,7 +482,6 @@ fn tex(s: &str) -> String {
     o
 }
 
-/// cname is the TikZ color name defined for `c` in the preamble.
 fn cname(c: &str) -> String {
     format!("c{}", theme::rgb(c))
 }

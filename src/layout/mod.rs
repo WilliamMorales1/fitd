@@ -1,9 +1,3 @@
-//! Layout core shared by every strategy: text measurement, the scene CSP, and the outer
-//! search. A strategy (radial, layered) proposes candidate spots per node plus its own
-//! structural constraints; the user's `require`/`prefer` constraints are added on top. The
-//! outer search finds the largest body font that is satisfiable, then spends a second budget
-//! on soft preferences. When even the smallest font fails, it extracts a minimal set of
-//! conflicting user constraints (QuickXplain).
 
 use crate::csp::{self, Outcome, Problem};
 use crate::geom::{P, Rect, segment_hits_rect, segments_cross};
@@ -37,7 +31,6 @@ pub use polish::Readable;
 pub use relations::{FRAME_PAD, TITLE_BAND, frame, frame_clear, relation_holds};
 pub use stable::Anchor;
 
-/// measure_groups sets each group's title width, which frames need, from the loaded fonts.
 pub fn measure_groups(g: &mut Graph, fonts: &Fonts) {
     fn measure(rel: &mut Relation, fonts: &Fonts) {
         if let Relation::Group {
@@ -65,21 +58,12 @@ pub struct Config {
     pub margin: f64,
     pub min_font: f64,
     pub max_font: f64,
-    /// Leaf wrap width in ems of the body font.
     pub wrap_em: f64,
-    /// Constraint checks allowed per CSP attempt before declaring it infeasible.
     pub budget: u64,
-    /// Constraint checks spent improving soft preferences once the font is fixed.
     pub opt_budget: u64,
-    /// Constraint checks for font probes until one fits; later probes get twice the last
-    /// fit's cost.
     pub first_cap: u64,
-    /// Smallest body font readable at the page's viewing distance; also the length unit of
-    /// readability scores.
     pub legible: f64,
-    /// Trade quality for speed while editing: coarser font search, one font, short polish.
     pub draft: bool,
-    /// A previous layout to stay close to (`--stable`); static since it lives for the whole run.
     pub anchor: Option<&'static Anchor>,
 }
 
@@ -105,7 +89,6 @@ pub struct TextLine {
     pub size: f64,
     pub bold: bool,
     pub width: f64,
-    /// Offsets from the box's top-left corner (y grows downward inside the box).
     pub x: f64,
     pub baseline: f64,
 }
@@ -123,23 +106,16 @@ pub struct Boxed {
 pub struct Stats {
     pub attempts: usize,
     pub search: csp::Stats,
-    /// Total weight of soft constraints left unmet, and of all soft constraints.
     pub soft_cost: u64,
     pub soft_total: u64,
-    /// Checks the winning plan of the latest attempt spent.
     pub probe_checks: u64,
-    /// Largest check budget a failed attempt ran out of since this was last cleared; None
-    /// when every failure was proved.
     pub cut_off: Option<u64>,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum EdgeStyle {
-    /// A straight hierarchy line (radial).
     Line,
-    /// A straight directed arrow (layered).
     Arrow,
-    /// A dashed curved cross link.
     Link,
 }
 
@@ -147,17 +123,12 @@ pub struct Drawn {
     pub a: usize,
     pub b: usize,
     pub style: EdgeStyle,
-    /// Stroke width in ems of the body font.
     pub width: f64,
     pub label: Option<String>,
-    /// Bend of a link (see `curve`), or instead a detour around boxes (untrimmed), and the
-    /// label's position along the path, 0 to 1. The solver picks them.
     pub bow: f64,
     pub via: Option<Vec<P>>,
     pub t: f64,
-    /// Label box size in points, set once the font is known.
     pub label_size: (f64, f64),
-    /// Where an arrow ends, as an offset from the target's center (see `spread_arrivals`).
     pub aim: P,
 }
 
@@ -182,16 +153,12 @@ pub struct Layout {
     pub kind: LayoutKind,
     pub body: f64,
     pub boxes: Vec<Boxed>,
-    /// Node centers; origin at page center, y up.
     pub pos: Vec<P>,
     pub edges: Vec<Drawn>,
     pub kx: f64,
     pub ky: f64,
-    /// Slack allowed when checking alignments, since candidate spots are discrete.
     pub tol: f64,
-    /// Radial branch rotation in degrees, so later passes rebuild the same plan.
     pub rot: f64,
-    /// Fonts tried by the final trade-off with each one's merit (lower is better).
     pub tradeoff: Vec<(f64, f64)>,
     pub stats: Stats,
 }
@@ -201,7 +168,6 @@ impl Layout {
         Rect::centered(self.pos[v], self.boxes[v].w, self.boxes[v].h)
     }
 
-    /// radius is the stretched polar radius used for the "general at center" ordering.
     pub fn radius(&self, v: usize) -> f64 {
         (self.pos[v].0 / self.kx).hypot(self.pos[v].1 / self.ky)
     }
@@ -216,8 +182,6 @@ impl Layout {
         )
     }
 
-    /// ends are the points an edge runs between before trimming: the centers of its nodes,
-    /// with the target's moved by `aim`.
     pub fn ends(&self, e: &Drawn) -> (P, P) {
         (
             self.pos[e.a],
@@ -225,7 +189,6 @@ impl Layout {
         )
     }
 
-    /// path is an edge's drawn route with its chosen bend, trimmed to the node borders.
     pub fn path(&self, e: &Drawn) -> Vec<P> {
         let (pa, pb) = self.ends(e);
         match &e.via {
@@ -247,8 +210,6 @@ impl Layout {
     }
 }
 
-/// Cand is one spot a node may take: its preference cost (lower is better), its center, and
-/// a strategy-specific coordinate (the radial step index for `Outward`).
 pub struct Cand {
     pub cost: f64,
     pub at: P,
@@ -257,79 +218,46 @@ pub struct Cand {
 
 #[derive(Clone, Copy)]
 pub enum Kind {
-    /// Two regions stay this far apart.
     Apart(f64),
-    /// Scope 1 sits at least this much farther out (in `Cand::r`) than scope 0.
     Outward(f64),
-    /// The segment between scopes 0 and 1 misses scope 2's region grown by this much.
     Clear(f64),
-    /// Segments 0-1 and 2-3 do not cross.
     NoCross,
-    /// A user constraint, by index into `Graph::constraints`, over all its nodes.
     Rel(usize),
-    /// Two nodes of a hard alignment; pairs propagate better than one wide constraint.
     Aligned(Side),
-    /// Route `0`'s label stays off node `1`.
     LabelClear(usize, usize, f64),
-    /// Route's label stays on the page.
     LabelPage(usize),
-    /// Two routes' labels do not overlap.
     LabelApart(usize, usize, f64),
-    /// Route `0`'s label sits wholly inside or wholly outside group constraint `1`'s frame,
-    /// clear of its border and title (soft).
     LabelFrame(usize, usize),
-    /// Two dashed links neither cross nor run close together (soft).
     LinkApart(usize, usize),
-    /// A dashed link does not cross the straight edge between nodes `1` and `2` (soft).
     LinkEdge(usize, usize, usize),
-    /// A dashed link stays out of node `1` grown by this many ems (soft).
     LinkClear(usize, usize, f64),
-    /// Group constraint `0`'s frame keeps clear of node `1`, which is not a member.
+    LinkPage(usize),
     Outside(usize, usize),
-    /// The frames of two group constraints keep clear of each other.
     Frames(usize, usize),
 }
 
-/// Plan is what a strategy hands to the core: candidates per node and constraints over nodes.
 pub struct Plan {
-    /// Variable order: static search assigns nodes in this order.
     pub order: Vec<usize>,
     pub cands: Vec<Vec<Cand>>,
-    /// (nodes, kind, weight); weight 0 is hard.
     pub cons: Vec<(Vec<usize>, Kind, u64)>,
     pub edges: Vec<Drawn>,
     pub kx: f64,
     pub ky: f64,
     pub tol: f64,
-    /// Layered only, when the layers do not fit along the flow: (layers, length they need,
-    /// length the page gives), in points.
     pub crowded: Option<(usize, f64, f64)>,
 }
 
-/// Which user constraints an attempt includes.
 #[derive(Clone, Copy)]
 enum Users<'a> {
-    /// These hard constraints only (indices into `Graph::constraints`).
     Hard(&'a [usize]),
-    /// Every hard constraint plus `prefer`s and layered crossings, on this layout's plan and
-    /// trying its spots first.
     All(&'a Layout),
-    /// Every hard constraint and every `prefer`, all as hard: a layout that meets what the
-    /// author asked for, to weigh against the largest font.
     Wanted,
-    /// Nodes fixed where this layout put them; only link routes are optimized.
     Routes(&'a Layout),
-    /// Every hard constraint at a smaller font than this layout's, trying its spots first:
-    /// boxes shrink around the same centers, so they usually still fit.
     Shrunk(&'a Layout),
 }
 
-/// ROTATIONS turns the radial branches, in degrees. Near the largest font that fits, which
-/// rotation solves is close to chance, so each probe tries all of them in parallel.
 const ROTATIONS: [f64; 4] = [0.0, 10.0, 30.0, 45.0];
 
-/// attempt places every node at body font `b`. A radial probe tries each of ROTATIONS and
-/// keeps the first in list order that solves, so the result does not depend on timing.
 fn attempt(
     g: &Graph,
     t: &Tree,
@@ -345,7 +273,6 @@ fn attempt(
     let boxes = measure_all(g, t, fonts, cfg, b);
     let rots = match (kind, users) {
         (_, Users::All(prev) | Users::Routes(prev) | Users::Shrunk(prev)) => vec![prev.rot],
-        // The locked rotation goes first, so it wins whenever it solves.
         (LayoutKind::Radial, Users::Hard(_) | Users::Wanted) => match cfg.anchor {
             Some(a) => std::iter::once(a.rot)
                 .chain(ROTATIONS.into_iter().filter(|&r| r != a.rot))
@@ -356,7 +283,6 @@ fn attempt(
     };
     let optimizing = matches!(users, Users::All(_));
     let routing = matches!(users, Users::Routes(_));
-    // Once a plan solves, the plans after it in list order cannot win, so they stop.
     let stop: Vec<AtomicBool> = rots.iter().map(|_| AtomicBool::new(false)).collect();
     let (built, runs): (Vec<_>, Vec<(Outcome, u64, csp::Stats)>) = std::thread::scope(|s| {
         let (stop, boxes) = (&stop, &boxes);
@@ -386,8 +312,6 @@ fn attempt(
             .map(|h| h.join().expect("solver thread"))
             .unzip()
     });
-    // Plans after the first that solves were cancelled at a timing-dependent point, so their
-    // work is left out of the stats to keep the build log reproducible.
     let first = runs
         .iter()
         .position(|(out, ..)| matches!(out, Outcome::Sat(_)));
@@ -471,26 +395,17 @@ fn attempt(
     })
 }
 
-/// Failures carry `cut_off`, the largest check budget a deciding probe ran out of; None means
-/// the verdict is proved for the strategy's candidate positions.
 pub enum Failure {
-    /// Nothing fits even without user constraints; for a layered layout whose layers are too
-    /// many for the page, how crowded the flow is (see `Plan::crowded`).
     NoRoom {
         crowded: Option<(usize, f64, f64)>,
         cut_off: Option<u64>,
     },
-    /// These hard user constraints cannot all hold at the minimum font; removing any one of
-    /// them makes the rest satisfiable.
     Core {
         core: Vec<usize>,
         cut_off: Option<u64>,
     },
 }
 
-/// largest_branch finds the depth-1 subtree whose boxes take the most area at the font floor,
-/// as (its top node, its node count, its share of all box area): the best part to split out
-/// when nothing fits. None when the root has fewer than two branches.
 pub fn largest_branch(
     g: &Graph,
     t: &Tree,
@@ -516,15 +431,10 @@ pub fn largest_branch(
         .map(|(b, n, a)| (b, n, a / total))
 }
 
-/// Fractions of the largest feasible font that the final trade-off polishes and compares.
 const TRADE: [f64; 3] = [1.0, 0.95, 0.9];
 
-/// Merit per unit of log font gain above the legibility floor: 5% more font is worth about
-/// one crossing.
 const W_FONT: f64 = 800.0;
 
-/// merit scores a finished layout for the font trade-off, lower is better: its readability
-/// penalty plus unmet `prefer` weight, minus a font gain with diminishing returns.
 pub fn merit(g: &Graph, t: &Tree, cfg: &Config, lay: &Layout) -> f64 {
     let rects: Vec<Rect> = (0..lay.pos.len()).map(|v| lay.rect(v)).collect();
     let q = Readable::new(t, lay.kind, &lay.edges, cfg.page(), cfg.legible).score(&rects);
@@ -539,8 +449,6 @@ pub fn merit(g: &Graph, t: &Tree, cfg: &Config, lay: &Layout) -> f64 {
     q.total() + SOFT_PENALTY * unmet as f64 + drift - W_FONT * (lay.body / cfg.legible).ln()
 }
 
-/// solve binary-searches the largest body font for which the hard constraints are
-/// satisfiable, then polishes that font and slightly smaller ones and keeps the best `merit`.
 pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout, Failure> {
     let mut stats = Stats::default();
     let hard: Vec<usize> = (0..g.constraints.len())
@@ -558,8 +466,6 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
         )
     };
 
-    // Near the largest font that fits, a probe either succeeds quickly or runs until the
-    // budget is gone. So once a probe succeeds, later probes get twice its cost.
     let (mut lo, mut hi) = (cfg.min_font, cfg.max_font);
     let (mut found, mut next, mut cap) = (None, hi, cfg.first_cap);
     loop {
@@ -571,8 +477,6 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
             }
             None => {
                 hi = next;
-                // Settle whether anything fits before bisecting further: on an unsatisfiable
-                // input every probe down to the floor would otherwise run its whole cap.
                 if found.is_none() {
                     if next > lo || cap < cfg.budget {
                         stats.cut_off = None;
@@ -584,7 +488,6 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
                 }
             }
         }
-        // The trade-off below steps down 5% at a time, so finer precision here is wasted.
         if hi - lo <= if cfg.draft { 0.1 } else { 0.03 } * lo {
             break;
         }
@@ -593,7 +496,6 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
     let mut best = match found {
         Some(l) => l,
         None => {
-            // Only failed probes can be cut off, and a cut-off one may hide a layout.
             let full_cut = stats.cut_off.take();
             if hard.is_empty() || probe(cfg.min_font, &[], cfg.budget, &mut stats).is_none() {
                 let crowded = match g.settings.layout {
@@ -617,8 +519,6 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
                 };
                 return Err(Failure::NoRoom { crowded, cut_off });
             }
-            // The full set already failed on the whole budget. Subsets that fit usually solve
-            // fast, so core probes get the first probe's cap.
             let mut feasible =
                 |set: &[usize]| probe(cfg.min_font, set, cfg.budget / 4, &mut stats).is_some();
             let mut core = quickxplain(&mut feasible, &[], false, &hard);
@@ -629,14 +529,6 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
             });
         }
     };
-    // Then trade font against readability. Above the legibility floor a larger font helps
-    // less and less, so a slightly smaller font may buy a clearer arrangement: polish a few
-    // fonts and keep the best merit. Below the floor nothing smaller is tried.
-    // With a lock, the locked font competes with the new largest on `merit`, which charges
-    // every node that leaves its spot, so a font gain wins only when it outweighs the moves.
-    // The locked spots can lift the search above what the edit alone allows, so a fixed
-    // threshold on the gain kept losing to them. The binary search stops short of the exact
-    // largest, so a locked font above it may still fit; then it is simply kept.
     let (mut kept, mut locked) = (false, None);
     if let Some(a) = cfg.anchor
         && a.body >= cfg.min_font
@@ -663,10 +555,6 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
             .collect(),
     };
     let locked = locked.as_ref();
-    // Each font is independent, so they run in parallel, each with its own stats; the soft
-    // cost is the polished winner's. The first round starts from the largest font's layout.
-    // When its winner still misses a `prefer`, a second round starts each font from a layout
-    // that meets every one, since a preference outweighs a few percent of font (see `merit`).
     type Trial = (f64, Option<(f64, Layout, (u64, u64))>, Stats);
     let round = |best: &Layout, wanted: bool| -> Vec<Trial> {
         std::thread::scope(|s| {
@@ -767,8 +655,6 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
         (stats.soft_cost, stats.soft_total) = soft;
     }
     best.tradeoff = tradeoff;
-    // Then, with nodes fixed, pick link routes and label spots: few variables, so the search
-    // is exhaustive.
     if best
         .edges
         .iter()
@@ -791,15 +677,11 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
     Ok(best)
 }
 
-/// spread_arrivals spaces the ends of arrows that enter one node from earlier layers along its
-/// entry side, in the order of their sources, so they do not meet in one point. An arrow keeps
-/// its center end when the new one would touch another box, a label, or another edge.
 fn spread_arrivals(lay: &mut Layout, page: &Rect) {
     let LayoutKind::Layered(dir) = lay.kind else {
         return;
     };
     let down = dir == Dir::Down;
-    // Position along the flow and across it.
     let along = |p: P| if down { -p.1 } else { p.0 };
     let across = |p: P| if down { p.0 } else { p.1 };
     let n = lay.pos.len();
@@ -815,7 +697,6 @@ fn spread_arrivals(lay: &mut Layout, page: &Rect) {
         if ins.len() < 2 {
             continue;
         }
-        // By the slope they arrive at, so the spread ends keep the arrows apart.
         let slope = |k: usize| {
             let (a, c) = (lay.pos[lay.edges[k].a], lay.pos[v]);
             (across(a) - across(c)) / (along(c) - along(a))
@@ -832,8 +713,6 @@ fn spread_arrivals(lay: &mut Layout, page: &Rect) {
     }
 }
 
-/// arrival_clear reports whether edge `k` misses every box but its own, every edge it does not
-/// share a node with, and, with its label, every label and box.
 fn arrival_clear(lay: &Layout, k: usize, page: &Rect) -> bool {
     let e = &lay.edges[k];
     let (p, q) = lay.ends(e);
@@ -841,7 +720,6 @@ fn arrival_clear(lay: &Layout, k: usize, page: &Rect) -> bool {
     if (0..n).any(|u| u != e.a && u != e.b && segment_hits_rect(p, q, &lay.rect(u))) {
         return false;
     }
-    // With the end moved, even an edge sharing a node can cross; the checker tests every pair.
     let others = lay
         .edges
         .iter()

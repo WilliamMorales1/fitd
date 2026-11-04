@@ -1,6 +1,3 @@
-//! `include "file.fitd"`: splices other files in, line for line, before parsing. The include
-//! line stays (the parser skips it), so diagnostics can point at it, and `Source` maps every
-//! spliced line back to its own file.
 
 use crate::ast::StmtKind;
 use crate::diag::{Diag, Seg, Source, Span};
@@ -15,7 +12,6 @@ struct Splice {
 impl Splice {
     fn seg(&mut self, path: &str, file_line: usize) {
         let line = self.text.matches('\n').count() + 1;
-        // A file that adds no lines leaves a segment that the next one replaces.
         if self.segs.last().is_some_and(|s| s.line == line) {
             self.segs.pop();
         }
@@ -27,9 +23,6 @@ impl Splice {
     }
 }
 
-/// expand splices every include reachable from `text`, which was read from `path`. Include
-/// paths are relative to the including file. A cycle or unreadable file is E0011 at its
-/// include line, which is then left out.
 pub fn expand(path: &str, text: &str) -> (Source, Vec<Diag>) {
     let mut out = Splice {
         text: String::new(),
@@ -41,8 +34,6 @@ pub fn expand(path: &str, text: &str) -> (Source, Vec<Diag>) {
     (Source::spliced(path, &out.text, out.segs), out.diags)
 }
 
-/// unused_shared_style tells whether `d` reports a style declared in an included file as
-/// unused; such a file may serve many diagrams, and none of them need use every style.
 pub fn unused_shared_style(src: &Source, d: &Diag) -> bool {
     d.code == "W0203" && src.file_line(src.line_col(d.pos()).0).0 != src.path
 }

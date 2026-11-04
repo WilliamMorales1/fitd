@@ -1,5 +1,3 @@
-//! Recursive-descent parser. A bad statement is reported and skipped to the next line,
-//! so one typo never hides the errors after it.
 
 use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
@@ -129,7 +127,6 @@ impl Parser<'_> {
         }
     }
 
-    /// edge reads `a -> b -> c`; each hop becomes one edge, and a hop's targets all feed the next.
     fn edge(&mut self) -> PResult<Vec<StmtKind>> {
         let mut froms = vec![self.name("a node name")?];
         let mut hops = Vec::new();
@@ -168,7 +165,6 @@ impl Parser<'_> {
         Ok(out)
     }
 
-    /// looks reads the `.style` and `key=value` items that end a node or edge statement.
     fn looks(&mut self) -> PResult<(Vec<Name>, Vec<Attr>)> {
         let (mut classes, mut attrs) = (Vec::new(), Vec::new());
         while !self.at_end() {

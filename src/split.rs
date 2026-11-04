@@ -1,26 +1,16 @@
-//! `fitd split`: turns one map into an overview page and one page per top-level branch. Each
-//! page is ordinary `.fitd` that includes a shared file of settings and styles, so any page
-//! builds alone and a style edited once changes every page.
 
 use crate::ast::{Attr, Name, Rel, StmtKind};
 use crate::diag::Level;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Page is where a statement goes: the overview, or the page of a top-level branch, by its
-/// index among the root's children.
 type Page = usize;
 const OVERVIEW: Page = usize::MAX;
 
-/// Split is the written pages: the shared file, then the overview, then one per branch, as
-/// (file name, text); and statements, or parts of them, that relate nodes on different pages
-/// in a way no single page can show, and so were left out.
 pub struct Split {
     pub files: Vec<(String, String)>,
     pub dropped: Vec<String>,
 }
 
-/// split reads the map at `path` (whose text is `text`) and lays it out over pages named after
-/// `stem`. Fails when the map has errors or its root has fewer than two branches.
 pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let crate::macros::Loaded {
         parse, mut diags, ..
@@ -41,8 +31,6 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         ));
     }
     let index = |n: &Name| g.nodes.iter().position(|v| v.id == n.text);
-    // The pages a node appears on: a branch head is both a stub on the overview and its own
-    // page's root.
     let pages_of = |v: usize| -> BTreeSet<Page> {
         match t.branch(v) {
             None => BTreeSet::from([OVERVIEW]),
@@ -70,12 +58,8 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let mut body: Vec<Vec<String>> = vec![Vec::new(); heads.len() + 1];
     let slot = |p: Page| if p == OVERVIEW { heads.len() } else { p };
     let mut dropped = Vec::new();
-    // Member sets of the frames on each page: a nested group cut down to its parent's part
-    // would repeat a frame, which sema rejects.
     let mut framed: BTreeMap<Page, Vec<BTreeSet<String>>> = BTreeMap::new();
-    // Nodes from other pages that a page's cross-page edges reach, drawn there as stubs.
     let mut stubs: Vec<Vec<usize>> = vec![Vec::new(); heads.len() + 1];
-    // The pages every named node appears on.
     let meet = |names: &[&Name]| -> BTreeSet<Page> {
         let mut on: Option<BTreeSet<Page>> = None;
         for n in names {
@@ -85,7 +69,6 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         }
         on.unwrap_or_default()
     };
-    // The page that holds a node in full: its branch's page, or the overview.
     let home = |v: usize| {
         *pages_of(v)
             .iter()
@@ -122,8 +105,6 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 .replace('\n', "\\n")
         )
     };
-    // Pages the last `node` went to, for the `|` body lines under it; the overview stub
-    // drops them, since its page holds the full node.
     let mut last: BTreeSet<Page> = BTreeSet::new();
     for st in &stmts {
         let own = snippet(st.span.lo, st.span.hi);
@@ -134,7 +115,6 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             }
             StmtKind::Root(_) | StmtKind::Include(_) => continue,
             StmtKind::Layout { kind, attrs } => {
-                // The root is set per page, and the map's root is missing from branch pages.
                 shared += &format!("layout {}", kind.text);
                 for a in attrs.iter().filter(|a| a.key.text != "root") {
                     shared += &format!(" {}", snippet(a.key.span.lo, a.value.span().hi));
@@ -177,7 +157,6 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             last = on;
             continue;
         }
-        // A statement on a head alone belongs with its page, where the head is the root.
         if let Some(&p) = on.iter().find(|&&p| p != OVERVIEW).or(on.first()) {
             if let StmtKind::Group { items, .. } = &st.kind {
                 let set: BTreeSet<String> = items.iter().map(|n| n.text.clone()).collect();
@@ -200,7 +179,6 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 .collect::<String>()
         };
         match &st.kind {
-            // Each end's page draws the edge to a stub of the other end.
             StmtKind::Edge { from, to, .. } => {
                 let op = parse[from.span.hi..to[0].span.lo].trim().to_string();
                 let tail = snippet(to.last().unwrap().span.hi, st.span.hi);
@@ -246,7 +224,6 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                     body[slot(p)].push(line);
                 }
             }
-            // A chain keeps each run of links within one page; an alignment keeps each page's part.
             StmtKind::Constraint { hard, rel, attrs } => {
                 let kw = if *hard { "require" } else { "prefer" };
                 let attrs = attrs_of(attrs);

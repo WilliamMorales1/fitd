@@ -1,9 +1,7 @@
-//! Edge paths: the curve each edge is drawn along, label spots on it, and path tests.
 
 use super::*;
 
-/// Bends tried for dashed links, preferred first, and label positions along any edge.
-pub(super) const BOWS: [f64; 8] = [0.22, -0.22, 0.4, -0.4, 0.1, -0.1, 0.6, -0.6];
+pub(super) const BOWS: [f64; 9] = [0.22, -0.22, 0.4, -0.4, 0.1, -0.1, 0.6, -0.6, 0.0];
 
 pub(super) const SPOTS: [f64; 9] = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82];
 
@@ -14,8 +12,6 @@ pub(super) fn inside_box(c: P, shape: Shape, w: f64, h: f64, p: P) -> bool {
     }
 }
 
-/// curve is the path of an edge: a quadratic Bezier from `pa` to `pb` bent by `bow` times its
-/// length away from the page center (0 is straight), trimmed to the part outside both boxes.
 pub fn curve(pa: P, in_a: &dyn Fn(P) -> bool, pb: P, in_b: &dyn Fn(P) -> bool, bow: f64) -> Vec<P> {
     let m = ((pa.0 + pb.0) / 2.0, (pa.1 + pb.1) / 2.0);
     let d = (pb.0 - pa.0).hypot(pb.1 - pa.1).max(1e-9);
@@ -37,7 +33,6 @@ pub fn curve(pa: P, in_a: &dyn Fn(P) -> bool, pb: P, in_b: &dyn Fn(P) -> bool, b
     trim(&pts, in_a, in_b)
 }
 
-/// trim keeps the part of a path from where it leaves box `a` to where it enters box `b`.
 pub fn trim(pts: &[P], in_a: &dyn Fn(P) -> bool, in_b: &dyn Fn(P) -> bool) -> Vec<P> {
     let s = pts.iter().position(|&p| !in_a(p)).unwrap_or(0);
     let e = pts
@@ -48,12 +43,6 @@ pub fn trim(pts: &[P], in_a: &dyn Fn(P) -> bool, in_b: &dyn Fn(P) -> bool) -> Ve
     pts[s..=e].to_vec()
 }
 
-/// detours are paths from `pa` to `pb` around `boxes`, kept `clear` away from each and inside
-/// `page`: the shortest route over the corners of the grown boxes (a visibility graph). The
-/// first is planned three times as far out with its corners rounded within the extra room;
-/// then the tight route with small rounded corners, and sharp in case rounding cuts into a
-/// box. Empty when the straight line is already clear or no route exists. Paths are
-/// untrimmed, about 60 points.
 pub fn detours(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Vec<Vec<P>> {
     let Some(way) = route(pa, pb, boxes, page, clear) else {
         return Vec::new();
@@ -66,11 +55,8 @@ pub fn detours(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Vec<Vec
     out
 }
 
-/// route is the shortest polyline from `pa` to `pb` over the corners of `boxes` grown by
-/// `clear`, or None when the straight line is clear or nothing gets through.
 fn route(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Option<Vec<P>> {
     let grown: Vec<Rect> = boxes.iter().map(|r| r.inflate(clear)).collect();
-    // Slightly smaller than `grown`, so a segment along a grown box's side still counts as clear.
     let hard: Vec<Rect> = boxes.iter().map(|r| r.inflate(0.98 * clear)).collect();
     let seen = |p: P, q: P| {
         let bb = Rect {
@@ -101,8 +87,6 @@ fn route(pa: P, pb: P, boxes: &[Rect], page: &Rect, clear: f64) -> Option<Vec<P>
     Some(way.iter().map(|&i| pts[i]).collect())
 }
 
-/// fillet replaces each inner corner of a polyline with a quadratic arc that starts at most
-/// `reach` before it, which stays within half of `reach` of the corner.
 fn fillet(way: &[P], reach: f64) -> Vec<P> {
     let mut out = vec![way[0]];
     for i in 1..way.len() - 1 {
@@ -126,8 +110,6 @@ fn fillet(way: &[P], reach: f64) -> Vec<P> {
     out
 }
 
-/// shortest is Dijkstra from point 0 to point 1 over the legs `seen` allows. Legs are tested
-/// for visibility only when relaxed.
 fn shortest(pts: &[P], seen: &dyn Fn(P, P) -> bool) -> Option<Vec<usize>> {
     let n = pts.len();
     let (mut dist, mut prev, mut done) =
@@ -156,7 +138,6 @@ fn shortest(pts: &[P], seen: &dyn Fn(P, P) -> bool) -> Option<Vec<usize>> {
     Some(way)
 }
 
-/// densify samples a polyline at about `n` evenly spaced points.
 fn densify(way: &[P], n: usize) -> Vec<P> {
     let len: f64 = way
         .windows(2)
@@ -177,14 +158,11 @@ fn densify(way: &[P], n: usize) -> Vec<P> {
     out
 }
 
-/// label_rect is the box of a label centered at fraction `t` of a path.
 pub fn label_rect(path: &[P], t: f64, size: (f64, f64)) -> Rect {
     let i = ((path.len() - 1) as f64 * t).round() as usize;
     Rect::centered(path[i], size.0, size.1)
 }
 
-/// paths_meet reports whether two paths cross or run within `d` of each other, ignoring the
-/// parts inside `skip` (around shared endpoints, where links naturally meet).
 pub fn paths_meet(p: &[P], q: &[P], d: f64, skip: &[Rect]) -> bool {
     if !bounds(p).inflate(d).intersects(&bounds(q)) {
         return false;
@@ -261,7 +239,6 @@ mod tests {
                 "{w:?}"
             );
         }
-        // A wall across the whole page leaves no way around.
         assert!(
             detours(
                 (-50.0, 0.0),

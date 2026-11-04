@@ -1,4 +1,3 @@
-//! Checked intermediate form produced by sema: names resolved, values typed.
 
 use crate::diag::Span;
 
@@ -12,20 +11,16 @@ pub struct Node {
     pub id: String,
     pub title: String,
     pub body: Vec<String>,
-    /// Accent: border and tint of a box, fill of a circle, and its branch's color.
     pub color: Option<String>,
     pub fill: Option<String>,
     pub text: Option<String>,
     pub shape: Option<Shape>,
-    /// Span of the id in its `node` statement.
     pub span: Span,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum EdgeKind {
-    /// Hierarchical: general idea to specific idea.
     Tree,
-    /// Cross-reference drawn as a dashed arrow; never used for hierarchy unless needed for connectivity.
     Link,
 }
 
@@ -33,10 +28,8 @@ pub struct Edge {
     pub a: usize,
     pub b: usize,
     pub kind: EdgeKind,
-    /// False for `--` and `..`: drawn without an arrowhead; layers still follow the source order.
     pub directed: bool,
     pub label: Option<String>,
-    /// Stroke color; None draws the layout's default (branch accent, theme edge or link).
     pub color: Option<String>,
     pub span: Span,
 }
@@ -44,7 +37,6 @@ pub struct Edge {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Length {
     Pt(f64),
-    /// Multiple of the body font, which is only known once the solver picks it.
     Em(f64),
 }
 
@@ -63,9 +55,7 @@ pub enum Side {
     Bottom,
     Left,
     Right,
-    /// Shared center y.
     Row,
-    /// Shared center x.
     Column,
 }
 
@@ -75,25 +65,21 @@ impl Side {
     }
 }
 
-/// Place is one cell of the page split into thirds; (column, row) with (0, 0) at top-left.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Place(pub u8, pub u8);
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Relation {
-    /// a's right edge plus gap is at most b's left edge.
     LeftOf {
         a: usize,
         b: usize,
         gap: Length,
     },
-    /// a's bottom edge is at least gap above b's top edge.
     Above {
         a: usize,
         b: usize,
         gap: Length,
     },
-    /// The space between the two boxes is at most `within`.
     Near {
         a: usize,
         b: usize,
@@ -107,10 +93,6 @@ pub enum Relation {
         a: usize,
         place: Place,
     },
-    /// A frame, with the title on top, around these nodes and no others, on the page.
-    /// `title_em` is the title's width in ems of the body font, measured once fonts are
-    /// loaded (`layout::measure_groups`). `inner` holds copies of the groups directly nested
-    /// in this one, whose frames this frame must enclose.
     Group {
         items: Vec<usize>,
         title: Option<String>,
@@ -120,19 +102,37 @@ pub enum Relation {
     },
 }
 
+pub enum NodeIndices<'a> {
+    Single(Option<usize>),
+    Pair(std::array::IntoIter<usize, 2>),
+    Many(std::iter::Copied<std::slice::Iter<'a, usize>>),
+}
+
+impl Iterator for NodeIndices<'_> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Single(value) => value.take(),
+            Self::Pair(values) => values.next(),
+            Self::Many(values) => values.next(),
+        }
+    }
+}
+
 impl Relation {
-    pub fn nodes(&self) -> Vec<usize> {
+    pub fn nodes(&self) -> NodeIndices<'_> {
         match self {
             Relation::LeftOf { a, b, .. }
             | Relation::Above { a, b, .. }
-            | Relation::Near { a, b, .. } => vec![*a, *b],
-            Relation::Align { items, .. } | Relation::Group { items, .. } => items.clone(),
-            Relation::At { a, .. } => vec![*a],
+            | Relation::Near { a, b, .. } => NodeIndices::Pair([*a, *b].into_iter()),
+            Relation::Align { items, .. } | Relation::Group { items, .. } => {
+                NodeIndices::Many(items.iter().copied())
+            }
+            Relation::At { a, .. } => NodeIndices::Single(Some(*a)),
         }
     }
 
-    /// depth counts the frames from this group's own down to its deepest nested one; 0 for a
-    /// relation that is not a group.
     pub fn depth(&self) -> usize {
         match self {
             Relation::Group { inner, .. } => {
@@ -166,14 +166,10 @@ pub enum LayoutKind {
 pub struct Settings {
     pub layout: Option<LayoutKind>,
     pub page: Option<(f64, f64)>,
-    /// The page's orientation was given (a `portrait` or `landscape` flag, or `WxH`), so the
-    /// layout may not turn it.
     pub page_fixed: bool,
-    /// Most bands a layered flow may wrap into; 1 never wraps. None leaves it to the layout.
     pub bands: Option<usize>,
     pub margin: Option<f64>,
     pub font: Option<(f64, f64)>,
-    /// Span of the `font` statement that set `font`.
     pub font_span: Option<Span>,
     pub wrap_em: Option<f64>,
     pub family: Option<String>,

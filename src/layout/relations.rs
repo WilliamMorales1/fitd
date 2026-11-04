@@ -1,4 +1,3 @@
-//! Whether a user relation holds for given node boxes.
 
 use super::*;
 
@@ -14,13 +13,9 @@ pub(super) fn aligned(side: Side, a: &Rect, b: &Rect, tol: f64) -> bool {
     d.abs() <= tol + 1e-9
 }
 
-/// Space between a group's members and its frame, and between the frame and any other box or
-/// frame, in ems.
 pub const FRAME_PAD: f64 = 0.5;
 pub const FRAME_CLEAR: f64 = 0.4;
 
-/// frame is a group's border: around its members' boxes and nested groups' frames, with a
-/// title band on top that is wide enough for the title. Only defined for `Relation::Group`.
 pub fn frame(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64) -> Rect {
     let Relation::Group {
         items,
@@ -56,12 +51,8 @@ pub fn frame(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64) -> Rect {
     r
 }
 
-/// Height of a group's title band in ems; the title is drawn at 0.8em.
 pub const TITLE_BAND: f64 = 1.1;
 
-/// relation_holds is the meaning of a user constraint, shared by the solver and the checker.
-/// `rect` gives a node's region; y grows upward. For a group it checks only that the frame is
-/// on the page; `frame_clear` checks it against everything else.
 pub fn relation_holds(
     rel: &Relation,
     rect: &dyn Fn(usize) -> Rect,
@@ -92,8 +83,6 @@ pub fn relation_holds(
     }
 }
 
-/// frame_clear reports whether a group's frame keeps clear of `other`: a box outside the group,
-/// or the frame of a group that shares none of its nodes.
 pub fn frame_clear(frame: &Rect, other: &Rect, body: f64) -> bool {
     !frame.inflate(FRAME_CLEAR * body).intersects(other)
 }

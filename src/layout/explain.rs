@@ -1,7 +1,4 @@
-//! Minimal unsatisfiable cores of user constraints (QuickXplain).
 
-/// quickxplain returns a minimal subset of `cs` that is infeasible together with `base`
-/// (Junker 2004). It needs `base` feasible and `base + cs` infeasible.
 pub(super) fn quickxplain(
     feasible: &mut dyn FnMut(&[usize]) -> bool,
     base: &[usize],
@@ -26,7 +23,6 @@ mod tests {
 
     #[test]
     fn quickxplain_finds_minimal_core() {
-        // Infeasible exactly when the set contains both 2 and 5, or contains 7.
         let mut calls = 0;
         let mut feasible = |s: &[usize]| {
             calls += 1;

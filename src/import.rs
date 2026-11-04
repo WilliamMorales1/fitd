@@ -1,6 +1,3 @@
-//! `fitd import`: translates Graphviz DOT, Mermaid flowcharts and mind maps, and D2 to fitd.
-//! Nodes, labels, edges, and clusters, subgraphs, or containers (as nested `group`s) carry over;
-//! everything else is dropped and listed, since fitd places nodes itself.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -11,7 +8,6 @@ struct INode {
     color: Option<String>,
     fill: Option<String>,
     circle: bool,
-    /// Innermost cluster the node was first mentioned in.
     group: Option<usize>,
 }
 
@@ -27,16 +23,12 @@ struct IEdge {
 struct IGroup {
     title: Option<String>,
     name: String,
-    /// The cluster this one is nested in.
     parent: Option<usize>,
 }
 
-/// Doc is a diagram read from another language, before it is written as fitd.
 #[derive(Default)]
 struct Doc {
-    /// None for radial; Some(true) for a layered flow down, Some(false) for right.
     down: Option<bool>,
-    /// The root of a radial map, when the source names one.
     root: Option<usize>,
     nodes: Vec<INode>,
     index: HashMap<String, usize>,
@@ -48,7 +40,6 @@ struct Doc {
 impl Doc {
     fn node(&mut self, id: &str, group: Option<usize>) -> usize {
         if let Some(&v) = self.index.get(id) {
-            // A node mentioned again in a cluster nested inside its own moves into it.
             match (self.nodes[v].group, group) {
                 (None, _) => self.nodes[v].group = group,
                 (Some(old), Some(new)) if self.within(new, old) => self.nodes[v].group = group,
@@ -69,7 +60,6 @@ impl Doc {
         self.nodes.len() - 1
     }
 
-    /// within says whether cluster `g` is `k` or nested somewhere inside it.
     fn within(&self, g: usize, k: usize) -> bool {
         let mut g = Some(g);
         while let Some(h) = g {
@@ -91,8 +81,6 @@ const KEYWORDS: &[&str] = &[
     "prefer", "include",
 ];
 
-/// fitd_ids gives every node an id fitd accepts (letters, digits, `_`, inner `-`, not starting
-/// with a digit, not a keyword), keeping the original where it already is one.
 fn fitd_ids(names: &[&str]) -> Vec<String> {
     let mut used = BTreeSet::new();
     names
@@ -135,13 +123,11 @@ fn quote(s: &str) -> String {
     )
 }
 
-/// hex keeps a color fitd can use: `#RGB` or `#RRGGBB`.
 fn hex(c: &str) -> Option<String> {
     let h = c.strip_prefix('#')?;
     (matches!(h.len(), 3 | 6) && h.chars().all(|c| c.is_ascii_hexdigit())).then(|| c.to_uppercase())
 }
 
-/// strip_html turns `<br>` into a newline and drops other tags.
 fn strip_html(s: &str, dropped: &mut BTreeSet<String>) -> String {
     let mut out = String::new();
     let mut rest = s;
@@ -224,7 +210,6 @@ impl Doc {
             if members.is_empty() {
                 continue;
             }
-            // fitd nests a group only inside a strictly larger one.
             if written.contains(&members) {
                 self.dropped.insert(format!(
                     "cluster `{}`, which holds the same nodes as the one around it",
@@ -247,12 +232,10 @@ impl Doc {
     }
 }
 
-// ---- DOT ----
 
 #[derive(Clone, Debug, PartialEq)]
 enum DTok {
     Id(String),
-    /// A quoted string, kept apart from bare ids so `"node"` is a name, not a keyword.
     Quoted(String),
     Html(String),
     Punct(&'static str),
@@ -303,7 +286,6 @@ fn dot_lex(text: &str) -> Result<Vec<DTok>, String> {
                 }
             }
             i += 1;
-            // `"a" + "b"` concatenates.
             match out.last_mut() {
                 Some(DTok::Punct("+")) => {
                     out.pop();
@@ -369,7 +351,6 @@ struct DotParser {
     pos: usize,
     doc: Doc,
     directed: bool,
-    /// Cluster stack; the innermost is last.
     clusters: Vec<usize>,
 }
 
@@ -454,8 +435,6 @@ impl DotParser {
         Ok(())
     }
 
-    /// stmts reads up to the closing `}` and returns every node mentioned, for edges to a
-    /// subgraph. Node and edge defaults are scoped to the block.
     fn stmts(
         &mut self,
         node_def: &[(String, String)],
@@ -525,7 +504,6 @@ impl DotParser {
         Ok(seen)
     }
 
-    /// endpoint reads a node (with its port dropped) or a subgraph: (the node, every node).
     fn endpoint(
         &mut self,
         node_def: &[(String, String)],
@@ -662,15 +640,11 @@ fn from_dot(text: &str) -> Result<Doc, String> {
     Ok(p.doc)
 }
 
-// ---- Mermaid ----
 
-/// mermaid_node reads `id`, `id[text]`, `id(text)`, `id((text))`, `id{text}`, and the other
-/// shapes, returning (id, text, circle) and the rest of the line.
 fn mermaid_node(s: &str) -> Option<(String, Option<String>, bool, &str)> {
     let s = s.trim_start();
     let mut end = 0;
     for (i, c) in s.char_indices() {
-        // A hyphen inside an id is fine; one that starts an arrow ends it.
         let arrow = c == '-'
             && (s[i..].starts_with("--") || s[i..].starts_with("-.") || s[i..].starts_with("->"));
         if !(c.is_alphanumeric() || c == '_' || c == '-' || !c.is_ascii()) || arrow {
@@ -722,8 +696,6 @@ fn mermaid_node(s: &str) -> Option<(String, Option<String>, bool, &str)> {
     Some((id, None, false, rest))
 }
 
-/// mermaid_arrow reads a link: `-->`, `---`, `-.->`, `==>`, `--o`, `<-->`, with an optional
-/// `|label|` or `-- label -->` text. Returns (directed, dotted, label, rest).
 fn mermaid_arrow<'a>(
     s: &'a str,
     dropped: &mut BTreeSet<String>,
@@ -740,7 +712,6 @@ fn mermaid_arrow<'a>(
     let (mut op, mut rest) = (s[..n].to_string(), &s[n..]);
     let mut label = None;
     if matches!(op.as_str(), "--" | "==" | "-.") && rest.starts_with(' ') {
-        // `A -- text --> B`: the text runs to the closing half of the arrow.
         let close = ["-->", "---", "==>", "===", ".->", ".-"]
             .iter()
             .filter_map(|c| rest.find(c).map(|i| (i, *c)))
@@ -821,7 +792,6 @@ fn from_mermaid(text: &str) -> Result<Doc, String> {
         match word {
             "subgraph" => {
                 let rest = line["subgraph".len()..].trim();
-                // `subgraph id [Title]`, or `subgraph Title` alone.
                 let (name, title) = match (rest.find('['), rest.strip_suffix(']')) {
                     (Some(j), Some(inner)) => (
                         rest[..j].trim().to_string(),
@@ -854,7 +824,6 @@ fn from_mermaid(text: &str) -> Result<Doc, String> {
         if line.contains(":::") {
             doc.drop("`:::` classes");
         }
-        // A chain of node groups (`A & B`) joined by arrows.
         let group = clusters.last().copied();
         let mut rest = line;
         let mut prev: Option<Vec<usize>> = None;
@@ -909,16 +878,12 @@ fn from_mermaid(text: &str) -> Result<Doc, String> {
     Ok(doc)
 }
 
-// ---- D2 ----
 
-/// D2Seg is one D2 statement, with its line and whether a `{` block follows it, or a `}`.
 enum D2Seg {
     Stmt(String, usize, bool),
     Close,
 }
 
-/// d2_lex splits D2 source into statements at newlines, `;`, `{`, and `}` outside quotes,
-/// dropping `#` comments. A `|`-delimited block string becomes one quoted value.
 fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
     let mut out = Vec::new();
     let (mut buf, mut line, mut quote, mut depth) = (String::new(), 1, None, 0usize);
@@ -946,7 +911,6 @@ fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
                 quote = Some(c);
                 buf.push(c);
             }
-            // `${name}` substitutes a variable rather than opening a block.
             '$' if it.peek() == Some(&'{') => {
                 buf.push(c);
                 for c in it.by_ref() {
@@ -962,7 +926,6 @@ fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
                 }
             }
             '|' if buf.trim_end().ends_with(':') => {
-                // `|md ... |`: as many pipes close it as opened it.
                 let mut n = 1;
                 while it.next_if_eq(&'|').is_some() {
                     n += 1;
@@ -977,8 +940,6 @@ fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
                     body.push(c);
                 }
                 body.truncate(body.len() - n);
-                // A language tag (`md`, `latex`) runs to the first space or newline; a
-                // Markdown heading keeps its text.
                 let (lang, body) = body.split_once(char::is_whitespace).unwrap_or(("", ""));
                 let lines: Vec<&str> = body
                     .trim()
@@ -996,7 +957,6 @@ fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
                     lines.join("\n").replace('\\', "\\\\").replace('"', "\\\"")
                 );
             }
-            // `;` separates statements, except inside an array such as `class: [a; b]`.
             '[' | ']' => {
                 depth = if c == '[' {
                     depth + 1
@@ -1023,8 +983,6 @@ fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
     Ok(out)
 }
 
-/// d2_split cuts `s` at each occurrence of a separator outside quotes, returning the pieces
-/// and the separators between them. Earlier separators in `seps` win at the same spot.
 fn d2_split<'a>(s: &'a str, seps: &[&'a str]) -> (Vec<&'a str>, Vec<&'a str>) {
     let (mut parts, mut found) = (Vec::new(), Vec::new());
     let (mut start, mut quote, mut i) = (0, None, 0);
@@ -1052,8 +1010,6 @@ fn d2_split<'a>(s: &'a str, seps: &[&'a str]) -> (Vec<&'a str>, Vec<&'a str>) {
     (parts, found)
 }
 
-/// d2_unquote reads a key or value: a quoted string loses its quotes and escapes, a bare one
-/// its surrounding space.
 fn d2_unquote(s: &str) -> String {
     let s = s.trim();
     match s.chars().next() {
@@ -1076,7 +1032,6 @@ fn d2_unquote(s: &str) -> String {
     }
 }
 
-/// d2_subst replaces each `${name}` in `s` with its variable from `vars`.
 fn d2_subst(s: &str, vars: &HashMap<String, String>, dropped: &mut BTreeSet<String>) -> String {
     let mut out = String::new();
     let mut rest = s;
@@ -1096,7 +1051,6 @@ fn d2_subst(s: &str, vars: &HashMap<String, String>, dropped: &mut BTreeSet<Stri
     out + rest
 }
 
-/// Keys that set a property of the object they follow rather than name a child.
 const D2_PROPS: &[&str] = &[
     "shape",
     "label",
@@ -1129,22 +1083,15 @@ struct D2Node {
     fill: Option<String>,
     parent: Option<usize>,
     container: bool,
-    /// Names from `class`, applied once every class is known.
     classes: Vec<String>,
 }
 
-/// D2Scope is what the statements inside a `{` block apply to.
 enum D2Scope {
-    /// Children and properties of a container, by its path ("" for the top level).
     Container(String),
-    /// Properties of the edges a statement drew.
     Edges(Vec<usize>),
-    /// Properties under a prefix (`style: {`) of an object, or of edges when it is None.
     Props(Option<String>, Vec<usize>, String),
-    /// The `classes` block, and inside it one class's properties under a prefix.
     Classes,
     Class(String, String),
-    /// The `vars` block, under the path of the variable being defined.
     Vars(String),
     Skip,
 }
@@ -1155,14 +1102,12 @@ struct D2Doc {
     nodes: Vec<D2Node>,
     edges: Vec<IEdge>,
     direction: Option<String>,
-    /// Each class's properties, as (path, value), in source order.
     classes: HashMap<String, Vec<(String, String)>>,
     vars: HashMap<String, String>,
     dropped: BTreeSet<String>,
 }
 
 impl D2Doc {
-    /// object finds or makes the object at `path`, and its ancestors.
     fn object(&mut self, path: &str) -> usize {
         if let Some(&v) = self.index.get(path) {
             return v;
@@ -1180,7 +1125,6 @@ impl D2Doc {
         self.nodes.len() - 1
     }
 
-    /// resolve joins a key to the container it is written in; `_` steps out one level.
     fn resolve(prefix: &str, key: &[String]) -> String {
         let mut segs: Vec<String> = prefix
             .split('.')
@@ -1197,7 +1141,6 @@ impl D2Doc {
         segs.join(".")
     }
 
-    /// prop applies a property path (`style.fill`) to an object, or to edges when `obj` is None.
     fn prop(&mut self, obj: Option<usize>, edges: &[usize], prop: &str, value: &str) {
         let hex_or_drop = |d: &mut BTreeSet<String>, v: &str| {
             let h = hex(v);
@@ -1248,8 +1191,6 @@ impl D2Doc {
     }
 }
 
-/// from_d2 reads D2: objects, labels, connections, containers (as groups), classes, vars, and the shape,
-/// label, fill, and stroke of objects and connections. D2 lays out top to bottom by default.
 fn from_d2(text: &str) -> Result<Doc, String> {
     let mut d = D2Doc {
         paths: Vec::new(),
@@ -1329,7 +1270,6 @@ fn from_d2(text: &str) -> Result<Doc, String> {
                 }
                 (None, false) => {}
             },
-            // `name: {` or `name.style: {` opens a class; inside, a property opens a prefix or is set.
             D2Scope::Class(name, prop) => match (value, opens) {
                 (_, true) => stack.push(D2Scope::Class(name, prop)),
                 (Some(val), false) if !prop.is_empty() => {
@@ -1473,7 +1413,6 @@ fn from_d2(text: &str) -> Result<Doc, String> {
             }
         }
     }
-    // An object's own style wins over its classes', and a later class over an earlier one.
     for v in 0..d.nodes.len() {
         let (fill, color, label) = (
             d.nodes[v].fill.is_some(),
@@ -1552,7 +1491,6 @@ fn from_d2(text: &str) -> Result<Doc, String> {
             (n.circle, n.color.clone(), n.fill.clone());
         at[v] = Some(w);
     }
-    // A container stands for its first member, the first object written inside it.
     let mut first = at.clone();
     for v in (0..d.nodes.len()).rev() {
         if let (Some(p), Some(_)) = (d.nodes[v].parent, first[v]) {
@@ -1571,7 +1509,6 @@ fn from_d2(text: &str) -> Result<Doc, String> {
     Ok(doc)
 }
 
-/// Mind map node shapes as (open, close, circle); a bare line is a plain node.
 const MINDMAP_SHAPES: [(&str, &str, bool); 6] = [
     ("((", "))", true),
     ("))", "((", false),
@@ -1581,12 +1518,9 @@ const MINDMAP_SHAPES: [(&str, &str, bool); 6] = [
     ("(", ")", false),
 ];
 
-/// from_mindmap reads a Mermaid `mindmap`, whose hierarchy is its indentation, as a radial map
-/// rooted at its first node. Every line is its own node, even when two share a text.
 fn from_mindmap(text: &str) -> Result<Doc, String> {
     let mut doc = Doc::default();
     let mut header = false;
-    // Indent and node of each open ancestor.
     let mut stack: Vec<(usize, usize)> = Vec::new();
     for (i, raw) in text.lines().enumerate() {
         let line = raw.split("%%").next().unwrap_or("").trim_end();
@@ -1610,7 +1544,6 @@ fn from_mindmap(text: &str) -> Result<Doc, String> {
             doc.drop("`:::` classes");
             body = body[..j].trim_end();
         }
-        // `id[text]` and the other shapes; otherwise the whole line is the text.
         let shaped = MINDMAP_SHAPES.iter().find_map(|&(open, close, circle)| {
             let j = body.find(open)?;
             let id = &body[..j];
@@ -1658,8 +1591,6 @@ fn from_mindmap(text: &str) -> Result<Doc, String> {
     Ok(doc)
 }
 
-/// import translates DOT or Mermaid source to fitd, chosen by the file extension or, failing
-/// that, by the first word. Returns the fitd text and what was dropped.
 pub fn import(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
     let ext = std::path::Path::new(path)
         .extension()

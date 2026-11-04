@@ -1,12 +1,3 @@
-//! Layered strategy (Sugiyama-style flowchart): edges point down (or right).
-//!
-//! Classic pipeline, with the last step replaced by the CSP:
-//! 1. merge nodes that a hard `row` (down) or `column` (right) alignment puts on one layer;
-//! 2. break cycles by dropping DFS back edges from the layering (they are drawn as links);
-//! 3. assign layers by longest path, so every edge between layers points forward;
-//! 4. order each layer by barycenter sweeps, which only sets value preference;
-//! 5. let the solver pick each node's cross-axis position from a grid. Same-layer regions stay
-//!    apart and edges miss other nodes (hard); edge crossings cost 1 each (soft).
 
 use crate::geom::Rect;
 use crate::graph::{Dir, EdgeKind, Graph, Relation, Side};
@@ -15,7 +6,6 @@ use crate::layout::{
 };
 use crate::metrics::Fonts;
 
-/// back_edges returns the indices of tree edges that close a directed cycle in DFS order.
 fn back_edges(n: usize, edges: &[(usize, usize)]) -> Vec<bool> {
     let mut out_arcs = vec![Vec::new(); n];
     for (i, &(a, b)) in edges.iter().enumerate() {
@@ -49,7 +39,6 @@ fn back_edges(n: usize, edges: &[(usize, usize)]) -> Vec<bool> {
     back
 }
 
-/// layers assigns each node its longest-path distance from a source.
 fn layers(n: usize, dag: &[(usize, usize)]) -> Vec<usize> {
     let mut indeg = vec![0; n];
     let mut succ = vec![Vec::new(); n];
@@ -71,7 +60,6 @@ fn layers(n: usize, dag: &[(usize, usize)]) -> Vec<usize> {
     layer
 }
 
-/// order sorts each layer by the mean position of its neighbors, sweeping down then up.
 fn order(n: usize, layer: &[usize], dag: &[(usize, usize)]) -> Vec<Vec<usize>> {
     let depth = layer.iter().max().map_or(0, |m| m + 1);
     let mut rows: Vec<Vec<usize>> = vec![Vec::new(); depth];
@@ -119,7 +107,6 @@ fn order(n: usize, layer: &[usize], dag: &[(usize, usize)]) -> Vec<Vec<usize>> {
     rows
 }
 
-/// merged maps each node to the representative of its group of nodes forced onto one layer.
 fn merged(g: &Graph, dir: Dir) -> Vec<usize> {
     let side = match dir {
         Dir::Down => Side::Row,
@@ -148,7 +135,6 @@ fn merged(g: &Graph, dir: Dir) -> Vec<usize> {
 pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan {
     let n = boxes.len();
     let page = cfg.page();
-    // Layers fill the page along the flow, so leave room at both ends for group frames.
     let depth = g
         .constraints
         .iter()
@@ -163,7 +149,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         Dir::Down => (page.y1 - page.y0 - lead - trail, page.x1 - page.x0),
         Dir::Right => (page.x1 - page.x0 - lead - trail, page.y1 - page.y0),
     };
-    // (main, cross) extent of each box: main runs along the flow.
     let size = |v: usize| match dir {
         Dir::Down => (boxes[v].h, boxes[v].w),
         Dir::Right => (boxes[v].w, boxes[v].h),
@@ -173,8 +158,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         Dir::Right => (page.x0 + m, -c),
     };
 
-    // Layers are found on the graph with merged nodes contracted; an edge inside a group runs
-    // along its layer and takes no part in layering or ordering.
     let rep = merged(g, dir);
     let tree: Vec<(usize, usize)> = g
         .edges
@@ -207,10 +190,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         .collect();
     let rows = order(n, &layer, &dag);
 
-    // Spread layers over the page, with at least two ems between them for arrows, and room
-    // for a label plus an em on each side where an arrow to the next layer carries one. When
-    // the flow is too long to reach the legibility floor in one line, it wraps into bands that
-    // run back and forth (a snake), so each band's last layer sits beside the next one's first.
     let sep = (0.6 * b).max(3.0);
     let thick: Vec<f64> = rows
         .iter()
@@ -224,7 +203,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
             room[la] = room[la].max(if dir == Dir::Down { h } else { w } + 2.0 * b);
         }
     }
-    // Room needed between the layers of a band, beyond their thickness.
     let gaps = |r: &std::ops::Range<usize>| room[r.start..r.end - 1].iter().sum::<f64>();
     let span: Vec<f64> = rows
         .iter()
@@ -237,7 +215,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
             .map(|s| s..(s + per).min(rows.len()))
             .collect()
     };
-    // Whether `k` bands fit with every length scaled by `scale`.
     let fits = |k: usize, scale: f64| {
         let bs = bands(k);
         let along = bs
@@ -263,8 +240,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     let band: Vec<usize> = (0..rows.len())
         .map(|l| bands.iter().position(|r| r.contains(&l)).unwrap())
         .collect();
-    // Each gap grows by one shared amount above its room, so the bands' layers line up. Past
-    // four ems the flow sits centered, unless an `at` needs its ends to reach the page's edges.
     let pinned = g
         .constraints
         .iter()
@@ -284,7 +259,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         let used = thick[r.clone()].iter().sum::<f64>() + gaps(r) + extra * (r.len() - 1) as f64;
         let mut m = lead + (main_len - used).max(0.0) / 2.0;
         for l in r.clone() {
-            // A hair under an exact fill, so rounding never pushes the last layer off the page.
             center[l] = if i % 2 == 0 {
                 m + thick[l] / 2.0
             } else {
@@ -293,8 +267,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
             m += thick[l] + room[l] + extra;
         }
     }
-    // Each band owns a slice of the cross axis, as wide as its widest layer plus a share of
-    // what is left; one band owns all of it.
     let need: Vec<f64> = bands
         .iter()
         .map(|r| span[r.clone()].iter().copied().fold(0.0, f64::max))
@@ -312,7 +284,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     let step = 0.5 * b;
     let mut cands: Vec<Vec<Cand>> = (0..n).map(|_| Vec::new()).collect();
     for (l, row) in rows.iter().enumerate().filter(|_| feasible) {
-        // Ideal spots spread the row evenly across its band, in barycenter order.
         let (lo, hi) = slices[band[l]];
         let total: f64 = row.iter().map(|&v| size(v).1).sum();
         let space = ((hi - lo - total) / row.len() as f64).clamp(0.0, 4.0 * b);
@@ -322,7 +293,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
             let (_, w) = size(v);
             let ideal = c + w / 2.0;
             c += w + space;
-            // One grid shared by every node, so centers can line up exactly.
             let (i0, i1) = (
                 ((lo + w / 2.0) / step).ceil() as i64,
                 ((hi - w / 2.0) / step).floor() as i64,
@@ -344,7 +314,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     for row in &rows {
         for (i, &u) in row.iter().enumerate() {
             for &v in &row[i + 1..] {
-                // An arrow along the layer needs the same room as one between layers.
                 let joined = along
                     .iter()
                     .any(|&(p, q)| (p, q) == (u, v) || (q, p) == (u, v));
@@ -361,7 +330,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
             cons.push((vec![a, c, u], Kind::Clear(sep * 0.25), 0));
         }
     }
-    // In a single band only the layers an edge spans can be in its way; across bands anything can.
     let near = |l: usize, lo: usize, hi: usize| k > 1 || (l >= lo && l <= hi);
     for (i, &(a, c)) in dag.iter().enumerate() {
         let (lo, hi) = (layer[a].min(layer[c]), layer[a].max(layer[c]));
@@ -393,8 +361,6 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Link) {
         edges.push(Drawn::new(e.a, e.b, EdgeStyle::Link, 0.1, e.label.clone()));
     }
-    // Group members go first: once a frame is known, forward checking keeps everyone else off
-    // it, instead of a non-member taking a spot that a later member's frame needs.
     let member = |v: usize| {
         g.constraints
             .iter()
@@ -442,7 +408,6 @@ mod tests {
 
     #[test]
     fn barycenter_uncrosses_two_edges() {
-        // 0->3 and 1->2: putting 3 before 2 removes the crossing.
         let rows = order(4, &[0, 0, 1, 1], &[(0, 3), (1, 2)]);
         assert_eq!(rows[1], vec![3, 2]);
     }

@@ -1,5 +1,3 @@
-//! Minimal language server (`fitd lsp`): front-end diagnostics on every change, full layout
-//! diagnostics on save, go-to-definition and completion for node and style names.
 
 use crate::ast::{Name, StmtKind};
 use crate::diag::{Diag, Level, Source, Span};
@@ -13,7 +11,6 @@ const KEYWORDS: &[&str] = &[
     "prefer", "include",
 ];
 
-/// Out is stdout, shared with the threads that run full layouts.
 type Out = Arc<Mutex<std::io::Stdout>>;
 
 fn send(out: &Out, msg: Value) {
@@ -40,11 +37,9 @@ fn read(input: &mut impl BufRead) -> Option<Value> {
     }
     let mut body = vec![0; len?];
     input.read_exact(&mut body).ok()?;
-    // A malformed message is skipped, not taken for the end of input.
     Some(serde_json::from_slice(&body).unwrap_or(Value::Null))
 }
 
-/// position converts a byte offset to an LSP position, whose character counts UTF-16 units.
 fn position(text: &str, off: usize) -> Value {
     let off = off.min(text.len());
     let line_start = text[..off].rfind('\n').map_or(0, |i| i + 1);
@@ -52,7 +47,6 @@ fn position(text: &str, off: usize) -> Value {
     json!({ "line": line, "character": text[line_start..off].encode_utf16().count() })
 }
 
-/// offset converts an LSP position back to a byte offset, clamped to its line.
 fn offset(text: &str, pos: &Value) -> usize {
     let (line, ch) = (
         pos["line"].as_u64().unwrap_or(0) as usize,
@@ -75,8 +69,6 @@ fn range(text: &str, span: Span) -> Value {
 
 const NOWHERE: Span = Span { lo: 0, hi: 0 };
 
-/// spliced_range maps a span of the spliced text to its file and a range there. Spliced lines
-/// are verbatim copies, so only line numbers change; a span that crosses files is cut to a point.
 fn spliced_range(src: &Source, span: Span) -> (String, Value) {
     let at = |off: usize| {
         let (line, col) = src.line_col(off);
@@ -106,12 +98,8 @@ fn lsp_diag(range: Value, d: &Diag) -> Value {
     json!({ "range": range, "severity": if d.level == Level::Error { 1 } else { 2 }, "code": d.code, "source": "fitd", "message": msg })
 }
 
-/// Diagnostics by file path, so those in included files go to their own documents. The
-/// document's own path is always present, possibly empty.
 type Diags = HashMap<String, Vec<Value>>;
 
-/// front_end runs include, lex, parse, and sema, which include the static contradiction
-/// check (E0008).
 fn front_end(path: &str, text: &str) -> Diags {
     let crate::macros::Loaded {
         src,
@@ -136,7 +124,6 @@ fn front_end(path: &str, text: &str) -> Diags {
     out
 }
 
-/// short_line splits a `--short` line `file:line:col: message`; the file may hold colons.
 fn short_line(line: &str) -> Option<(&str, usize, usize, &str)> {
     let mut from = 0;
     while let Some(i) = line[from..].find(": ").map(|i| from + i) {
@@ -152,10 +139,8 @@ fn short_line(line: &str) -> Option<(&str, usize, usize, &str)> {
     None
 }
 
-/// Layout children by document uri, so a newer save can kill the build it replaces.
 type Running = Arc<Mutex<HashMap<String, std::process::Child>>>;
 
-/// cancel kills the layout child running for `uri`, if any.
 fn cancel(running: &Running, uri: &str) {
     if let Some(mut c) = running.lock().unwrap().remove(uri) {
         let _ = c.kill();
@@ -163,9 +148,6 @@ fn cancel(running: &Running, uri: &str) {
     }
 }
 
-/// layout builds the saved file in a child process registered under `uri` and reads back its
-/// `--short` diagnostics, so the server shares every check with the command line. None when
-/// the build was cancelled or could not start.
 fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Diags> {
     use std::io::Read;
     static RUN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -183,7 +165,6 @@ fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Diags>
     running.lock().unwrap().insert(uri.to_string(), child);
     let mut log = Vec::new();
     let _ = err.read_to_end(&mut log);
-    // Still registered means nobody killed it; reap it here.
     let mine = {
         let mut r = running.lock().unwrap();
         if r.get(uri).is_some_and(|c| c.id() == id) {
@@ -195,7 +176,6 @@ fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Diags>
     let _ = std::fs::remove_file(&out);
     let _ = std::fs::remove_file(format!("{}.fitd-tmp{id}", out.display()));
     let status = mine?.wait().ok()?;
-    // Killed by a signal: no exit code, and the log is cut short.
     status.code()?;
     let mut texts = HashMap::from([(path.to_string(), Source::new(path, text))]);
     let mut diags = Diags::from([(path.to_string(), Vec::new())]);
@@ -216,7 +196,6 @@ fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Diags>
         let src = texts.entry(file.clone()).or_insert_with(|| {
             Source::new(&file, &std::fs::read_to_string(&file).unwrap_or_default())
         });
-        // `--short` gives a line and column, so the mark runs from there to the end of the line.
         let r = match at {
             Some((ln, col)) if ln >= 1 && ln <= src.text.lines().count().max(1) => {
                 let line_text = src.line_text(ln);
@@ -234,15 +213,12 @@ fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Diags>
     Some(diags)
 }
 
-/// Decl is a declared name with its file and its range there.
 struct Decl {
     name: String,
     path: String,
     range: Value,
 }
 
-/// declared lists node ids and style names, for definitions and completion, including those
-/// declared in included files.
 fn declared(path: &str, text: &str) -> (Vec<Decl>, Vec<Decl>) {
     let crate::macros::Loaded { src, parse, .. } =
         crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
@@ -266,7 +242,6 @@ fn declared(path: &str, text: &str) -> (Vec<Decl>, Vec<Decl>) {
     (nodes, styles)
 }
 
-/// word_at finds the name under the cursor and whether a `.` marks it as a style.
 fn word_at(text: &str, off: usize) -> Option<(String, bool)> {
     let is = |c: char| c.is_alphanumeric() || c == '_' || c == '-';
     let lo = text[..off]
@@ -289,7 +264,6 @@ fn definition(path: &str, text: &str, uri: &Value, pos: &Value) -> Value {
     };
     let (nodes, styles) = declared(path, text);
     let pool = if style { styles } else { nodes };
-    // The open file's own declaration wins over one in an include.
     let found = pool
         .iter()
         .find(|d| d.name == word && d.path == path)
@@ -319,7 +293,6 @@ fn completion(path: &str, text: &str, pos: &Value) -> Value {
             .map(|k| json!({ "label": k, "kind": 14 }))
             .collect()
     } else {
-        // A node may be referenced before its `node` line, so every declaration is offered.
         nodes
             .iter()
             .filter(|n| seen.insert(n.name.clone()))
@@ -329,7 +302,6 @@ fn completion(path: &str, text: &str, pos: &Value) -> Value {
     Value::Array(items)
 }
 
-/// uri_of is the `file://` uri of a path, with `.` and `..` resolved and unsafe bytes escaped.
 fn uri_of(path: &str) -> String {
     let mut parts: Vec<&str> = Vec::new();
     for c in path.split(['/', '\\']) {
@@ -357,8 +329,6 @@ fn uri_of(path: &str) -> String {
     s
 }
 
-/// Other documents each open document last published diagnostics to, so an include whose
-/// problems are fixed gets them cleared.
 type Published = Arc<Mutex<HashMap<String, HashSet<String>>>>;
 
 fn publish(out: &Out, uri: &str, diags: Vec<Value>) {
@@ -368,8 +338,6 @@ fn publish(out: &Out, uri: &str, diags: Vec<Value>) {
     );
 }
 
-/// publish_all sends the diagnostics of the document at `uri` and of the files it includes,
-/// and clears files it published to before that now have none.
 fn publish_all(out: &Out, published: &Published, uri: &str, path: &str, mut diags: Diags) {
     publish(out, uri, diags.remove(path).unwrap_or_default());
     let mut others = HashSet::new();
@@ -408,18 +376,15 @@ fn path_of(uri: &str) -> Option<String> {
         }
     }
     let path = String::from_utf8(out).ok()?;
-    // `file:///C:/x` is `C:/x` on Windows.
     let drive = path.len() > 2 && path.as_bytes()[2] == b':';
     Some(if drive { path[1..].to_string() } else { path })
 }
 
-/// serve runs the server on stdin and stdout until the client sends `exit`.
 pub fn serve() -> std::process::ExitCode {
     let out: Out = Arc::new(Mutex::new(std::io::stdout()));
     let mut input = std::io::BufReader::new(std::io::stdin());
     let mut docs: HashMap<String, String> = HashMap::new();
     let published: Published = Arc::default();
-    // Uri to the change count when its last full layout started, so a stale result is dropped.
     let versions: Arc<Mutex<HashMap<String, u64>>> = Arc::default();
     let running: Running = Arc::default();
     let mut shutdown = false;

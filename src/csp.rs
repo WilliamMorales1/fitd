@@ -1,10 +1,3 @@
-//! Finite-domain CSP solver: forward checking with conflict-directed backjumping (FC-CBJ,
-//! Prosser 1993), plus branch and bound over soft constraints.
-//!
-//! A problem has variables `0..n`, each with domain `0..k` in preference order, and
-//! constraints of any arity given as scopes plus a predicate. Variables are assigned in index
-//! order, so the problem decides the order. Forward checking prunes a variable as soon as it
-//! is the last unassigned one in some scope.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -14,16 +7,10 @@ pub trait Problem {
     fn num_vars(&self) -> usize;
     fn domain_size(&self, v: usize) -> usize;
     fn scopes(&self) -> &[Vec<usize>];
-    /// holds evaluates constraint `c`; every variable in its scope is assigned in `val`.
     fn holds(&self, c: usize, val: &[u32]) -> bool;
-    /// weight is 0 for a hard constraint, or the cost of violating a soft one.
     fn weight(&self, _c: usize) -> u64 {
         0
     }
-    /// filter is an optional fast path for forward checking. Constraint `c` has `y` as its
-    /// only unassigned variable; push to `bad` every value `a` of `y` that violates `c` and is
-    /// alive (`removed[a] == UNSET`). Return the number of elementary tests done, or None to
-    /// fall back to one check per value.
     fn filter(
         &self,
         _c: usize,
@@ -34,8 +21,6 @@ pub trait Problem {
     ) -> Option<u64> {
         None
     }
-    /// propagate marks binary hard constraint `c` for arc consistency before search. Worth it
-    /// for constraints that chain (orderings), where forward checking sees one link at a time.
     fn propagate(&self, _c: usize) -> bool {
         false
     }
@@ -43,9 +28,7 @@ pub trait Problem {
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Stats {
-    /// Assignments tried.
     pub nodes: u64,
-    /// Constraint evaluations.
     pub checks: u64,
     pub backjumps: u64,
 }
@@ -62,7 +45,6 @@ impl std::ops::AddAssign for Stats {
 pub enum Outcome {
     Sat(Vec<u32>),
     Unsat,
-    /// The check budget ran out before search finished.
     Unknown,
 }
 
@@ -90,7 +72,6 @@ impl VarSet {
 }
 
 enum Fail {
-    /// The variables whose current values caused the failure; search backs up to the deepest.
     Conflict(VarSet),
     Abort,
 }
@@ -98,18 +79,14 @@ enum Fail {
 struct Search<'a, P: Problem> {
     p: &'a P,
     n: usize,
-    /// Hard and soft constraints per variable.
     hard: Vec<Vec<usize>>,
     soft: Vec<Vec<usize>>,
     val: Vec<u32>,
-    /// removed[v][a] is the depth that pruned value a, or UNSET while it is alive.
     removed: Vec<Vec<u32>>,
     size: Vec<usize>,
     trail: Vec<(usize, u32)>,
-    /// Per variable: (depth, culprits) for each prune, so a wipeout knows whom to blame.
     pruned_by: Vec<Vec<(u32, VarSet)>>,
     budget: u64,
-    /// Set by another thread when this search's answer is no longer needed.
     stop: &'a AtomicBool,
     stats: Stats,
     optimize: bool,
@@ -159,7 +136,6 @@ impl<P: Problem> Search<'_, P> {
         s
     }
 
-    /// revise removes the values of `y` that violate `c`, whose other variables are assigned.
     fn revise(&mut self, c: usize, y: usize, depth: u32) -> Result<(), Fail> {
         let mut bad = Vec::new();
         match self.p.filter(c, &self.val, y, &self.removed[y], &mut bad) {
@@ -193,8 +169,6 @@ impl<P: Problem> Search<'_, P> {
         Ok(())
     }
 
-    /// supported removes the values of `x` that no live value of `y` satisfies `c` with.
-    /// Run before search only, so nothing is assigned and prunes are permanent.
     fn supported(&mut self, c: usize, x: usize, y: usize) -> Result<bool, Fail> {
         let mut changed = false;
         for a in 0..self.p.domain_size(x) {
@@ -224,7 +198,6 @@ impl<P: Problem> Search<'_, P> {
         Ok(changed)
     }
 
-    /// arc_consistency is AC-3 over the constraints the problem asks to propagate.
     fn arc_consistency(&mut self) -> Result<(), Fail> {
         let arcs: Vec<(usize, usize, usize)> = (0..self.p.scopes().len())
             .filter(|&c| {
@@ -255,7 +228,6 @@ impl<P: Problem> Search<'_, P> {
         Ok(())
     }
 
-    /// forward_check returns the conflict set of the first wiped-out domain, if any.
     fn forward_check(&mut self, x: usize, depth: u32) -> Result<Option<VarSet>, Fail> {
         for i in 0..self.hard[x].len() {
             let c = self.hard[x][i];
@@ -274,7 +246,6 @@ impl<P: Problem> Search<'_, P> {
         Ok(None)
     }
 
-    /// soft_delta is the weight of soft constraints that `x` just completed and violates.
     fn soft_delta(&mut self, x: usize) -> Result<u64, Fail> {
         let mut d = 0;
         for i in 0..self.soft[x].len() {
@@ -311,7 +282,6 @@ impl<P: Problem> Search<'_, P> {
                 return Ok(());
             }
             self.best = Some((self.cost, self.val.clone()));
-            // Keep searching for a cheaper solution unless this one is perfect.
             return if self.cost == 0 {
                 Ok(())
             } else {
@@ -335,7 +305,6 @@ impl<P: Problem> Search<'_, P> {
             if ok && self.optimize {
                 delta = self.soft_delta(x)?;
                 if self.best.as_ref().is_some_and(|b| self.cost + delta >= b.0) {
-                    // Bound failure: blame the whole path, since the bound depends on all of it.
                     conf.union(&self.everyone());
                     ok = false;
                 }
@@ -364,16 +333,11 @@ impl<P: Problem> Search<'_, P> {
     }
 }
 
-/// solve searches for an assignment satisfying every hard constraint, within `budget` checks
-/// or until `stop` is set. Soft constraints are ignored.
 pub fn solve<P: Problem>(p: &P, budget: u64, stop: &AtomicBool) -> (Outcome, Stats) {
     let (out, _, stats) = run(p, budget, stop, false);
     (out, stats)
 }
 
-/// optimize is branch and bound: it satisfies every hard constraint while minimizing the
-/// total weight of violated soft ones. On budget exhaustion it returns the best found so far
-/// as `Sat`; the returned cost is that solution's soft cost.
 pub fn optimize<P: Problem>(p: &P, budget: u64, stop: &AtomicBool) -> (Outcome, u64, Stats) {
     run(p, budget, stop, true)
 }
@@ -407,7 +371,6 @@ fn run<P: Problem>(p: &P, budget: u64, stop: &AtomicBool, optimize: bool) -> (Ou
         cost: 0,
         best: None,
     };
-    // Unary constraints have nothing to propagate from; filter them once up front.
     for c in 0..p.scopes().len() {
         if p.scopes()[c].len() == 1 && p.weight(c) == 0 && s.revise(c, p.scopes()[c][0], 0).is_err()
         {
@@ -436,7 +399,6 @@ mod tests {
 
     static GO: AtomicBool = AtomicBool::new(false);
 
-    /// Table is a small problem given as scopes, a predicate, and weights.
     struct Table {
         n: usize,
         k: usize,
@@ -509,7 +471,6 @@ mod tests {
 
     #[test]
     fn branch_and_bound_minimizes_soft_cost() {
-        // Path a-b-c, two colors; soft: a=1 (weight 5), c=0 (weight 1).
         let ok = |c, s: &[usize], v: &[u32]| match c {
             0 | 1 => v[s[0]] != v[s[1]],
             2 => v[0] == 1,
@@ -523,7 +484,6 @@ mod tests {
             weights: vec![0, 0, 5, 1],
             propagate: false,
         };
-        // a=1 forces b=0, c=1: pay 1 for c rather than 5 for a.
         let (out, cost, _) = optimize(&p, u64::MAX, &GO);
         assert_eq!((out, cost), (Outcome::Sat(vec![1, 0, 1]), 1));
         assert_eq!(solve(&p, u64::MAX, &GO).0, Outcome::Sat(vec![0, 1, 0]));
@@ -531,8 +491,6 @@ mod tests {
 
     #[test]
     fn arc_consistency_proves_ordering_chain_unsat_before_search() {
-        // v0 < v1 < ... < v5 over five values cannot hold; forward checking alone would
-        // search, while arc consistency empties a domain without assigning anything.
         let p = Table {
             n: 6,
             k: 5,

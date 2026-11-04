@@ -1,4 +1,3 @@
-//! Diagnostics with source spans, rendered in the style of rustc.
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Span {
@@ -7,12 +6,12 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn new(lo: usize, hi: usize) -> Span {
-        Span { lo, hi }
+    pub fn new(lo: usize, hi: usize) -> Self {
+        Self { lo, hi }
     }
 
-    pub fn to(self, o: Span) -> Span {
-        Span {
+    pub fn to(self, o: Span) -> Self {
+        Self {
             lo: self.lo.min(o.lo),
             hi: self.hi.max(o.hi),
         }
@@ -96,8 +95,6 @@ impl Diag {
     }
 }
 
-/// Source maps byte offsets to lines and columns, and lines back to the files that were
-/// spliced together by `include`.
 pub struct Source {
     pub path: String,
     pub text: String,
@@ -105,7 +102,6 @@ pub struct Source {
     segs: Vec<Seg>,
 }
 
-/// Seg is a run of whole lines copied from one file, from `line` of the spliced text on.
 #[derive(Clone, Debug)]
 pub struct Seg {
     pub line: usize,
@@ -141,13 +137,11 @@ impl Source {
         &self.segs[self.segs.partition_point(|s| s.line <= line).max(1) - 1]
     }
 
-    /// file_line maps a line of the spliced text to its file and its line there.
     pub fn file_line(&self, line: usize) -> (&str, usize) {
         let s = self.seg(line);
         (&s.path, s.file_line + line - s.line)
     }
 
-    /// line_col is 1-based; the column counts characters, not bytes.
     pub fn line_col(&self, off: usize) -> (usize, usize) {
         let line = self.starts.partition_point(|&s| s <= off) - 1;
         let col = self.text[self.starts[line]..off.min(self.text.len())]
@@ -164,7 +158,6 @@ impl Source {
 }
 
 impl Diag {
-    /// pos orders diagnostics by where they point, so output reads top to bottom.
     pub fn pos(&self) -> usize {
         self.labels
             .iter()
@@ -174,8 +167,6 @@ impl Diag {
     }
 }
 
-/// mark_rows draws one line's marks. Marks that do not overlap share a row, and messages hang
-/// below on connectors, as rustc does; overlapping marks each get their own row.
 fn mark_rows(pad: &str, marks: &[(usize, String, &str)]) -> String {
     let mut s = String::new();
     let overlap = marks
@@ -202,7 +193,6 @@ fn mark_rows(pad: &str, marks: &[(usize, String, &str)]) -> String {
         .filter(|m| !m.2.is_empty())
         .map(|m| (m.0, m.2))
         .collect();
-    // The rightmost message fits on the mark row itself.
     if let Some(&(col, msg)) = hang.last()
         && marks.last().is_some_and(|m| m.0 == col)
     {
@@ -259,7 +249,6 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
                 continue;
             }
             let (path, fline) = src.file_line(line);
-            // A line from another file gets its own header, as rustc does.
             if path != file {
                 s += &format!("{pad}::: {path}:{fline}:{}\n", src.line_col(l.span.lo).1);
                 file = path;
@@ -269,7 +258,6 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
             let text = src.line_text(line);
             s += &format!("{fline:>width$} | {text}\n");
             last = line;
-            // (start column, mark, message) for every label on this line, left to right.
             let mut marks: Vec<(usize, String, &str)> = labels[i..]
                 .iter()
                 .take_while(|l| src.line_col(l.span.lo).0 == line)
@@ -305,8 +293,6 @@ pub fn render(src: &Source, diags: &[Diag]) -> String {
     s
 }
 
-/// render_short gives each error or warning one line, `path:line:col: level[CODE]: message`,
-/// for agents and editors. Notes are left out; other lines a diagnostic points at are listed.
 pub fn render_short(src: &Source, diags: &[Diag]) -> String {
     let mut s = String::new();
     for d in diags.iter().filter(|d| d.level != Level::Note) {

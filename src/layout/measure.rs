@@ -1,4 +1,3 @@
-//! Text measurement: wrapping titles and bodies, and sizing each node's box.
 
 use super::*;
 
@@ -32,15 +31,11 @@ pub(super) fn words(s: &str) -> Vec<String> {
     out
 }
 
-/// wrap breaks text into lines no wider than `maxw` (a longer word gets a line of its own).
-/// It uses as few lines as greedy filling would, then balances them, so the last line is not
-/// left with a lone word.
 pub fn wrap(fonts: &Fonts, text: &str, size: f64, bold: bool, maxw: f64) -> Vec<String> {
     let words = words(text);
     if words.len() < 2 {
         return vec![words.into_iter().next().unwrap_or_default()];
     }
-    // Text is measured glyph by glyph without kerning, so widths add up.
     let ww: Vec<f64> = words.iter().map(|w| fonts.width(w, size, bold)).collect();
     let space = fonts.width(" ", size, bold);
     let width = |i: usize, j: usize| ww[i..j].iter().sum::<f64>() + space * (j - i - 1) as f64;
@@ -55,7 +50,6 @@ pub fn wrap(fonts: &Fonts, text: &str, size: f64, bold: bool, maxw: f64) -> Vec<
         lines += 1;
         i = j;
     }
-    // cost[k][i]: least sum of squared slack setting words i.. on exactly k lines.
     let n = words.len();
     let mut cost = vec![vec![f64::INFINITY; n + 1]; lines + 1];
     let mut brk = vec![vec![0; n + 1]; lines + 1];
@@ -141,7 +135,6 @@ pub fn measure(fonts: &Fonts, g: &Graph, v: usize, role: Role, b: f64, cfg: &Con
             }
         }
         Shape::Circle => {
-            // Radius from the farthest line corner, so text always fits inside the circle.
             let mut r: f64 = 0.0;
             for l in &lines {
                 let top_y = l.baseline - 0.96 * l.size - text_h / 2.0;

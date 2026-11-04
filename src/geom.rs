@@ -40,7 +40,6 @@ impl Rect {
     }
 }
 
-/// segment_hits_rect reports whether segment ab passes through the interior of r (Liang-Barsky).
 pub fn segment_hits_rect(a: P, b: P, r: &Rect) -> bool {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let (mut t0, mut t1) = (0.0f64, 1.0f64);
@@ -70,7 +69,6 @@ fn orient(a: P, b: P, c: P) -> f64 {
     (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
 }
 
-/// segments_cross reports a proper crossing; segments sharing an endpoint never cross.
 pub fn segments_cross(a: P, b: P, c: P, d: P) -> bool {
     let near = |p: P, q: P| (p.0 - q.0).abs() < 1e-6 && (p.1 - q.1).abs() < 1e-6;
     if near(a, c) || near(a, d) || near(b, c) || near(b, d) {

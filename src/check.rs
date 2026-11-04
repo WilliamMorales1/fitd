@@ -1,8 +1,3 @@
-//! Borrow-checker-style verifier, independent of the solver.
-//!
-//! Every node owns its region of the page; tree edges and links borrow a corridor through the
-//! page. The checker recomputes everything from the finished layout, so a solver bug surfaces
-//! as a diagnostic instead of a broken picture.
 
 use crate::diag::Diag;
 use crate::geom::Rect;
@@ -222,7 +217,6 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
     for (i, &(p, v, (pp, pv))) in straight.iter().enumerate() {
         for &(q, w, (pq, pw)) in &straight[i + 1..] {
             if segments_cross(pp, pv, pq, pw) {
-                // Radial trees can always be drawn planar; layered graphs in general cannot.
                 let (err, code) = if radial {
                     (true, "E0103")
                 } else {
@@ -368,7 +362,7 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
         .collect();
     for (k, &(ci, f)) in groups.iter().enumerate() {
         let c = &g.constraints[ci];
-        let items = c.rel.nodes();
+        let items: Vec<_> = c.rel.nodes().collect();
         if let Some(u) =
             (0..n).find(|&u| !items.contains(&u) && !frame_clear(&f, &lay.rect(u), lay.body))
         {
@@ -380,13 +374,7 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
                 .primary(c.span, "violated by the layout"),
             );
         }
-        let apart = |cj: usize| {
-            !g.constraints[cj]
-                .rel
-                .nodes()
-                .iter()
-                .any(|v| items.contains(v))
-        };
+        let apart = |cj: usize| !g.constraints[cj].rel.nodes().any(|v| items.contains(&v));
         if let Some(&(cj, _)) = groups[k + 1..]
             .iter()
             .find(|&&(cj, h)| apart(cj) && !frame_clear(&f, &h, lay.body))
@@ -412,7 +400,6 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
     d
 }
 
-/// glyph_owner finds the first statement, in source order, whose drawn text contains `c`.
 fn glyph_owner(g: &Graph, c: char) -> Option<crate::diag::Span> {
     let nodes = g
         .nodes
@@ -467,7 +454,6 @@ mod tests {
         let lang = include_str!("../docs/language/08-diagnostics.fitd");
         for (code, _) in EXPLAIN {
             let n: u32 = code[1..].parse().unwrap();
-            // The table lists some codes as ranges, like `E0101-E0107`.
             let listed = lang.contains(code)
                 || lang.match_indices(&code[..3]).any(|(i, _)| {
                     let range = &lang[i..(i + 11).min(lang.len())];

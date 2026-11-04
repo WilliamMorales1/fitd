@@ -1,27 +1,19 @@
-//! The scene CSP: a strategy's plan plus user constraints, as a `csp::Problem`.
 
 use super::*;
 use std::cell::RefCell;
 
-/// Margin in ems that links and labels try to keep off boxes, and labels off each other.
 const CLEAR: f64 = 0.4;
 
-/// Margin in ems that labels must keep.
 const LABEL_CLEAR: f64 = 0.15;
 
-/// Route is an edge whose bend or label position the solver chooses. Its variable comes after
-/// every node's, so all positions are known when its values are checked.
 pub(super) struct Route {
     pub(super) edge: usize,
     pub(super) a: usize,
     pub(super) b: usize,
-    /// Bends: bows of the curve, then detours around boxes (untrimmed paths).
     pub(super) bows: Vec<f64>,
     pub(super) vias: Vec<Vec<P>>,
-    /// (bend, t) pairs in preference order, every bend with the same label spots.
     pub(super) opts: Vec<(usize, f64)>,
     pub(super) label: Option<(f64, f64)>,
-    /// Path per option, filled when both endpoints are fixed; curves dominate route checks.
     pub(super) paths: Vec<Vec<P>>,
 }
 
@@ -31,19 +23,13 @@ impl Route {
     }
 }
 
-/// Grid buckets one variable's candidate centers. Every candidate of a node has the same box,
-/// so "its box meets region R" is "its center lies in R grown by half the box": a range query.
 pub(super) struct Grid {
     pub(super) cell: f64,
-    /// Cell coordinates of the first column and row, and the row count.
     x0: i64,
     y0: i64,
     ny: i64,
-    /// Candidates of cell k (column-major) are `items[start[k]..start[k + 1]]`, so they come out
-    /// in the same order every run and `polish` is reproducible.
     start: Vec<u32>,
     items: Vec<u32>,
-    /// Non-empty cells as (column, row, cell index).
     full: Vec<(i64, i64, usize)>,
 }
 
@@ -53,7 +39,6 @@ impl Grid {
         for p in at {
             (x0, y0, x1, y1) = (x0.min(p.0), y0.min(p.1), x1.max(p.0), y1.max(p.1));
         }
-        // About sixteen candidates per bucket.
         let cell = (((x1 - x0) * (y1 - y0)).max(1.0) * 16.0 / at.len().max(1) as f64)
             .sqrt()
             .max(1.0);
@@ -102,9 +87,6 @@ impl Grid {
         &self.items[self.start[k] as usize..self.start[k + 1] as usize]
     }
 
-    /// shadow calls `f` with every candidate whose center may lie in the wedge seen from
-    /// `apex` across the convex hull of `pts` (and some that do not). None when the wedge is
-    /// 180 degrees or wider, which happens when `apex` touches the hull.
     pub(super) fn shadow(&self, apex: P, pts: &[P], mut f: impl FnMut(u32)) -> Option<u64> {
         let cross = |a: P, b: P| a.0 * b.1 - a.1 * b.0;
         let n = pts.len() as f64;
@@ -138,7 +120,6 @@ impl Grid {
             );
             let (x1, y1) = (x0 + self.cell, y0 + self.cell);
             let corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)];
-            // The wedge is left of `dlo` and right of `dhi`; skip cells wholly outside either side.
             if corners.iter().all(|&c| cross(dlo, c) < 0.0)
                 || corners.iter().all(|&c| cross(dhi, c) > 0.0)
             {
@@ -151,7 +132,6 @@ impl Grid {
         Some(n)
     }
 
-    /// near calls `f` with every candidate whose center may lie in `r` (and some that do not).
     pub(super) fn near(&self, r: &Rect, mut f: impl FnMut(u32)) -> u64 {
         let (cx0, cx1) = (
             (r.x0 / self.cell).floor() as i64,
@@ -170,7 +150,6 @@ impl Grid {
         let (cy0, cy1) = (cy0.max(self.y0), cy1.min(self.y0 + self.ny - 1));
         let mut n = 0;
         for cx in cx0..=cx1 {
-            // A column's cells are contiguous, so its candidates are one slice.
             if cy0 > cy1 {
                 break;
             }
@@ -184,16 +163,13 @@ impl Grid {
     }
 }
 
-/// Memo is a label box keyed by the values that place it.
 type Memo = ([u32; 3], Rect);
 
-/// Scene is a plan plus user constraints, as a `csp::Problem` over variables in plan order.
 pub(super) struct Scene<'a> {
     pub(super) g: &'a Graph,
     pub(super) page: Rect,
     pub(super) body: f64,
     pub(super) tol: f64,
-    /// Node of each variable, and the variable of each node.
     pub(super) node: Vec<usize>,
     pub(super) var: Vec<usize>,
     pub(super) at: Vec<Vec<P>>,
@@ -202,15 +178,11 @@ pub(super) struct Scene<'a> {
     pub(super) scopes: Vec<Vec<usize>>,
     pub(super) kinds: Vec<Kind>,
     pub(super) weights: Vec<u64>,
-    /// Candidate box size and shape per node variable, and a spatial index over its candidates.
     pub(super) size: Vec<(f64, f64)>,
     pub(super) shapes: Vec<Shape>,
     pub(super) grids: Vec<Grid>,
     pub(super) routes: Vec<Route>,
-    /// Per constraint, when routing: whether two links stay apart, by bend of each (BOWS order).
     pub(super) apart: Vec<Vec<bool>>,
-    /// Per route, its last label box keyed by the values of its endpoints and itself: labels
-    /// are checked against every node, so the same curve is asked for many times in a row.
     pub(super) labels: RefCell<Vec<Option<Memo>>>,
 }
 
@@ -306,7 +278,6 @@ impl Problem for Scene<'_> {
         let s = &self.scopes[c];
         let (w, h) = self.size[y];
         let mut tests = 0;
-        // Generic, not a closure, so `hit` inlines into the scan.
         fn visit(
             a: u32,
             removed: &[u32],
@@ -358,7 +329,6 @@ impl Problem for Scene<'_> {
                 Some(tests)
             }
             Kind::Clear(thin) => {
-                // An endpoint is open: the edge hits the box only from inside the box's shadow.
                 let (apex, open) = if s[0] == y {
                     (self.at[s[1]][val[s[1]] as usize], 0)
                 } else {
@@ -382,7 +352,6 @@ impl Problem for Scene<'_> {
                 Some(tests)
             }
             Kind::NoCross => {
-                // The open endpoint's edge crosses the other edge only from inside its shadow.
                 let k = s.iter().position(|&v| v == y).unwrap();
                 let partner = k ^ 1;
                 let (o0, o1) = if k < 2 { (2, 3) } else { (0, 1) };
@@ -519,11 +488,14 @@ impl Problem for Scene<'_> {
                     .iter()
                     .any(|&p| inside_box(c, shape, w, h, p))
             }
+            Kind::LinkPage(i) => self
+                .route_path(i, val)
+                .iter()
+                .all(|&p| self.page.contains(p)),
         }
     }
 }
 
-/// build turns one plan into a CSP scene, plus the plan's edges and its (kx, ky, tol).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build<'a>(
     g: &'a Graph,
@@ -542,7 +514,6 @@ pub(super) fn build<'a>(
         LayoutKind::Layered(dir) => layered::plan(g, fonts, boxes, cfg, b, dir),
     };
     let mut plan = plan;
-    // Locked spots go before the plan's own; a known layout below goes before both.
     if let Some(a) = cfg.anchor {
         for (v, c) in plan.cands.iter_mut().enumerate() {
             if let Some(q) = a.pos[v] {
@@ -557,7 +528,6 @@ pub(super) fn build<'a>(
             }
         }
     }
-    // Starting from a known layout guarantees a first solution; search then improves on it.
     if let Users::Shrunk(prev) | Users::All(prev) | Users::Routes(prev) = users {
         for (v, c) in plan.cands.iter_mut().enumerate() {
             c.insert(
@@ -635,7 +605,6 @@ pub(super) fn build<'a>(
                     cons.push(([&items[..], &[u]].concat(), Kind::Outside(ci, u), 0));
                 }
                 for (cj, d) in g.constraints.iter().enumerate().take(ci) {
-                    // Groups that share nodes are nested, and the outer frame encloses the inner.
                     if let Relation::Group { items: other, .. } = &d.rel
                         && !other.iter().any(|v| items.contains(v))
                         && cons.iter().any(|c| matches!(c.1, Kind::Rel(k) if k == cj))
@@ -644,7 +613,7 @@ pub(super) fn build<'a>(
                     }
                 }
             }
-            rel => cons.push((rel.nodes(), Kind::Rel(ci), w)),
+            rel => cons.push((rel.nodes().collect(), Kind::Rel(ci), w)),
         }
     }
     sc.grids = sc.at.iter().map(|a| Grid::new(a)).collect();
@@ -670,7 +639,6 @@ pub(super) fn build<'a>(
         let bows: Vec<f64> = if link { BOWS.to_vec() } else { vec![0.0] };
         let mut vias = Vec::new();
         if link && routing {
-            // Nodes are fixed, so detours around the other boxes can be computed up front.
             let others: Vec<Rect> = (0..n)
                 .filter(|&u| u != e.a && u != e.b)
                 .map(|u| sc.rects[sc.var[u]][0])
@@ -700,12 +668,9 @@ pub(super) fn build<'a>(
             paths: Vec::new(),
         });
         if routing {
-            // Every node has a single spot, so value 0 everywhere places them all.
             let i = sc.routes.len() - 1;
             let mut val = vec![0; sc.node.len() + i + 1];
             if link {
-                // Bends that clear every box go first, so branch and bound finds a good
-                // routing early even when its budget runs out.
                 let r = &sc.routes[i];
                 let hits: Vec<usize> = (0..r.bends())
                     .map(|k| {
@@ -739,15 +704,12 @@ pub(super) fn build<'a>(
                 .collect();
         }
     }
-    // Scopes over nodes plus route variables; duplicates are dropped because a route's
-    // endpoints may be the same nodes as the constraint's others.
     let base = sc.node.len();
     let push = |sc: &mut Scene, nodes: &[usize], routes: &[usize], kind: Kind, w: u64| {
         let mut scope: Vec<usize> = nodes.iter().map(|&u| sc.var[u]).collect();
         for &i in routes {
             scope.extend([sc.var[sc.routes[i].a], sc.var[sc.routes[i].b], base + i]);
         }
-        // Keep first occurrences in order: structural kinds read their scope by position.
         let mut seen = Vec::new();
         scope.retain(|v| {
             !seen.contains(v) && {
@@ -770,8 +732,6 @@ pub(super) fn build<'a>(
     for i in 0..sc.routes.len() {
         if sc.routes[i].label.is_some() {
             push(&mut sc, &[], &[i], Kind::LabelPage(i), 0);
-            // Labels must not touch boxes or each other; once nodes are fixed, they also try
-            // to keep a margin.
             for u in 0..n {
                 push(&mut sc, &[u], &[i], Kind::LabelClear(i, u, LABEL_CLEAR), 0);
                 if routing {
@@ -802,8 +762,7 @@ pub(super) fn build<'a>(
         }
         if routing && links.contains(&i) {
             let (a, b2) = (sc.routes[i].a, sc.routes[i].b);
-            // Weights follow what a reader notices most: a link through a box (W0201), two
-            // links meeting (W0207), a link grazing a box, a link over a tree edge.
+            push(&mut sc, &[], &[i], Kind::LinkPage(i), 0);
             for u in (0..n).filter(|&u| u != a && u != b2) {
                 push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, 0.0), 40);
                 push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, CLEAR), 2);
@@ -820,8 +779,6 @@ pub(super) fn build<'a>(
     }
     if routing {
         sc.grids.clear();
-        // Nodes are fixed, so whether two links meet depends only on their bends; the search
-        // asks the same question many times, so answer each pair once.
         sc.apart = vec![Vec::new(); sc.kinds.len()];
         for c in 0..sc.kinds.len() {
             let Kind::LinkApart(i, j) = sc.kinds[c] else {
@@ -849,8 +806,6 @@ mod tests {
     use super::*;
     use crate::graph::Settings;
 
-    /// scene builds `k` random candidates for each of `n` boxes, with every `Apart` pair, a
-    /// path of edges that must clear every box, and crossing-free edge pairs.
     fn scene(g: &Graph, n: usize, k: usize, seed: u64) -> Scene<'_> {
         let mut x = seed;
         let mut rnd = || {
@@ -902,7 +857,6 @@ mod tests {
                     sc.weights.push(0);
                 }
             }
-            // Edges 0-1, 2-3, 4-5: pairwise crossing-free.
             if i % 2 == 0 && i + 1 < n {
                 for j in (i + 2..n - 1).step_by(2) {
                     sc.scopes.push(vec![i, i + 1, j, j + 1]);
@@ -925,7 +879,6 @@ mod tests {
             settings: Settings::default(),
         };
         let (mut sat, mut unsat, mut jumps) = (0, 0, 0);
-        // Many candidates: mostly satisfiable after some search. Few: mostly unsatisfiable.
         let cases = (1..12)
             .map(|seed| (8 + seed as usize % 2, 100, seed))
             .chain((1..12).map(|seed| (10, 25, seed)));
@@ -946,7 +899,6 @@ mod tests {
             assert_eq!(plain, fast, "seed {seed}");
             jumps += fs.backjumps;
         }
-        // The scenes must be hard enough to exercise pruning, wipeouts, and backjumps.
         assert!(
             sat > 0 && unsat > 0 && jumps > 0,
             "sat {sat} unsat {unsat} backjumps {jumps}"

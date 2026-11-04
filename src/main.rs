@@ -3,6 +3,7 @@ mod check;
 mod csp;
 mod diag;
 mod emit;
+mod error;
 #[cfg(test)]
 mod fuzz;
 mod geom;
@@ -24,6 +25,7 @@ mod theme;
 mod tree;
 
 use diag::{Diag, Level};
+use error::FitdResult;
 use geom::Rect;
 use graph::LayoutKind;
 use layout::{Config, Failure};
@@ -41,8 +43,6 @@ const USAGE: &str = "usage:
   fitd split <input.fitd> [-o DIR]   an overview page plus one page per top-level branch
   fitd guide            the whole language on one page, with examples";
 
-/// GUIDE is the language reference sized for an agent's context: everything needed to write a
-/// diagram, in a few hundred tokens.
 const GUIDE: &str = include_str!("guide.txt");
 type PdfPage = (String, metrics::Fonts, (f64, f64));
 
@@ -55,7 +55,7 @@ fn page(spec: &str, portrait: bool) -> Result<(f64, f64), String> {
     })
 }
 
-fn run(args: &[String]) -> Result<ExitCode, String> {
+fn run(args: &[String]) -> FitdResult<ExitCode> {
     match args.first().map(String::as_str) {
         Some("explain") => {
             let code = args.get(1).ok_or(USAGE)?.to_uppercase();
@@ -129,13 +129,13 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                 .filter(|a| *a != "--watch")
                 .cloned()
                 .collect::<Vec<_>>(),
-        ),
-        Some(_) => build(args),
+        )
+        .map_err(Into::into),
+        Some(_) => build(args).map_err(Into::into),
         None => Err(USAGE.into()),
     }
 }
 
-/// VALUED lists the build flags that take a value, so `watch` can find the input among them.
 const VALUED: &[&str] = &[
     "--grid",
     "-o",
@@ -154,14 +154,9 @@ const VALUED: &[&str] = &[
     "--stable",
 ];
 
-/// How often `watch` looks at the input, and how long the input must stay unchanged before
-/// the full build follows the draft.
 const POLL: std::time::Duration = std::time::Duration::from_millis(200);
 const IDLE: std::time::Duration = std::time::Duration::from_millis(1500);
 
-/// watch rebuilds whenever the input changes: a draft at once, then a full build once the
-/// file has been idle for IDLE. Each build runs as a child process, so a change kills the build
-/// in progress instead of waiting out a slow full layout. It runs until interrupted.
 fn watch(args: &[String]) -> Result<ExitCode, String> {
     let mut it = args.iter();
     let mut input = None;
@@ -204,7 +199,6 @@ fn watch(args: &[String]) -> Result<ExitCode, String> {
             if let Some(mut c) = running.take() {
                 let _ = c.kill();
                 let _ = c.wait();
-                // A build killed between writing and renaming leaves its temporary file.
                 for o in &outs {
                     let _ = std::fs::remove_file(format!("{o}.fitd-tmp{}", c.id()));
                 }
@@ -230,8 +224,6 @@ fn watch(args: &[String]) -> Result<ExitCode, String> {
     }
 }
 
-/// build compiles one input to the output its extension names, or several inputs to one PDF:
-/// a page each, or with `--grid CxR` that many to a page, each laid out for its own cell.
 fn build(args: &[String]) -> Result<ExitCode, String> {
     let mut inputs = Vec::new();
     let mut grid = None;
@@ -271,8 +263,6 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     {
         return Err(format!("`{a}` takes one input, not several"));
     }
-    // With a grid, --page and the orientation flags size the sheet, and each cell is the page
-    // its diagram is laid out on.
     let sheet = match grid {
         Some(_) => {
             let spec = args
@@ -359,8 +349,6 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// build_one compiles one input. With `pages`, it adds the page to them instead of writing
-/// any file.
 fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCode, String> {
     let mut input = None;
     let (mut svg_out, mut tikz_out) = (None, None);
@@ -455,7 +443,6 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         return Ok(ExitCode::FAILURE);
     }
 
-    // Command-line flags override settings written in the file.
     if bands.is_some() {
         g.settings.bands = bands;
     }
@@ -480,7 +467,6 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         && let Ok(text) = std::fs::read_to_string(path)
     {
         let a = layout::Anchor::parse(&g, &text).map_err(|e| format!("{path}: {e}"))?;
-        // An open orientation follows the lock, so a page turned last time stays turned.
         if !page_fixed && a.page == (page_h, page_w) {
             (page_w, page_h) = (page_h, page_w);
         }
@@ -503,11 +489,9 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         wrap_em: wrap.or(set.wrap_em).unwrap_or(24.0),
         budget,
         opt_budget: budget / if draft { 32 } else { 16 },
-        // A draft gives up sooner on the first, usually too large, fonts.
         first_cap: budget / if draft { 20 } else { 4 },
         legible: legible(page_w, page_h, min_font.unwrap_or(font.0)),
         draft,
-        // Leaked: the anchor lives for the whole run, and a static keeps Config Copy.
         anchor: anchor.map(|a| &*Box::leak(Box::new(a))),
     };
 
@@ -596,7 +580,6 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
                     d.secondary(span, "")
                 };
             }
-            // Say where the floor came from, since a smaller font is often the easiest fix.
             let d = match (min_font, g.settings.font_span) {
                 (Some(_), _) => d.note("the font floor is set by `--min-font`"),
                 (None, Some(span)) => d.secondary(span, "the font floor is set here"),
@@ -624,13 +607,11 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         }
     };
     let mut diags = check::check(&g, &fonts, &cfg, &lay);
-    // Retry variants reorder branches or turn the page, which would undo the lock.
     if !diags.is_empty() && !draft && cfg.anchor.is_none() {
         let (cfg2, notes) = retry(&g, &t, &fonts, cfg, page_fixed, &mut lay, &mut diags);
         cfg = cfg2;
         show(&notes);
     }
-    // The largest font that fits is not always kept; say so, since the log line is easy to miss.
     if let Some(&(top, _)) = lay.tradeoff.iter().max_by(|a, b| a.0.total_cmp(&b.0))
         && top > lay.body + 0.05
     {
@@ -719,7 +700,6 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
     let stem = input.strip_suffix(".fitd").unwrap_or(&input).to_string();
     let out = svg_out.unwrap_or(format!("{stem}.svg"));
     let bytes = if out.to_ascii_lowercase().ends_with(".png") {
-        // A PNG is cropped to the drawing, with the margin as padding, not sized to the page.
         let svg = emit::svg(
             &g,
             &t,
@@ -785,10 +765,6 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
     Ok(ExitCode::SUCCESS)
 }
 
-/// retry rebuilds a layout that has warnings with the radial branches reordered toward their
-/// links and, when the file leaves the orientation open, on the turned page. The variants run
-/// in parallel; the one with the fewest diagnostics wins, then the best merit. Returns the
-/// winner's config and a note saying what changed.
 fn retry(
     g: &graph::Graph,
     t: &tree::Tree,
@@ -803,8 +779,6 @@ fn retry(
     } else {
         None
     };
-    // The first build already found about where the font lands, so the variants give up on
-    // fonts far above it as soon as a draft would.
     let quick = Config {
         first_cap: cfg.budget / 20,
         ..cfg
@@ -882,7 +856,6 @@ fn retry(
     }
 }
 
-/// write saves an output file, creating its directory if needed.
 fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
     if let Some(dir) = std::path::Path::new(path)
         .parent()
@@ -890,10 +863,8 @@ fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
     {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    // Through a temporary file and a rename, so a viewer never reads half an image.
     let tmp = format!("{path}.fitd-tmp{}", std::process::id());
     let renamed = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, path));
-    // Windows refuses to replace a file another program holds open, as viewers often do.
     #[cfg(windows)]
     let renamed =
         renamed.or_else(|_| std::fs::write(path, bytes).and_then(|_| std::fs::remove_file(&tmp)));
@@ -903,9 +874,6 @@ fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
     })
 }
 
-/// legible is the smallest comfortable body font for a page read from about its diagonal:
-/// 16pt per meter of viewing distance (poster guides give about 24pt at 1.5m), at least 8pt,
-/// and never below the user's own minimum.
 fn legible(page_w: f64, page_h: f64, min_font: f64) -> f64 {
     let diagonal_m = page_w.hypot(page_h) / 72.0 * 0.0254;
     (16.0 * diagonal_m).max(8.0).max(min_font)

@@ -1,4 +1,3 @@
-//! Lexer. Newlines are tokens because the grammar is one statement per line.
 
 use crate::diag::{Diag, Span};
 
@@ -6,10 +5,8 @@ use crate::diag::{Diag, Span};
 pub enum Tok {
     Ident,
     Str(String),
-    /// A number with an optional unit or size suffix, such as `24`, `7pt`, or `2296x1524pt`.
     Num,
     Color,
-    /// The rest of a line after a leading `|`.
     Body(String),
     Arrow,
     DashDash,
@@ -81,7 +78,6 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             continue;
         }
         let first = std::mem::replace(&mut line_start, false);
-        // `#` right after `=` is a color (`color=#1565C0`); anywhere else it starts a comment.
         if c == '#' && i > 0 && at(i - 1) == Some('=') {
             i += 1;
             while at(i).is_some_and(|c| c.is_ascii_hexdigit()) {
@@ -145,7 +141,6 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             }
             push(&mut toks, Tok::Num, i);
         } else if ident_char(c) {
-            // A hyphen joins words (`left-of`) but never eats an arrow (`a->b`, `a--b`).
             while at(i).is_some_and(ident_char)
                 || (at(i) == Some('-') && at(i + 1).is_some_and(ident_char))
             {
