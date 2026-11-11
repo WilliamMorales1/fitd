@@ -131,6 +131,50 @@ fn merged(g: &Graph, dir: Dir) -> Vec<usize> {
     (0..rep.len()).map(|v| find(&mut rep, v)).collect()
 }
 
+/// Layering is the flow structure of a layered graph: merged ranks, tree edges, and each node's layer.
+pub(crate) struct Layering {
+    rep: Vec<usize>,
+    tree: Vec<(usize, usize)>,
+    flat: Vec<bool>,
+    back: Vec<bool>,
+    pub layer: Vec<usize>,
+}
+
+// A `->` between two aside nodes orders the strip, not the flow.
+fn strip_edge(g: &Graph, e: &crate::graph::Edge) -> bool {
+    g.nodes[e.a].aside && g.nodes[e.b].aside
+}
+
+pub(crate) fn layering(g: &Graph, dir: Dir) -> Layering {
+    let n = g.nodes.len();
+    let rep = merged(g, dir);
+    let tree: Vec<(usize, usize)> = g
+        .edges
+        .iter()
+        .filter(|e| e.kind == EdgeKind::Tree && !strip_edge(g, e))
+        .map(|e| (e.a, e.b))
+        .collect();
+    let flat: Vec<bool> = tree.iter().map(|&(a, b)| rep[a] == rep[b]).collect();
+    let contracted: Vec<(usize, usize)> = tree.iter().map(|&(a, b)| (rep[a], rep[b])).collect();
+    let mut back = back_edges(n, &contracted);
+    for (bk, f) in back.iter_mut().zip(&flat) {
+        *bk &= !f;
+    }
+    let up: Vec<(usize, usize)> = (0..tree.len())
+        .filter(|&i| !back[i] && !flat[i])
+        .map(|i| contracted[i])
+        .collect();
+    let l = layers(n, &up);
+    let layer = (0..n).map(|v| l[rep[v]]).collect();
+    Layering {
+        rep,
+        tree,
+        flat,
+        back,
+        layer,
+    }
+}
+
 pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan {
     let n = boxes.len();
     let page = cfg.page();
@@ -158,32 +202,19 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         Dir::Right => (page.x0 + m, (page.y0 + page.y1) / 2.0 - c),
     };
 
-    let rep = merged(g, dir);
-    let tree: Vec<(usize, usize)> = g
-        .edges
-        .iter()
-        .filter(|e| e.kind == EdgeKind::Tree)
-        .map(|e| (e.a, e.b))
-        .collect();
-    let flat: Vec<bool> = tree.iter().map(|&(a, b)| rep[a] == rep[b]).collect();
-    let contracted: Vec<(usize, usize)> = tree.iter().map(|&(a, b)| (rep[a], rep[b])).collect();
-    let mut back = back_edges(n, &contracted);
-    for (bk, f) in back.iter_mut().zip(&flat) {
-        *bk &= !f;
-    }
+    let Layering {
+        rep,
+        tree,
+        flat,
+        back,
+        layer,
+    } = layering(g, dir);
+    let side = |e: &&crate::graph::Edge| strip_edge(g, e);
     let keep = |i: usize| !back[i] && !flat[i];
     let dag: Vec<(usize, usize)> = (0..tree.len())
         .filter(|&i| keep(i))
         .map(|i| tree[i])
         .collect();
-    let layer: Vec<usize> = {
-        let up: Vec<(usize, usize)> = (0..tree.len())
-            .filter(|&i| keep(i))
-            .map(|i| contracted[i])
-            .collect();
-        let l = layers(n, &up);
-        (0..n).map(|v| l[rep[v]]).collect()
-    };
     let along: Vec<(usize, usize)> = (0..tree.len())
         .filter(|&i| flat[i])
         .map(|i| tree[i])
@@ -220,7 +251,7 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         .map(|r| r.iter().map(|&v| size(v).0).fold(0.0, f64::max))
         .collect();
     let mut room = vec![2.0 * b; rows.len()];
-    for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Tree) {
+    for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Tree && !side(e)) {
         let (la, lb) = (layer[e.a].min(layer[e.b]), layer[e.a].max(layer[e.b]));
         if let (Some(l), true) = (&e.label, lb == la + 1) {
             let (w, h) = label_size(fonts, l, b);
@@ -423,7 +454,7 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     for (e, is_back) in g
         .edges
         .iter()
-        .filter(|e| e.kind == EdgeKind::Tree)
+        .filter(|e| e.kind == EdgeKind::Tree && !side(e))
         .zip(&back)
     {
         let style = if *is_back {
@@ -432,6 +463,9 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
             EdgeStyle::Arrow
         };
         edges.push(Drawn::new(e.a, e.b, style, 0.12, e.label.clone()));
+    }
+    for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Tree && side(e)) {
+        edges.push(Drawn::new(e.a, e.b, EdgeStyle::Arrow, 0.1, e.label.clone()));
     }
     for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Link) {
         edges.push(Drawn::new(e.a, e.b, EdgeStyle::Link, 0.1, e.label.clone()));

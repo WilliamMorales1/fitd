@@ -792,7 +792,10 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     for (v, n) in s.nodes.iter().enumerate().filter(|(_, n)| n.aside) {
         let flows = edges
             .iter()
-            .any(|e| e.kind == EdgeKind::Tree && (e.a == v || e.b == v));
+            .any(|e| {
+                let other = if e.a == v { e.b } else { e.a };
+                e.kind == EdgeKind::Tree && (e.a == v || e.b == v) && !s.nodes[other].aside
+            });
         let grouped = constraints
             .iter()
             .any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)));
@@ -805,7 +808,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             s.diags.push(
                 Diag::warning("W0208", format!("`place=aside` on `{}` is ignored", n.id))
                     .primary(n.span, why)
-                    .help("aside is for nodes joined only by `..>` links, such as notes"),
+                    .help("aside nodes join the flow only by `..>` links; `->` may join two aside nodes"),
             );
         }
     }

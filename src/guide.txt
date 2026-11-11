@@ -19,7 +19,7 @@ Syntax: one statement per line, # comment. Only `node` lines and edges are neede
   font 8pt..30pt wrap=16em      # range searched; one size fixes it, so give a range
   theme light|dark|mono
   style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle|none stack=N (copies behind)
-        wrap=24em place=aside (layered: strip after flow, ..> only)
+        wrap=24em place=aside (layered: strip after flow, ..> to flow)
   group "Title" a, b, c .style color=#hex times=N  # framed; times=N: dashed frame titled `Nx`
   require REL                   # must hold, or build fails with E0110
   prefer REL weight=2           # soft, warns W0205 if unmet

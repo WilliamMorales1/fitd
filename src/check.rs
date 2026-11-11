@@ -121,7 +121,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "W0208",
-        "A node has `place=aside` but is on a `->` edge or in a group, so it stays in the flow. Aside nodes sit in a strip after a layered flow and must be joined only by `..>` links.",
+        "A node has `place=aside` but is on a `->` edge to a flow node or in a group, so it stays in the flow. Aside nodes sit in a strip after a layered flow; they reach the flow only by `..>` links, and `->` may join two aside nodes to order the strip.",
     ),
     (
         "W0204",
