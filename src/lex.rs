@@ -141,7 +141,8 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             push(&mut toks, Tok::Str(s), i);
         } else if c.is_ascii_digit() {
             while at(i).is_some_and(|c| c.is_alphanumeric())
-                || (at(i) == Some('.') && at(i + 1).is_some_and(|c| c.is_ascii_digit()))
+                || (matches!(at(i), Some('.' | ':'))
+                    && at(i + 1).is_some_and(|c| c.is_ascii_digit()))
             {
                 i += 1;
             }

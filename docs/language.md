@@ -207,7 +207,10 @@ key "Principal" shape=circle fill=#FFFFFF color=#222222
 ```fitd
 page a4 portrait margin=12mm
 page 297x210mm margin=1cm
+page 16:9 margin=12pt
 ```
+
+A ratio `W:H` such as `16:9`, `4:3`, or `1.414:1` fixes only the page shape. fitd picks the smallest page of that shape on which the diagram fits at the font floor and meets as many checks and `prefer` constraints as it does on an unbounded page, then reports the size it chose (`note: page 16:9 fits on 845x475pt`). Since the page is as small as the floor allows, text comes out near the floor, so set `font` to the smallest size the reader should see (`font 10pt..30pt`). `portrait` and `landscape` turn the ratio; the page is never turned on its own. A `--stable` lock made for a page of the same shape keeps its size. Ratios beyond 20:1 are rejected.
 
 `font VALUE [attributes]` sets font size or font-size search range. A fixed size or range can be specified. Length units are `pt`, `mm`, `cm`, `in`, and `em`; `em` is relative to body font size. `wrap` sets text width, and `family` selects font family. For example, `font 7pt..48pt wrap=24em family="DejaVu Sans"` sets search bounds, wrapping width, and font family.
 

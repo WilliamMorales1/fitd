@@ -1746,3 +1746,45 @@ fn aside_on_a_flow_node_warns() {
     ]);
     assert!(ok && log.contains("warning[W0208]"), "{log}");
 }
+
+#[test]
+fn ratio_page_is_smallest_that_fits() {
+    let src = tmp("ratio.fitd");
+    std::fs::write(
+        &src,
+        "layout layered dir=down\nfont 10pt\nnode a \"Start here\"\nnode b \"Then this\"\nnode c \"Or that\"\nnode d \"Done\"\na -> b, c\nb -> d\nc -> d\n",
+    )
+    .unwrap();
+    let svg = tmp("ratio.svg");
+    let (ok, log) = fitd(&[
+        src.to_str().unwrap(),
+        "-o",
+        svg.to_str().unwrap(),
+        "--page",
+        "16:9",
+    ]);
+    assert!(ok, "{log}");
+    let dims = log
+        .split("fits on ")
+        .nth(1)
+        .and_then(|r| r.split("pt").next())
+        .and_then(|r| r.split_once('x'))
+        .map(|(w, h)| (w.parse::<f64>().unwrap(), h.parse::<f64>().unwrap()))
+        .expect(&log);
+    assert!((dims.0 / dims.1 - 16.0 / 9.0).abs() < 0.01, "{dims:?}");
+    // Four short boxes at a fixed 10pt font need far less than an A4 sheet.
+    assert!(dims.0 < 842.0 && dims.1 < 595.0, "{dims:?}");
+    assert!(
+        log.contains(&format!("on {:.0}x{:.0}pt", dims.0, dims.1)),
+        "{log}"
+    );
+    let smaller = format!("{:.0}x{:.0}", dims.0 * 0.7, dims.1 * 0.7);
+    let (ok, log) = fitd(&[
+        src.to_str().unwrap(),
+        "-o",
+        svg.to_str().unwrap(),
+        "--page",
+        &smaller,
+    ]);
+    assert!(!ok, "a page 30% smaller should not fit at the floor: {log}");
+}

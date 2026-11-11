@@ -183,6 +183,8 @@ pub enum LayoutKind {
 pub struct Settings {
     pub layout: Option<LayoutKind>,
     pub page: Option<(f64, f64)>,
+    /// page_ratio is a `W:H` page shape whose size the layout picks.
+    pub page_ratio: Option<(f64, f64)>,
     pub page_fixed: bool,
     pub bands: Option<usize>,
     pub margin: Option<f64>,

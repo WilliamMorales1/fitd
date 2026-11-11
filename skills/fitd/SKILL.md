@@ -68,7 +68,7 @@ Only `node` lines and edges are required. Leave out `page`, `font`, `theme`, and
 | `--short` | One line per diagnostic. Always use it. |
 | `--draft` | 2 to 6 times faster; use while iterating, drop it for the final build. |
 | `--stable FILE.lock` | Keep nodes and font in place when editing a map someone already saw. |
-| `--page a0..a4` or `WxHmm` | Page size; smaller pages give smaller fonts. |
+| `--page a0..a4`, `WxHmm`, or `16:9` | Page size; smaller pages give smaller fonts. A ratio picks the smallest page of that shape that fits at the font floor. |
 | `--portrait` / `--landscape` | Fix orientation. |
 | `--theme light\|dark\|mono` | Color preset; `mono` for print. |
 

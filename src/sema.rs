@@ -48,6 +48,17 @@ pub fn length(s: &str, bare: Option<&str>) -> Result<Length, String> {
     }
 }
 
+/// ratio reads a `W:H` page shape such as `16:9`.
+pub fn ratio(s: &str) -> Option<Result<(f64, f64), String>> {
+    let (w, h) = s.split_once(':')?;
+    let num = |v: &str| v.parse::<f64>().ok().filter(|x| x.is_finite() && *x > 0.0);
+    Some(match (num(w), num(h)) {
+        (Some(w), Some(h)) if (w / h).max(h / w) <= 20.0 => Ok((w, h)),
+        (Some(_), Some(_)) => Err(format!("page ratio `{s}` is more than 20:1")),
+        _ => Err(format!("`{s}` is not a page ratio like `16:9`")),
+    })
+}
+
 pub fn page_size(s: &str, bare: Option<&str>) -> Result<(f64, f64), String> {
     if let Some(p) = paper(s) {
         return Ok(p);
@@ -537,18 +548,40 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     Value::Num(t, _) => Some(t),
                     _ => None,
                 };
-                match text.map(|t| page_size(t, None)) {
+                match text.map(|t| (t, ratio(t))) {
+                    Some((_, Some(Ok(r)))) => {
+                        set.page = None;
+                        set.page_ratio = Some(r);
+                        set.page_fixed = true;
+                    }
+                    Some((_, Some(Err(e)))) => s.type_err(size, e),
+                    _ => {}
+                }
+                match text
+                    .filter(|t| !t.contains(':'))
+                    .map(|t| page_size(t, None))
+                {
                     Some(Ok(p)) => {
+                        set.page_ratio = None;
                         set.page = Some(p);
                         set.page_fixed =
                             text.is_some_and(|t| paper(t).is_none()) || !flags.is_empty();
                     }
                     Some(Err(e)) => s.type_err(size, e),
-                    None => {
-                        s.type_err(size, "expected a page size like `a1` or `594x420mm`".into())
-                    }
+                    None if text.is_some_and(|t| t.contains(':')) => {}
+                    None => s.type_err(
+                        size,
+                        "expected a page size like `a1`, `594x420mm`, or `16:9`".into(),
+                    ),
                 }
                 for f in flags {
+                    if let Some((w, h)) = set.page_ratio {
+                        match f.text.as_str() {
+                            "portrait" => set.page_ratio = Some((w.min(h), w.max(h))),
+                            "landscape" => set.page_ratio = Some((w.max(h), w.min(h))),
+                            _ => {}
+                        }
+                    }
                     match (f.text.as_str(), set.page) {
                         ("portrait", Some((w, h))) => set.page = Some((w.min(h), w.max(h))),
                         ("landscape", Some((w, h))) => set.page = Some((w.max(h), w.min(h))),
@@ -1168,6 +1201,22 @@ mod tests {
 
     fn codes(src: &str) -> Vec<&'static str> {
         run(src).1.iter().map(|d| d.code).collect()
+    }
+
+    #[test]
+    fn page_ratios() {
+        let (g, d) = run("page 16:9 portrait margin=10pt\nnode a\n");
+        assert!(
+            d.is_empty(),
+            "{:?}",
+            d.iter().map(|d| &d.msg).collect::<Vec<_>>()
+        );
+        assert_eq!(g.settings.page_ratio, Some((9.0, 16.0)));
+        assert!(g.settings.page.is_none() && g.settings.page_fixed);
+        let (g, _) = run("page 1.414:1\npage a3\nnode a\n");
+        assert!(g.settings.page_ratio.is_none() && g.settings.page.is_some());
+        assert_eq!(codes("page 3:0\nnode a\n"), ["E0006"]);
+        assert_eq!(codes("page 30:1\nnode a\n"), ["E0006"]);
     }
 
     #[test]

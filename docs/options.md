@@ -22,7 +22,7 @@ Exit status is zero when output is written. Diagnostics go to standard error. Er
 | --- | --- |
 | `-o PATH` | Output path. Extension selects SVG, PNG, or PDF. PNG is cropped to drawing bounds; SVG and PDF retain page dimensions. |
 | `--tikz PATH` | Write TikZ source to `PATH`. |
-| `--page SIZE` | Override page size. Accepts `a0` through `a4` or `WIDTHxHEIGHT` with optional unit. |
+| `--page SIZE` | Override page size. Accepts `a0` through `a4`, `WIDTHxHEIGHT` with optional unit, or a ratio `W:H` (such as `16:9`) for the smallest page of that shape that fits. |
 | `--portrait` | Set portrait orientation. |
 | `--landscape` | Set landscape orientation. |
 | `--margin PT` | Set page margin in points. |

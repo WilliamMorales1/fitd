@@ -88,7 +88,7 @@ module.exports = grammar({
     // `${expr}` may stand anywhere in a name, as macros write names like `s${i}`.
     name: _ => /([\p{L}_]|\$\{[^}\n]*\})([\p{L}\p{N}_]|\$\{[^}\n]*\})*(-([\p{L}\p{N}_]|\$\{[^}\n]*\})+)*/,
     string: _ => /"([^"\\\n]|\\[^\n])*"/,
-    number: _ => /[0-9]([\p{L}\p{N}]|\.[0-9])*/,
+    number: _ => /[0-9]([\p{L}\p{N}]|[.:][0-9])*/,
     color: _ => token.immediate(prec(1, /#[0-9a-fA-F]*/)),
     comment: _ => token(seq('#', /[^\n]*/)),
   },

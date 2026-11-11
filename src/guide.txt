@@ -15,8 +15,8 @@ Syntax: one statement per line, # comment. Only `node` lines and edges are neede
   title "Text"
   layout radial root=ID         # default: concept/mind map around a root
   layout layered dir=down|right bands=N # flowchart; long flows wrap, bands=1 never
-  page a0..a4|WxHmm portrait|landscape margin=1cm   # default a1; no flag: may turn
-  font 8pt..30pt wrap=16em      # range searched; one size fixes it, so give a range
+  page a0..a4|WxHmm|16:9 portrait|landscape margin=1cm # a1, may turn; 16:9 tightest
+  font 8pt..30pt wrap=16em      # range searched; one size fixes it
   theme light|dark|mono
   style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle|none stack=N (copies behind)
         wrap=24em place=aside (layered: strip after flow, ..> to flow)

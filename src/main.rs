@@ -37,7 +37,7 @@ use layout::{Config, Failure};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
-  fitd <input[.fitd]|-> [-o out.svg|out.png|out.pdf] [--tikz out.tex] [--page a0..a4|WxH|WxHmm]
+  fitd <input[.fitd]|-> [-o out.svg|out.png|out.pdf] [--tikz out.tex] [--page a0..a4|WxH|WxHmm|W:H]
               [--portrait|--landscape] [--bands N] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
               [--short] [--budget CHECKS] [--expand-budget STEPS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
               [--stable LOCK] [--watch]
@@ -473,9 +473,15 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
     let set = &g.settings;
     // Without `keysize`, the key follows the body font, which is known only after a solve.
     let key_auto = g.settings.key_size.is_none();
-    let (mut page_w, mut page_h) = match &page_spec {
-        Some(p) => page(p, false)?,
-        None => set.page.unwrap_or(page("a1", false)?),
+    let mut shape = match page_spec.as_deref().and_then(sema::ratio) {
+        Some(r) => Some(r?),
+        None if page_spec.is_some() => None,
+        None => set.page_ratio,
+    };
+    let (mut page_w, mut page_h) = match (&page_spec, shape) {
+        (_, Some((w, h))) => (w, h),
+        (Some(p), None) => page(p, false)?,
+        (None, None) => set.page.unwrap_or(page("a1", false)?),
     };
     if portrait {
         (page_w, page_h) = (page_w.min(page_h), page_w.max(page_h));
@@ -483,8 +489,12 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
     if landscape {
         (page_w, page_h) = (page_w.max(page_h), page_w.min(page_h));
     }
+    if shape.is_some() {
+        shape = Some((page_w, page_h));
+    }
     let page_fixed = portrait
         || landscape
+        || shape.is_some()
         || page_spec.as_ref().map_or(set.page_fixed, |p| {
             sema::paper(&p.to_ascii_lowercase()).is_none()
         });
@@ -495,6 +505,9 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         let a = layout::Anchor::parse(&g, &text).map_err(|e| format!("{path}: {e}"))?;
         if !page_fixed && a.page == (page_h, page_w) {
             (page_w, page_h) = (page_h, page_w);
+        }
+        if shape.is_some_and(|(w, h)| ((a.page.0 / a.page.1) / (w / h) - 1.0).abs() < 0.005) {
+            (page_w, page_h) = a.page;
         }
         if a.page == (page_w, page_h) {
             anchor = Some(a);
@@ -545,6 +558,20 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         ))?
         .with(&set.theme_over);
     layout::measure_groups(&mut g, &fonts);
+    if let Some(r) = shape
+        && cfg.anchor.is_none()
+    {
+        (cfg.page_w, cfg.page_h) = fit_ratio(&g, &t, &fonts, cfg, r);
+        cfg.legible = legible(cfg.page_w, cfg.page_h, cfg.min_font);
+        let (w, h) = (cfg.page_w, cfg.page_h);
+        show(&[Diag::info(format!(
+            "page {}:{} fits on {w:.0}x{h:.0}pt ({:.0}x{:.0}mm)",
+            trim(r.0),
+            trim(r.1),
+            w / 72.0 * 25.4,
+            h / 72.0 * 25.4
+        ))]);
+    }
     let plan_key = |size: f64| {
         key::KeyPlan::new(
             &g.key,
@@ -756,7 +783,12 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
             &t,
             &fonts,
             &lay,
-            emit::png_view(&g, &lay, key.as_ref(), cfg.margin),
+            // A ratio page names the shape the reader asked for, so the bitmap keeps it.
+            if shape.is_some() {
+                Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h)
+            } else {
+                emit::png_view(&g, &lay, key.as_ref(), cfg.margin)
+            },
             &th,
             key.as_ref(),
         );
@@ -918,6 +950,115 @@ fn retry(
         }
         None => (cfg, Vec::new()),
     }
+}
+
+fn trim(x: f64) -> String {
+    format!("{x:.3}")
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .into()
+}
+
+/// fit_ratio finds the smallest page of shape `r` that fits at the font floor and meets as many checks and preferences as an unbounded page.
+fn fit_ratio(
+    g: &graph::Graph,
+    t: &tree::Tree,
+    fonts: &metrics::Fonts,
+    cfg: Config,
+    r: (f64, f64),
+) -> (f64, f64) {
+    let (aw, ah) = (r.0 / r.0.max(r.1), r.1 / r.0.max(r.1));
+    let m = cfg.margin;
+    let dims = |s: f64| ((aw * s).round(), (ah * s).round());
+    let radial = g.settings.layout.unwrap_or(LayoutKind::Radial) == LayoutKind::Radial;
+    let solve = |s: f64, max_font: f64, quick: bool| {
+        let (page_w, page_h) = dims(s);
+        let mut c = Config {
+            page_w,
+            page_h,
+            max_font,
+            legible: legible(page_w, page_h, cfg.min_font),
+            budget: if quick { cfg.budget / 4 } else { cfg.budget },
+            first_cap: if quick {
+                cfg.budget / 20
+            } else {
+                cfg.first_cap
+            },
+            ..cfg
+        };
+        let size = g.settings.key_size.unwrap_or(KEY_RATIO * c.min_font);
+        c.key_h = key::KeyPlan::new(&g.key, fonts, page_w - 2.0 * c.margin, c.margin, size)
+            .as_ref()
+            .map_or(0.0, key::KeyPlan::height);
+        // Includes the branch reordering that `retry` tries on the final page.
+        let arranged = if radial {
+            radial::arrange(g, t, &c)
+        } else {
+            None
+        };
+        std::iter::once(t)
+            .chain(arranged.as_ref())
+            .filter_map(|tr| {
+                let l = layout::solve(g, tr, fonts, &c).ok()?;
+                let d = check::check(g, fonts, &c, &l);
+                let n = |lv| d.iter().filter(|x| x.level == lv).count();
+                let top = l.tradeoff.iter().map(|x| x.0).fold(l.body, f64::max);
+                Some(((n(Level::Error), n(Level::Warning)), top))
+            })
+            .min_by(|a, b| a.0.cmp(&b.0).then(b.1.total_cmp(&a.1)))
+    };
+    // Layouts scale with the font, so the largest font on one page predicts the size at the floor.
+    let unbounded = 1000.0 * cfg.min_font;
+    // A fixed font (`font 11pt`) can outgrow the first guess, so double until something fits.
+    let mut s = 1000.0;
+    let (goal, mut top) = loop {
+        match solve(s, unbounded, true) {
+            Some(r) => break r,
+            None if s < 16000.0 => s *= 2.0,
+            None => return dims(s),
+        }
+    };
+    for _ in 0..3 {
+        // Only the area inside the margin scales with the font.
+        let next =
+            (s * aw.min(ah) - 2.0 * m) * cfg.min_font / top / aw.min(ah) + 2.0 * m / aw.min(ah);
+        if (next / s - 1.0).abs() < 0.02 {
+            break;
+        }
+        match solve(next, unbounded, true) {
+            Some((_, f)) => (s, top) = (next, f),
+            None => {
+                s = next * 1.04;
+                break;
+            }
+        }
+    }
+    // Preferences met depend on search luck, so try a few sizes up and keep the smallest best one.
+    let sizes: Vec<f64> = (0..6).map(|k| s * 1.04_f64.powi(k)).collect();
+    // The first size usually meets the goal, so it runs alone before the rest fan out.
+    let first = solve(sizes[0], cfg.max_font, false).map(|r| r.0);
+    if first.is_some_and(|sc| sc <= goal) {
+        return dims(sizes[0]);
+    }
+    let scores: Vec<_> = std::iter::once(first)
+        .chain(std::thread::scope(|sc| {
+            let hs: Vec<_> = sizes[1..]
+                .iter()
+                .map(|&x| sc.spawn(move || solve(x, cfg.max_font, false).map(|r| r.0)))
+                .collect();
+            hs.into_iter()
+                .map(|h| h.join().expect("ratio probe"))
+                .collect::<Vec<_>>()
+        }))
+        .collect();
+    let pick = scores
+        .iter()
+        .position(|sc| sc.is_some_and(|sc| sc <= goal))
+        .or_else(|| {
+            let best = scores.iter().flatten().min()?;
+            scores.iter().position(|sc| sc.as_ref() == Some(best))
+        });
+    dims(pick.map_or(sizes[5], |k| sizes[k]))
 }
 
 fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
