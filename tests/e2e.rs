@@ -416,13 +416,15 @@ fn theme_colors_reach_svg_and_tikz() {
 /// busy core run slower per CPU second, so a CPU budget failed under load with identical
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
-const EXAMPLES: [(&str, usize, u64); 10] = [
+const EXAMPLES: [(&str, usize, u64); 11] = [
     ("coffee", 2, 155_000_000),
     ("compiler", 2, 4_200_000),
     ("debugging", 0, 33_000),
     ("fib_calls", 0, 8_000_000),
     ("fitd_language", 1, 1_700_000),
     ("group_theory", 0, 164_000_000),
+    // Built from a user library beside it, `library/runbook.fitd`.
+    ("library/oncall", 0, 5_000),
     // Dense layers cross by nature: every W0206 here is an unavoidable crossing.
     ("neural_net", 60, 8_200_000),
     ("pipeline", 0, 94_000),
@@ -503,7 +505,8 @@ fn every_example_builds_within_baseline() {
         } else {
             format!("examples/{name}.fitd")
         };
-        let outs = [tmp(&format!("{name}-a.svg")), tmp(&format!("{name}-b.svg"))];
+        let slug = name.replace('/', "-");
+        let outs = [tmp(&format!("{slug}-a.svg")), tmp(&format!("{slug}-b.svg"))];
         // A second build runs alongside to catch HashMap order or thread timing leaking into
         // the layout.
         let twin = Command::new(env!("CARGO_BIN_EXE_fitd"))
@@ -1656,6 +1659,45 @@ fn library_modules_are_included_by_name() {
         "include \"nn\"\nuse nn_input(\"x\", \"X\", \"1\")\nnode a\n",
     );
     assert!(!ok && log.contains("unknown template `nn_input`"), "{log}");
+}
+
+#[test]
+fn user_libraries_are_included_beside_the_file() {
+    let dir = tmp("userlib");
+    std::fs::create_dir_all(&dir).unwrap();
+    let write = |name: &str, src: &str| {
+        let f = dir.join(name);
+        std::fs::write(&f, src).unwrap();
+        f
+    };
+    // A library calls templates it includes by their module name, and a shared library splices once.
+    write(
+        "shapes.fitd",
+        "# shapes: boxes for tests\ninclude \"user/base\"\ndef pill(id, name)\nbase.tag(id, name)\nend\n",
+    );
+    write("base.fitd", "def tag(id, name)\nnode ${id} \"${name}\"\nend\n");
+    let main = write(
+        "main.fitd",
+        "include \"user/base\"\ninclude \"user/shapes\"\nshapes.pill(\"a\", \"Alpha\")\nbase.tag(\"b\", \"Beta\")\na -> b\n",
+    );
+    let o = dir.join("main.svg");
+    let (ok, log) = fitd(&[main.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
+    assert!(ok && log.contains("0 errors, 0 warnings"), "{log}");
+    let svg = std::fs::read_to_string(&o).unwrap();
+    assert!(svg.contains("Alpha") && svg.contains("Beta"), "{svg}");
+
+    // A library's templates are not global, so the bare name is unknown outside it.
+    let bare = write("bare.fitd", "include \"user/shapes\"\nuse pill(\"a\", \"A\")\n");
+    let (ok, log) = fitd(&[bare.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
+    assert!(!ok && log.contains("unknown template `pill`"), "{log}");
+
+    let missing = write("missing.fitd", "include \"user/nope\"\nnode a\n");
+    let (ok, log) = fitd(&[missing.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
+    assert!(!ok && log.contains("cannot read") && log.contains("nope.fitd"), "{log}");
+
+    let badname = write("badname.fitd", "include \"user/a/b\"\nnode a\n");
+    let (ok, log) = fitd(&[badname.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
+    assert!(!ok && log.contains("bad library name"), "{log}");
 }
 
 #[test]

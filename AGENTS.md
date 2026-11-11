@@ -104,8 +104,7 @@ These cover a large share of the figures in surveys 2 to 4. fitd should not grow
 
 Only open work belongs here: planned changes, known problems, and caveats. Delete a plan once it is done, and move anything it left out into Known gaps. The plans are ordered to avoid redoing work. Each plan gives the change, where it goes, and when it is done.
 
-- User libraries (2) come first. They reuse the module syntax (`include "nn"`, `nn.input(...)`) and change no renders, so `committed_docs_match_a_fresh_build` checks them without looking at images.
-- Default styling (3) comes next. It changes every render and may change the fonts and metrics, so it goes before the layout plans. Layout tuning and done checks (larger font in 6, the square in 5) then run against the final metrics, and the full image review happens once.
+- Default styling (3) comes first. It changes every render and may change the fonts and metrics, so it goes before the layout plans. Layout tuning and done checks (larger font in 6, the square in 5) then run against the final metrics, and the full image review happens once.
 - The layout and feature plans (4 to 7) follow, smallest first. Each only re-checks its own renders.
 - Dependency arcs and Sankey (8) are low priority and stay last.
 
@@ -117,15 +116,8 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Edge heads: no Graphviz `arrowhead=`/`style=` import.
 - Sequence diagrams: no activation bars, self-messages, or lane-relative `group` frames inside a sequence.
 - Venn: no Euler diagrams (disjoint or nested sets drawn apart or inside) and no area-proportional circles.
+- User libraries: `include "user/LIB"` only looks beside the including file. There is no library search path or `FITD_PATH`; add one if libraries get shared across projects.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
-
-### 2. User libraries
-
-Nothing shows that a non-stdlib file can serve as a library.
-
-- Change: accept `include "user/LIB"` for a user library, with calls written `LIB.func(...)` as for stdlib modules. Decide where `user/` resolves (beside the including file, or a configured library directory) and document it.
-- Add e2e tests that write a small library file, include it, and call its templates, plus an example under `examples/` that does the same.
-- Done when the tests pass and the example builds with no errors.
 
 ### 3. Default styling from studies of professional diagrams
 

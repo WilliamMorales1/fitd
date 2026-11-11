@@ -6,6 +6,8 @@ struct Splice {
     text: String,
     segs: Vec<Seg>,
     diags: Vec<Diag>,
+    // Modules splice once, so libraries that share a dependency can be included together.
+    modules: Vec<PathBuf>,
 }
 
 impl Splice {
@@ -28,6 +30,7 @@ pub fn expand(path: &str, text: &str) -> (Source, Vec<Diag>) {
         text: String::new(),
         segs: Vec::new(),
         diags: Vec::new(),
+        modules: Vec::new(),
     };
     let mut stack = vec![canonical(Path::new(path))];
     splice(&mut out, path, text, &mut stack, None);
@@ -40,8 +43,15 @@ pub fn unused_shared_style(src: &Source, d: &Diag) -> bool {
 
 /// resolve maps an include target to the file it names and the module whose templates it defines.
 ///
-/// A bare name like `nn` names a bundled module; anything else is a path relative to `dir`.
-fn resolve<'t>(target: &'t str, dir: &Path) -> Result<(PathBuf, Option<&'t str>), Diag> {
+/// A bare name like `nn` names a bundled module, `user/LIB` names `LIB.fitd` in `dir`, and anything else is a path relative to `dir`.
+pub fn resolve<'t>(target: &'t str, dir: &Path) -> Result<(PathBuf, Option<&'t str>), Diag> {
+    if let Some(lib) = target.strip_prefix("user/") {
+        if !is_ident(lib) {
+            return Err(Diag::error("E0011", format!("bad library name `{lib}`"))
+                .note("write `include \"user/LIB\"`, where LIB.fitd sits beside this file"));
+        }
+        return Ok((dir.join(format!("{lib}.fitd")), Some(lib)));
+    }
     if !target.contains(['/', '.']) {
         if crate::stdlib::get(target).is_none() {
             return Err(Diag::error("E0011", format!("no library module `{target}`")).note(
@@ -51,6 +61,12 @@ fn resolve<'t>(target: &'t str, dir: &Path) -> Result<(PathBuf, Option<&'t str>)
         return Ok((PathBuf::from(format!("std/{target}.fitd")), Some(target)));
     }
     Ok((dir.join(target), None))
+}
+
+fn is_ident(s: &str) -> bool {
+    let mut c = s.chars();
+    c.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && c.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 fn canonical(p: &Path) -> PathBuf {
@@ -84,7 +100,9 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>, mo
                 continue;
             }
         };
-        let lib = lib_mod.and_then(crate::stdlib::get);
+        let lib = lib_mod
+            .filter(|_| !target.starts_with("user/"))
+            .and_then(crate::stdlib::get);
         let key = if lib.is_some() {
             file.clone()
         } else {
@@ -101,7 +119,10 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>, mo
                 .primary(span, "this include closes a cycle");
             out.diags
                 .push(d.note(format!("cycle: {}", chain.join(" -> "))));
-        } else {
+        } else if !(lib_mod.is_some() && out.modules.contains(&key)) {
+            if lib_mod.is_some() {
+                out.modules.push(key.clone());
+            }
             let child = match lib {
                 Some(t) => Ok(t.to_string()),
                 None => std::fs::read_to_string(&file),

@@ -283,16 +283,13 @@ pub fn definition(doc: &Doc, p: &Value) -> Value {
     if let Some(Hit::Spot(s)) = idx.at(doc.path, line, ch)
         && let Word::Include(t) = &s.word
     {
-        let path = if crate::stdlib::get(t).is_some() {
-            format!("std/{t}.fitd")
-        } else {
-            std::path::Path::new(doc.path)
-                .parent()
-                .unwrap_or(std::path::Path::new(""))
-                .join(t)
-                .to_string_lossy()
-                .into_owned()
+        let dir = std::path::Path::new(doc.path)
+            .parent()
+            .unwrap_or(std::path::Path::new(""));
+        let Ok((file, _)) = crate::include::resolve(t, dir) else {
+            return Value::Null;
         };
+        let path = file.to_string_lossy().into_owned();
         let uri = doc.uri(&path);
         return if uri.is_null() {
             Value::Null

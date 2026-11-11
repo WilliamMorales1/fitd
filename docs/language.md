@@ -316,6 +316,15 @@ nn.mask("m", "Causal mask", 4, 1)
 x -> e -> m
 ```
 
+`include "user/LIB"` reads `LIB.fitd` from the including file's directory and treats it as a library: its templates are called as `LIB.name(args)`, the same way as bundled modules, and inside the library they can be called unqualified with `use name(args)`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix (`.LIB_box`), since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
+
+```fitd
+include "user/runbook"
+runbook.check("deploy", "Deploy in last hour?")
+runbook.act("rollback", "Roll back", "on-call")
+deploy -> rollback "yes"
+```
+
 ### Macros
 
 ![Macro directives, expressions, scope, and expansion limits](language/05-macros.png)
