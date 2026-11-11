@@ -1,14 +1,15 @@
-use crate::ast::{Name, StmtKind};
+//! Language server: diagnostics, navigation, hover, and editing aids over stdio.
+
+mod docs;
+mod features;
+mod index;
+
 use crate::diag::{Diag, Level, Source, Span};
+use features::Doc;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::sync::{Arc, Mutex};
-
-const KEYWORDS: &[&str] = &[
-    "title", "root", "layout", "page", "font", "theme", "style", "node", "group", "require",
-    "prefer", "include",
-];
 
 type Out = Arc<Mutex<std::io::Stdout>>;
 
@@ -39,14 +40,14 @@ fn read(input: &mut impl BufRead) -> Option<Value> {
     Some(serde_json::from_slice(&body).unwrap_or(Value::Null))
 }
 
-fn position(text: &str, off: usize) -> Value {
+pub(super) fn position(text: &str, off: usize) -> Value {
     let off = off.min(text.len());
     let line_start = text[..off].rfind('\n').map_or(0, |i| i + 1);
     let line = text[..line_start].matches('\n').count();
     json!({ "line": line, "character": text[line_start..off].encode_utf16().count() })
 }
 
-fn offset(text: &str, pos: &Value) -> usize {
+pub(super) fn offset(text: &str, pos: &Value) -> usize {
     let (line, ch) = (
         pos["line"].as_u64().unwrap_or(0) as usize,
         pos["character"].as_u64().unwrap_or(0) as usize,
@@ -94,7 +95,14 @@ fn lsp_diag(range: Value, d: &Diag) -> Value {
     if let Some(h) = &d.help {
         msg += &format!("\nhelp: {h}");
     }
-    json!({ "range": range, "severity": if d.level == Level::Error { 1 } else { 2 }, "code": d.code, "source": "fitd", "message": msg })
+    let mut v = json!({ "range": range, "severity": if d.level == Level::Error { 1 } else { 2 }, "code": d.code, "source": "fitd", "message": msg });
+    if d.code == "W0203" {
+        v["tags"] = json!([1]);
+    }
+    if let Some(data) = features::diag_data(d) {
+        v["data"] = data;
+    }
+    v
 }
 
 type Diags = HashMap<String, Vec<Value>>;
@@ -118,9 +126,58 @@ fn front_end(path: &str, text: &str) -> Diags {
             .or(d.labels.first())
             .map_or(NOWHERE, |l| l.span);
         let (file, r) = spliced_range(&src, span);
-        out.entry(file).or_default().push(lsp_diag(r, d));
+        let file_text = if file == path {
+            Some(text.to_string())
+        } else {
+            crate::stdlib::get(&file)
+                .map(str::to_string)
+                .or_else(|| std::fs::read_to_string(&file).ok())
+        };
+        let r = anchor(file_text.as_deref(), r, d.msg.split('`').nth(1));
+        let v = lsp_diag(r, d);
+        // Each template expansion repeats its diagnostics at the same source spot.
+        let list = out.entry(file).or_default();
+        if !list.contains(&v) {
+            list.push(v);
+        }
     }
     out
+}
+
+/// anchor moves a range computed on template-expanded text onto the source line it came from.
+fn anchor(file: Option<&str>, r: Value, name: Option<&str>) -> Value {
+    let (Some(file), Some(name)) = (file, name) else {
+        return r;
+    };
+    let n = r["start"]["line"].as_u64().unwrap_or(0) as usize;
+    if r["end"]["line"] != r["start"]["line"] {
+        return r;
+    }
+    let Some(line) = file.lines().nth(n) else {
+        return r;
+    };
+    let (lo, hi) = (
+        r["start"]["character"].as_u64().unwrap_or(0) as usize,
+        r["end"]["character"].as_u64().unwrap_or(0) as usize,
+    );
+    if index::slice16(line, lo, hi) == Some(name) {
+        return r;
+    }
+    let word = |c: char| c.is_alphanumeric() || c == '_' || c == '-';
+    let hit = line
+        .match_indices(name)
+        .find(|&(i, _)| !line[..i].ends_with(word) && !line[i + name.len()..].starts_with(word));
+    let (lo, hi) = match hit {
+        Some((i, _)) => {
+            let lo = line[..i].encode_utf16().count();
+            (lo, lo + name.encode_utf16().count())
+        }
+        None => {
+            let lead = line.len() - line.trim_start().len();
+            (lead, line.trim_end().encode_utf16().count())
+        }
+    };
+    json!({ "start": { "line": n, "character": lo }, "end": { "line": n, "character": hi } })
 }
 
 fn short_line(line: &str) -> Option<(&str, usize, usize, &str)> {
@@ -212,96 +269,7 @@ fn layout(path: &str, text: &str, uri: &str, running: &Running) -> Option<Diags>
     Some(diags)
 }
 
-struct Decl {
-    name: String,
-    path: String,
-    range: Value,
-}
-
-fn declared(path: &str, text: &str) -> (Vec<Decl>, Vec<Decl>) {
-    let crate::macros::Loaded { src, parse, .. } =
-        crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
-    let (stmts, _) = crate::parse::parse(&parse);
-    let decl = |n: Name| {
-        let (path, range) = spliced_range(&src, n.span);
-        Decl {
-            name: n.text,
-            path,
-            range,
-        }
-    };
-    let (mut nodes, mut styles) = (Vec::new(), Vec::new());
-    for st in stmts {
-        match st.kind {
-            StmtKind::Node { id, .. } => nodes.push(decl(id)),
-            StmtKind::Style { name, .. } => styles.push(decl(name)),
-            _ => {}
-        }
-    }
-    (nodes, styles)
-}
-
-fn word_at(text: &str, off: usize) -> Option<(String, bool)> {
-    let is = |c: char| c.is_alphanumeric() || c == '_' || c == '-';
-    let lo = text[..off]
-        .char_indices()
-        .rev()
-        .take_while(|&(_, c)| is(c))
-        .last()
-        .map_or(off, |(i, _)| i);
-    let hi = off
-        + text[off..]
-            .char_indices()
-            .find(|&(_, c)| !is(c))
-            .map_or(text.len() - off, |(i, _)| i);
-    (lo < hi).then(|| (text[lo..hi].to_string(), text[..lo].ends_with('.')))
-}
-
-fn definition(path: &str, text: &str, uri: &Value, pos: &Value) -> Value {
-    let Some((word, style)) = word_at(text, offset(text, pos)) else {
-        return Value::Null;
-    };
-    let (nodes, styles) = declared(path, text);
-    let pool = if style { styles } else { nodes };
-    let found = pool
-        .iter()
-        .find(|d| d.name == word && d.path == path)
-        .or_else(|| pool.iter().find(|d| d.name == word));
-    found.map_or(Value::Null, |d| json!({ "uri": if d.path == path { uri.clone() } else { json!(uri_of(&d.path)) }, "range": d.range }))
-}
-
-fn completion(path: &str, text: &str, pos: &Value) -> Value {
-    let off = offset(text, pos);
-    let line_start = text[..off].rfind('\n').map_or(0, |i| i + 1);
-    let before = &text[line_start..off];
-    let typed = before
-        .rsplit(|c: char| !(c.is_alphanumeric() || c == '_' || c == '-'))
-        .next()
-        .unwrap_or("");
-    let (nodes, styles) = declared(path, text);
-    let mut seen = HashSet::new();
-    let items: Vec<Value> = if before[..before.len() - typed.len()].ends_with('.') {
-        styles
-            .iter()
-            .filter(|s| seen.insert(s.name.clone()))
-            .map(|s| json!({ "label": s.name, "kind": 7 }))
-            .collect()
-    } else if before.trim() == typed {
-        KEYWORDS
-            .iter()
-            .map(|k| json!({ "label": k, "kind": 14 }))
-            .collect()
-    } else {
-        nodes
-            .iter()
-            .filter(|n| seen.insert(n.name.clone()))
-            .map(|n| json!({ "label": n.name, "kind": 6 }))
-            .collect()
-    };
-    Value::Array(items)
-}
-
-fn uri_of(path: &str) -> String {
+pub(super) fn uri_of(path: &str) -> String {
     let mut parts: Vec<&str> = Vec::new();
     for c in path.split(['/', '\\']) {
         match c {
@@ -328,35 +296,6 @@ fn uri_of(path: &str) -> String {
     s
 }
 
-type Published = Arc<Mutex<HashMap<String, HashSet<String>>>>;
-
-fn publish(out: &Out, uri: &str, diags: Vec<Value>) {
-    send(
-        out,
-        json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": diags } }),
-    );
-}
-
-fn publish_all(out: &Out, published: &Published, uri: &str, path: &str, mut diags: Diags) {
-    publish(out, uri, diags.remove(path).unwrap_or_default());
-    let mut others = HashSet::new();
-    for (p, v) in diags {
-        let u = uri_of(&p);
-        publish(out, &u, v);
-        others.insert(u);
-    }
-    let mut published = published.lock().unwrap();
-    for stale in published
-        .get(uri)
-        .into_iter()
-        .flatten()
-        .filter(|u| !others.contains(*u))
-    {
-        publish(out, stale, Vec::new());
-    }
-    published.insert(uri.to_string(), others);
-}
-
 fn path_of(uri: &str) -> Option<String> {
     let p = uri.strip_prefix("file://")?;
     let mut out = Vec::new();
@@ -379,13 +318,90 @@ fn path_of(uri: &str) -> Option<String> {
     Some(if drive { path[1..].to_string() } else { path })
 }
 
+type Published = Arc<Mutex<HashMap<String, HashSet<String>>>>;
+type Cache = Arc<Mutex<HashMap<String, Vec<Value>>>>;
+
+/// Shared is what diagnostics publishing needs from any thread.
+#[derive(Clone)]
+struct Shared {
+    out: Out,
+    published: Published,
+    cache: Cache,
+}
+
+fn publish(sh: &Shared, uri: &str, diags: Vec<Value>) {
+    sh.cache
+        .lock()
+        .unwrap()
+        .insert(uri.to_string(), diags.clone());
+    send(
+        &sh.out,
+        json!({ "jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": { "uri": uri, "diagnostics": diags } }),
+    );
+}
+
+fn publish_all(sh: &Shared, uri: &str, path: &str, mut diags: Diags) {
+    publish(sh, uri, diags.remove(path).unwrap_or_default());
+    let mut others = HashSet::new();
+    for (p, v) in diags {
+        let u = uri_of(&p);
+        publish(sh, &u, v);
+        others.insert(u);
+    }
+    let mut published = sh.published.lock().unwrap();
+    for stale in published
+        .get(uri)
+        .into_iter()
+        .flatten()
+        .filter(|u| !others.contains(*u))
+    {
+        publish(sh, stale, Vec::new());
+    }
+    published.insert(uri.to_string(), others);
+}
+
+/// apply folds one didChange content change into the buffer.
+fn apply(text: &mut String, change: &Value) {
+    let new = change["text"].as_str().unwrap_or("");
+    if change["range"].is_object() {
+        let lo = offset(text, &change["range"]["start"]);
+        let hi = offset(text, &change["range"]["end"]).max(lo);
+        text.replace_range(lo..hi, new);
+    } else {
+        *text = new.to_string();
+    }
+}
+
+fn capabilities() -> Value {
+    json!({
+        "positionEncoding": "utf-16",
+        "textDocumentSync": { "openClose": true, "change": 2, "save": { "includeText": false } },
+        "hoverProvider": true,
+        "definitionProvider": true,
+        "referencesProvider": true,
+        "documentHighlightProvider": true,
+        "documentSymbolProvider": true,
+        "renameProvider": { "prepareProvider": true },
+        "completionProvider": { "triggerCharacters": [".", "=", "\"", "/", " "] },
+        "signatureHelpProvider": { "triggerCharacters": ["(", ","], "retriggerCharacters": [" "] },
+        "inlayHintProvider": true,
+        "codeActionProvider": { "codeActionKinds": ["quickfix"] },
+        "foldingRangeProvider": true,
+        "colorProvider": true,
+    })
+}
+
 pub fn serve() -> std::process::ExitCode {
-    let out: Out = Arc::new(Mutex::new(std::io::stdout()));
+    let sh = Shared {
+        out: Arc::new(Mutex::new(std::io::stdout())),
+        published: Arc::default(),
+        cache: Arc::default(),
+    };
     let mut input = std::io::BufReader::new(std::io::stdin());
     let mut docs: HashMap<String, String> = HashMap::new();
-    let published: Published = Arc::default();
     let versions: Arc<Mutex<HashMap<String, u64>>> = Arc::default();
     let running: Running = Arc::default();
+    let mut snippets = false;
     let mut shutdown = false;
     while let Some(msg) = read(&mut input) {
         let method = msg["method"].as_str().unwrap_or("");
@@ -396,20 +412,44 @@ pub fn serve() -> std::process::ExitCode {
             .to_string();
         let reply = |result: Value| {
             send(
-                &out,
+                &sh.out,
                 json!({ "jsonrpc": "2.0", "id": msg["id"], "result": result }),
             )
         };
+        let fail = |code: i64, message: String| {
+            send(
+                &sh.out,
+                json!({ "jsonrpc": "2.0", "id": msg["id"], "error": { "code": code, "message": message } }),
+            )
+        };
         let bump = |uri: &str| *versions.lock().unwrap().entry(uri.to_string()).or_insert(0) += 1;
+        let path = path_of(&uri).unwrap_or_default();
+        let open = |p: &str| {
+            docs.iter()
+                .find(|(u, _)| path_of(u).as_deref() == Some(p))
+                .map(|(_, t)| t.clone())
+        };
+        let with = |f: &dyn Fn(&Doc) -> Value, none: Value| match docs.get(&uri) {
+            Some(text) => f(&Doc {
+                uri: &uri,
+                path: &path,
+                text,
+                open: &open,
+            }),
+            None => none,
+        };
+        let p = &params["position"];
         match method {
-            "initialize" => reply(json!({
-                "capabilities": {
-                    "textDocumentSync": { "openClose": true, "change": 1, "save": { "includeText": false } },
-                    "definitionProvider": true,
-                    "completionProvider": { "triggerCharacters": ["."] }
-                },
-                "serverInfo": { "name": "fitd", "version": env!("CARGO_PKG_VERSION") }
-            })),
+            "initialize" => {
+                snippets = params["capabilities"]["textDocument"]["completion"]["completionItem"]
+                    ["snippetSupport"]
+                    .as_bool()
+                    .unwrap_or(false);
+                reply(json!({
+                    "capabilities": capabilities(),
+                    "serverInfo": { "name": "fitd", "version": env!("CARGO_PKG_VERSION") }
+                }))
+            }
             "shutdown" => {
                 shutdown = true;
                 reply(Value::Null);
@@ -417,21 +457,26 @@ pub fn serve() -> std::process::ExitCode {
             "exit" => break,
             "textDocument/didOpen" | "textDocument/didChange" => {
                 let text = if method == "textDocument/didOpen" {
-                    &params["textDocument"]["text"]
+                    params["textDocument"]["text"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string()
                 } else {
-                    &params["contentChanges"][0]["text"]
+                    let mut t = docs.remove(&uri).unwrap_or_default();
+                    for c in params["contentChanges"].as_array().into_iter().flatten() {
+                        apply(&mut t, c);
+                    }
+                    t
                 };
-                let text = text.as_str().unwrap_or("").to_string();
                 bump(&uri);
-                let path = path_of(&uri).unwrap_or_default();
-                publish_all(&out, &published, &uri, &path, front_end(&path, &text));
+                publish_all(&sh, &uri, &path, front_end(&path, &text));
                 docs.insert(uri, text);
             }
             "textDocument/didClose" => {
                 docs.remove(&uri);
                 bump(&uri);
                 cancel(&running, &uri);
-                publish_all(&out, &published, &uri, "", Diags::new());
+                publish_all(&sh, &uri, "", Diags::new());
             }
             "textDocument/didSave" => {
                 let (Some(path), Some(text)) = (path_of(&uri), docs.get(&uri).cloned()) else {
@@ -439,38 +484,76 @@ pub fn serve() -> std::process::ExitCode {
                 };
                 bump(&uri);
                 let at = versions.lock().unwrap()[&uri];
-                let (out, versions, running, published) = (
-                    out.clone(),
-                    versions.clone(),
-                    running.clone(),
-                    published.clone(),
-                );
+                let (sh, versions, running) = (sh.clone(), versions.clone(), running.clone());
                 std::thread::spawn(move || {
                     let Some(diags) = layout(&path, &text, &uri, &running) else {
                         return;
                     };
                     if versions.lock().unwrap().get(&uri) == Some(&at) {
-                        publish_all(&out, &published, &uri, &path, diags);
+                        publish_all(&sh, &uri, &path, diags);
                     }
                 });
             }
-            "textDocument/definition" => reply(docs.get(&uri).map_or(Value::Null, |t| {
-                definition(
-                    &path_of(&uri).unwrap_or_default(),
-                    t,
-                    &params["textDocument"]["uri"],
-                    &params["position"],
-                )
-            })),
-            "textDocument/completion" => {
-                reply(docs.get(&uri).map_or(Value::Array(Vec::new()), |t| {
-                    completion(&path_of(&uri).unwrap_or_default(), t, &params["position"])
-                }))
+            "textDocument/hover" => {
+                let diags = sh
+                    .cache
+                    .lock()
+                    .unwrap()
+                    .get(&uri)
+                    .cloned()
+                    .unwrap_or_default();
+                reply(with(&|d| features::hover(d, p, &diags), Value::Null))
             }
-            _ if msg.get("id").is_some() => send(
-                &out,
-                json!({ "jsonrpc": "2.0", "id": msg["id"], "error": { "code": -32601, "message": format!("unsupported method {method}") } }),
-            ),
+            "textDocument/definition" => reply(with(&|d| features::definition(d, p), Value::Null)),
+            "textDocument/references" => {
+                let decl = params["context"]["includeDeclaration"]
+                    .as_bool()
+                    .unwrap_or(true);
+                reply(with(&|d| features::references(d, p, decl), Value::Null))
+            }
+            "textDocument/documentHighlight" => {
+                reply(with(&|d| features::highlights(d, p), Value::Null))
+            }
+            "textDocument/documentSymbol" => reply(with(&features::symbols, json!([]))),
+            "textDocument/prepareRename" => {
+                reply(with(&|d| features::prepare_rename(d, p), Value::Null))
+            }
+            "textDocument/rename" => {
+                let new = params["newName"].as_str().unwrap_or("");
+                let r = match docs.get(&uri) {
+                    Some(text) => features::rename(
+                        &Doc {
+                            uri: &uri,
+                            path: &path,
+                            text,
+                            open: &open,
+                        },
+                        p,
+                        new,
+                    ),
+                    None => Ok(Value::Null),
+                };
+                match r {
+                    Ok(v) => reply(v),
+                    Err(e) => fail(-32602, e),
+                }
+            }
+            "textDocument/completion" => {
+                reply(with(&|d| features::completion(d, p, snippets), json!([])))
+            }
+            "textDocument/signatureHelp" => {
+                reply(with(&|d| features::signature_help(d, p), Value::Null))
+            }
+            "textDocument/inlayHint" => {
+                reply(with(&|d| features::inlay_hints(d, params), json!([])))
+            }
+            "textDocument/codeAction" => {
+                reply(with(&|d| features::code_actions(d, params), json!([])))
+            }
+            "textDocument/foldingRange" => reply(with(&|d| features::folds(d.text), json!([]))),
+            "textDocument/documentColor" => reply(with(&|d| features::colors(d.text), json!([]))),
+            "textDocument/colorPresentation" => reply(features::color_presentation(params)),
+            _ if msg.get("id").is_some() => fail(-32601, format!("unsupported method {method}")),
             _ => {}
         }
     }
@@ -489,6 +572,20 @@ pub fn serve() -> std::process::ExitCode {
 mod tests {
     use super::*;
 
+    fn doc<'a>(
+        uri: &'a str,
+        path: &'a str,
+        text: &'a str,
+        open: &'a dyn Fn(&str) -> Option<String>,
+    ) -> Doc<'a> {
+        Doc {
+            uri,
+            path,
+            text,
+            open,
+        }
+    }
+
     #[test]
     fn positions_count_utf16_units() {
         let text = "node a \"⟨𝔾⟩\"\nnode b\n";
@@ -505,14 +602,15 @@ mod tests {
     #[test]
     fn definitions_and_completions_follow_names() {
         let text = "style hot color=#C62828\nnode a .hot\nnode b\na -> b\nrequire a left-of \n";
-        let uri = json!("file:///x.fitd");
+        let none = |_: &str| None;
+        let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str, k: usize| position(text, text.match_indices(s).nth(k).unwrap().0);
         assert_eq!(
-            definition("/x.fitd", text, &uri, &at("b", 1))["range"]["start"],
+            features::definition(&d, &at("b", 1))["range"]["start"],
             json!({ "line": 2, "character": 5 })
         );
         assert_eq!(
-            definition("/x.fitd", text, &uri, &at("hot", 1))["range"]["start"],
+            features::definition(&d, &at("hot", 1))["range"]["start"],
             json!({ "line": 0, "character": 6 })
         );
         let labels = |v: Value| {
@@ -523,26 +621,26 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(
-            labels(completion(
-                "/x.fitd",
-                text,
-                &position(text, text.find("hot\nnode b").unwrap())
+            labels(features::completion(
+                &d,
+                &position(text, text.find("hot\nnode b").unwrap()),
+                false
             )),
             ["hot"]
         );
         assert_eq!(
-            labels(completion(
-                "/x.fitd",
-                text,
-                &position(text, text.rfind('\n').unwrap())
+            labels(features::completion(
+                &d,
+                &position(text, text.rfind('\n').unwrap()),
+                false
             )),
             ["a", "b"]
         );
         assert!(
-            labels(completion(
-                "/x.fitd",
-                text,
-                &json!({ "line": 5, "character": 0 })
+            labels(features::completion(
+                &d,
+                &json!({ "line": 5, "character": 0 }),
+                false
             ))
             .contains(&"require".to_string())
         );
@@ -560,13 +658,9 @@ mod tests {
         let main = dir.join("main.fitd");
         let path = main.to_str().unwrap();
         let text = "node a \"A\"\ninclude \"parts/more.fitd\"\na -> far\n";
-        let uri = json!("file:///main");
-        let def = definition(
-            path,
-            text,
-            &uri,
-            &position(text, text.rfind("far").unwrap()),
-        );
+        let none = |_: &str| None;
+        let d = doc("file:///main", path, text, &none);
+        let def = features::definition(&d, &position(text, text.rfind("far").unwrap()));
         assert_eq!(
             def["uri"],
             json!(uri_of(dir.join("parts/more.fitd").to_str().unwrap()))
@@ -580,7 +674,11 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(
-            labels(completion(path, text, &position(text, text.len() - 1))),
+            labels(features::completion(
+                &d,
+                &position(text, text.len() - 1),
+                false
+            )),
             ["a", "far"]
         );
         let diags = front_end(path, text);
@@ -620,5 +718,73 @@ mod tests {
         );
         assert_eq!(path_of("file:///C:/m.fitd").as_deref(), Some("C:/m.fitd"));
         assert_eq!(path_of("untitled:1"), None);
+    }
+
+    #[test]
+    fn edits_apply_in_ranges() {
+        let mut t = String::from("node a\nnode b\n");
+        apply(
+            &mut t,
+            &json!({ "range": { "start": { "line": 1, "character": 5 }, "end": { "line": 1, "character": 6 } }, "text": "c \"C\"" }),
+        );
+        assert_eq!(t, "node a\nnode c \"C\"\n");
+        apply(&mut t, &json!({ "text": "x" }));
+        assert_eq!(t, "x");
+    }
+
+    #[test]
+    fn modern_requests_answer() {
+        let text = "style hot color=#C62828\n# Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nnode a \"A\" .hot\nnode b\na -> b\nuse pair(c, d)\n";
+        let none = |_: &str| None;
+        let d = doc("file:///x.fitd", "/x.fitd", text, &none);
+        let at = |s: &str| position(text, text.rfind(s).unwrap());
+        let h = features::hover(&d, &at("hot"), &[]);
+        assert!(
+            h["contents"]["value"]
+                .as_str()
+                .unwrap()
+                .contains("style hot color=#C62828")
+        );
+        let h = features::hover(&d, &at("pair"), &[]);
+        assert!(
+            h["contents"]["value"]
+                .as_str()
+                .unwrap()
+                .contains("Pair two nodes.")
+        );
+        assert_eq!(
+            features::references(&d, &at("a ->"), true)
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        let r = features::rename(&d, &at("b\n"), "bee").unwrap();
+        assert_eq!(r["changes"]["file:///x.fitd"].as_array().unwrap().len(), 2);
+        assert!(features::rename(&d, &at("b\n"), "1x").is_err());
+        let sig = features::signature_help(&d, &json!({ "line": 9, "character": 10 }));
+        assert_eq!(sig["signatures"][0]["label"], "pair(x, y)");
+        assert_eq!(sig["activeParameter"], 0);
+        let hints = features::inlay_hints(
+            &d,
+            &json!({ "range": { "start": { "line": 0 }, "end": { "line": 9 } } }),
+        );
+        assert_eq!(hints[1]["label"], "y:");
+        assert_eq!(
+            features::folds(text)[0],
+            json!({ "startLine": 2, "endLine": 5 })
+        );
+        assert_eq!(features::colors(text)[0]["range"]["start"]["character"], 16);
+        let syms = features::symbols(&d);
+        let names: Vec<&str> = syms
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["name"].as_str().unwrap())
+            .collect();
+        assert!(
+            names.contains(&"pair") && names.contains(&"a") && names.contains(&"hot"),
+            "{names:?}"
+        );
     }
 }

@@ -24,7 +24,18 @@ vim.filetype.add({ extension = { fitd = 'fitd' } })
 vim.api.nvim_create_autocmd('FileType', { pattern = 'fitd', callback = function() vim.treesitter.start() end })
 vim.lsp.config('fitd', { cmd = { 'fitd', 'lsp' }, filetypes = { 'fitd' }, root_markers = { '.git' } })
 vim.lsp.enable('fitd')
+vim.api.nvim_create_autocmd('LspAttach', {
+  callback = function(ev)
+    local client = vim.lsp.get_client_by_id(ev.data.client_id)
+    if not client or client.name ~= 'fitd' then return end
+    vim.lsp.inlay_hint.enable(true, { bufnr = ev.buf })
+    vim.lsp.document_color.enable(true, { bufnr = ev.buf })
+    vim.wo.foldmethod, vim.wo.foldexpr = 'expr', 'v:lua.vim.lsp.foldexpr()'
+  end,
+})
 ```
+
+The server offers hover (`K`), definition, references, rename, symbols, completion, signature help, inlay hints, code actions, folding, and document colors; see `docs/options.md` for the full list. Neovim 0.11+ maps most of these by default (`grn`, `grr`, `gra`, `gO`, `<C-s>`); document colors need 0.12.
 
 ## Helix (25.07+)
 
@@ -52,4 +63,4 @@ command = "fitd"
 args = ["lsp"]
 ```
 
-`hx --health fitd` should then tick the language server, parser, and highlight queries. Some distributions (Arch among them) install the binary as `helix` instead of `hx`.
+Helix picks up hover, definition, references, rename, symbols, completion, signature help, inlay hints, and code actions from the server with no further setup. `hx --health fitd` should then tick the language server, parser, and highlight queries. Some distributions (Arch among them) install the binary as `helix` instead of `hx`.

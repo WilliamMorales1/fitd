@@ -79,4 +79,19 @@ Node, edge, and group attributes include `color`, `fill`, and `text` where suppo
 - `fitd explain CODE` prints extended diagnostic information.
 - `fitd guide` prints concise language syntax and examples.
 - `fitd import INPUT` converts Graphviz DOT, Mermaid, or D2 input to `.fitd` source.
-- `fitd lsp` starts language server using standard input and output.
+- `fitd lsp` starts language server using standard input and output. See [Language server](#language-server).
+
+## Language server
+
+`fitd lsp` speaks the Language Server Protocol over standard input and output. Positions count UTF-16 units; edits sync incrementally. Features:
+
+- Diagnostics from the front end on every edit, and from a full layout run on save. Diagnostics in included files appear in those files. Unused styles are marked unnecessary.
+- Hover: nodes and styles show their declaration (with body lines); templates show their signature and the `#` comment above `def`; keywords, attribute keys, attribute values, relations, edge operators, and `include` targets show their documentation. Hovering a diagnostic adds its `fitd explain` text.
+- Go to definition, find references, and document highlight for nodes, styles, and templates, across includes. Definition on an `include` path opens the file; bundled `std/` modules open as read-only copies.
+- Rename for nodes, styles, and templates, across included files. Names defined in the bundled library are not renamed.
+- Document symbols: styles, nodes, keys, groups, and templates.
+- Completion by context: statement keywords (as snippets when the editor supports them), node ids, `.style` classes, attribute keys per statement, attribute values after `=`, constraint relations and placements, layout kinds, theme presets, page sizes, template calls after `use`, and `include` paths (bundled modules and nearby `.fitd` files).
+- Signature help and parameter-name inlay hints for `use NAME(...)` calls.
+- Code actions: apply a "did you mean" suggestion, declare an unknown node or style, remove an unused style.
+- Folding for `def`, `for`, and `if` blocks, nodes with body lines, and comment runs.
+- Document colors for `#RRGGBB` values, with a color picker where the editor offers one.
