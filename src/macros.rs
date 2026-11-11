@@ -863,7 +863,8 @@ impl Expander<'_> {
 
     fn call(&mut self, line: usize, f: &str, vs: Vec<Val>) -> Run<Val> {
         let arity = match f {
-            "names" => 3,
+            "names" | "part" => 3,
+            "count" => 2,
             _ => {
                 let hint = if self.defs.contains_key(f) {
                     format!("; `{f}` is a template, so write `use {f}(...)` on its own line")
@@ -891,6 +892,48 @@ impl Expander<'_> {
                 Err(())
             }
         };
+        let text = |me: &mut Self, v: &Val| match v {
+            Val::Str(s) => Ok(s.clone()),
+            o => {
+                me.fail(
+                    line,
+                    format!("`{f}` needs a string, found {} \"{o}\"", o.kind()),
+                );
+                Err(())
+            }
+        };
+        if f != "names" {
+            let (s, sep) = (text(self, &vs[0])?, text(self, &vs[1])?);
+            if sep.is_empty() {
+                self.fail(line, format!("`{f}` needs a non-empty separator"));
+                return Err(());
+            }
+            // An empty or blank string has no fields, so `for i in 1..count(s, ";")` runs zero times.
+            let fields: Vec<&str> = if s.trim().is_empty() {
+                Vec::new()
+            } else if sep.trim().is_empty() {
+                s.split_whitespace().collect()
+            } else {
+                s.split(sep.as_str()).map(str::trim).collect()
+            };
+            if f == "count" {
+                return Ok(Val::Int(fields.len() as i64));
+            }
+            let i = num(self, &vs[2])?;
+            return match usize::try_from(i)
+                .ok()
+                .and_then(|i| fields.get(i.wrapping_sub(1)))
+            {
+                Some(p) => Ok(Val::Str(p.to_string())),
+                None => {
+                    self.fail(
+                        line,
+                        format!("`part` index {i} is outside 1..{}", fields.len()),
+                    );
+                    Err(())
+                }
+            };
+        }
         let (lo, hi) = (num(self, &vs[1])?, num(self, &vs[2])?);
         let mut s = String::new();
         for k in lo..=hi {
@@ -1196,6 +1239,23 @@ mod tests {
         let l = run(text);
         assert_eq!(l.parse, text);
         assert!(l.diags.is_empty());
+    }
+
+    #[test]
+    fn count_and_part_split_lists() {
+        let l = run(
+            "def row(xs)\nfor i in 1..count(xs, \";\")\n| ${part(xs, \";\", i)}\nend\nend\nnode a\nuse row(\"x: int; y: int\")\nuse row(\"\")\n",
+        );
+        assert!(
+            l.diags.is_empty(),
+            "{:?}",
+            l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>()
+        );
+        assert_eq!(visible(&l), ["node a", "| x: int", "| y: int"]);
+        let bad = run("node a \"${part(\"a;b\", \";\", 3)}\"\n");
+        assert!(bad.diags.iter().any(|d| d.msg.contains("outside 1..2")));
+        let ws = run("node a \"${count(\" 90  5 5 \", \" \")}\"\n");
+        assert_eq!(visible(&ws), ["node a \"3\""]);
     }
 
     #[test]

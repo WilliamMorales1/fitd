@@ -272,6 +272,16 @@ x -> e -> m
 
 Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, and `${expression}` interpolation. Directives use indentation for readability; block boundaries are marked by `end`. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
 
+Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for node lists. `count(s, sep)` gives the number of fields in `s`; `part(s, sep, i)` gives field `i`, counted from 1 and trimmed. A whitespace separator splits on runs of whitespace, and an empty string has no fields, so templates can take lists as one string:
+
+```fitd
+def row(cells)
+for i in 1..count(cells, ";")
+| ${part(cells, ";", i)}
+end
+end
+```
+
 ```fitd
 for i in 1..3
   node step${i} "Step ${i}"
