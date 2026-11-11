@@ -189,7 +189,7 @@ group "Layers" attn, ff times=2 color=#3949AB
 
 ### Keys
 
-`key "LABEL" [.class] [attributes]` adds one legend entry. Entries are drawn in centered rows along the bottom of the page, wrapping when a row is full; the solver lays out the diagram in the space above. Swatches take `color`, `fill`, and `shape` from classes and attributes, as nodes do. `line=solid` or `line=dashed` draws a line swatch for edge colors instead of a node swatch. `page ... keysize=20pt` sets the swatch and text size (default 0.85 of the chosen body font); line thickness scales with it. In split output, keys repeat on every page.
+`key "LABEL" [.class] [attributes]` adds one legend entry. Entries are drawn in centered rows along the bottom of the page, wrapping when a row is full; the solver lays out the diagram in the space above. Swatches take `color`, `fill`, and `shape` from classes and attributes, as nodes do. `line=solid` or `line=dashed` draws a line swatch for edge colors instead of a node swatch. A key whose classes are used only by groups draws an open frame swatch. `page ... keysize=20pt` sets the swatch and text size (default 0.85 of the chosen body font); line thickness scales with it. In split output, keys repeat on every page.
 
 ```fitd
 key "Investment" line=solid color=#4FC3E0

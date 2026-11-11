@@ -465,6 +465,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     let mut seen_setting: HashMap<&str, Span> = HashMap::new();
     let mut grouped: Vec<(usize, Vec<Span>)> = Vec::new();
     let mut key_entries = Vec::new();
+    // Style names used by groups and by anything else, to tell frame keys apart.
+    let (mut on_group, mut on_other, mut key_classes) = (Vec::new(), Vec::new(), Vec::new());
     for st in stmts {
         let key = match &st.kind {
             StmtKind::Title(_) => "title",
@@ -616,6 +618,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 }
                 let mut l = Look::default();
                 apply_styles(&mut s, &mut styles, classes, &mut l);
+                on_other.extend(classes.iter().map(|c| c.text.clone()));
                 look(attrs, &mut l, &mut s.diags);
                 let n = &mut s.nodes[v];
                 (n.color, n.fill, n.text, n.shape) = (l.color, l.fill, l.text, l.shape);
@@ -651,6 +654,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 };
                 let mut l = Look::default();
                 apply_styles(&mut s, &mut styles, classes, &mut l);
+                on_other.extend(classes.iter().map(|c| c.text.clone()));
                 for a in attrs {
                     match a.key.text.as_str() {
                         "color" => l.color = color(&a.value, &mut s.diags).or(l.color.take()),
@@ -703,12 +707,16 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     .cloned()
                     .collect();
                 look(&rest, &mut l, &mut s.diags);
+                if line.is_none() && !classes.is_empty() {
+                    key_classes.push((key_entries.len(), classes.clone()));
+                }
                 key_entries.push(KeyEntry {
                     label: label.clone(),
                     color: l.color,
                     fill: l.fill,
                     shape: l.shape,
                     line,
+                    frame: false,
                 });
             }
             StmtKind::Group {
@@ -720,6 +728,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 // Only a class's color applies; a group has no fill, shape, or stack.
                 let mut l = Look::default();
                 apply_styles(&mut s, &mut styles, classes, &mut l);
+                on_group.extend(classes.iter().map(|c| c.text.clone()));
                 let (mut col, mut times) = (l.color, None);
                 for a in attrs {
                     match (a.key.text.as_str(), &a.value) {
@@ -778,6 +787,11 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             }
             StmtKind::Body(_) | StmtKind::Cells(_) | StmtKind::Include(_) => {}
         }
+    }
+    for (i, classes) in key_classes {
+        key_entries[i].frame = classes
+            .iter()
+            .all(|c| on_group.contains(&c.text) && !on_other.contains(&c.text));
     }
     let mut unused: Vec<_> = styles.iter().filter(|(_, v)| !v.2).collect();
     unused.sort_by_key(|(_, v)| v.0.lo);

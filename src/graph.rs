@@ -201,6 +201,8 @@ pub struct KeyEntry {
     pub fill: Option<String>,
     pub shape: Option<Shape>,
     pub line: Option<bool>,
+    /// Set when the entry's styles only frame groups, so its swatch is an open frame.
+    pub frame: bool,
 }
 
 pub struct Graph {

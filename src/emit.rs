@@ -237,6 +237,14 @@ fn key_swatch(e: &KeyEntry, th: &Theme, x: f64, y: f64, s: f64) -> String {
             s / 5.0
         );
     }
+    if e.frame {
+        return format!(
+            r#"<rect x="{x:.2}" y="{:.2}" width="{s:.2}" height="{s:.2}" rx="{:.2}" fill="{c}" fill-opacity="{:.2}" stroke="{c}" stroke-width="1"/>"#,
+            y - s / 2.0,
+            s * 0.35,
+            th.tint / 2.0
+        );
+    }
     match (e.shape, &e.fill) {
         (_, Some(f)) if e.shape == Some(Shape::Circle) => format!(
             r#"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{f}" stroke="{c}" stroke-width="1"/>"#,
@@ -985,6 +993,7 @@ pub fn tikz(
                 let x = x0 + dx;
                 let c = cname(e.color.as_deref().unwrap_or(&th.edge));
                 let (fill, op) = match (&e.fill, e.shape) {
+                    _ if e.frame => (c.clone(), th.tint / 2.0),
                     (Some(f), _) => (cname(f), 1.0),
                     (None, Some(Shape::Circle)) => (c.clone(), 1.0),
                     (None, _) => (c.clone(), th.tint),
@@ -998,7 +1007,7 @@ pub fn tikz(
                         s / 5.0,
                         x + s
                     );
-                } else if e.shape == Some(Shape::Circle) {
+                } else if e.shape == Some(Shape::Circle) && !e.frame {
                     let _ = writeln!(
                         o,
                         "\\filldraw[fill={fill}, fill opacity={op:.2}, draw={c}, line width=1bp] ({:.2},{cy:.2}) circle ({:.2}bp);",
@@ -1009,7 +1018,7 @@ pub fn tikz(
                     let _ = writeln!(
                         o,
                         "\\filldraw[fill={fill}, fill opacity={op:.2}, draw={c}, line width=1bp, rounded corners={:.2}bp] ({x:.2},{:.2}) rectangle ({:.2},{:.2});",
-                        s * 0.15,
+                        s * if e.frame { 0.35 } else { 0.15 },
                         cy - s / 2.0,
                         x + s,
                         cy + s / 2.0
