@@ -6,7 +6,7 @@ Stdin:  fitd - -o out.svg <<'EOF' ... EOF
 Exit 0: written; errors on stderr.
 
 Syntax: one statement per line, # comment. Only nodes and edges are needed.
-  node ID "Title" .style        # ID: letters digits _ inner -; title defaults to ID
+  node ID "Title" .style row=1 col=2 # ID: letters digits _ inner -; no title: ID
   | body line                   # under node; lead spaces indent; **bold**
   ~ # %60 . _ LBL "two words"   # figure row: # solid %NN shade . outline _ gap, else label
                                 #   LBL*3 spans 3 columns; rows grid up: strips, heatmaps

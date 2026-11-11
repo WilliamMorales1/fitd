@@ -284,6 +284,18 @@ require align row(parser, solver, checker)
 prefer output at right weight=2
 ```
 
+Nodes can also be placed on a grid with `row=R col=C`, counted from 1. Nodes with the same `row` share an `align row` and sit left to right by `col`; nodes with the same `col` share an `align column` and stack top to bottom by `row`. Both are hard constraints. In a layered layout, a hard `above` (`dir=down`) or `left-of` (`dir=right`) also orders layers, so unconnected nodes can stack. Two nodes in one cell give E0007.
+
+```fitd
+layout layered
+node a "A" row=1 col=1
+node b "B" row=1 col=2
+node c "C" row=2 col=1
+node d "D" row=2 col=2
+a -> b, c
+b, c -> d
+```
+
 ### Includes
 
 `include "PATH"` inserts source file before macro expansion and parsing. Path is resolved relative to including file. Include cycles and missing files produce diagnostics.

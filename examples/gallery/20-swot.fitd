@@ -1,6 +1,13 @@
-# 2x2 matrix such as SWOT (business, strategy).
-include "grid"
-page 1:1
+# 2x2 matrix such as SWOT (business, strategy), with nodes placed on a grid.
+layout layered
+page 16:9
 font 9pt..28pt
-node swot "SWOT" .grid
-grid.quad("Strengths", "Weaknesses", "Opportunities", "Threats")
+node s "Strengths" row=1 col=1
+| loyal users
+| fast support
+node w "Weaknesses" row=1 col=2
+| slow builds
+node o "Opportunities" row=2 col=1
+| new markets
+node t "Threats" row=2 col=2
+| cheaper rivals

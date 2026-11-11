@@ -559,6 +559,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     let (mut title, mut root, mut edges, mut constraints) = (None, None, Vec::new(), Vec::new());
     let mut seen_setting: HashMap<&str, Span> = HashMap::new();
     let mut grouped: Vec<(usize, Vec<Span>)> = Vec::new();
+    let mut cells: Vec<(usize, [Option<usize>; 2], Span)> = Vec::new();
     let mut key_entries = Vec::new();
     // Style names used by groups and by anything else, to tell frame keys apart.
     let (mut on_group, mut on_other, mut key_classes) = (Vec::new(), Vec::new(), Vec::new());
@@ -765,6 +766,21 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     .partition(|a| EDGE_ONLY.contains(&a.key.text.as_str()));
                 let (lane, own): (Vec<Attr>, Vec<Attr>) =
                     own.into_iter().partition(|a| a.key.text == "lane");
+                let (grid, own): (Vec<Attr>, Vec<Attr>) = own
+                    .into_iter()
+                    .partition(|a| matches!(a.key.text.as_str(), "row" | "col"));
+                let mut cell = [None, None];
+                for a in &grid {
+                    match &a.value {
+                        Value::Num(t, _) if t.parse::<usize>().is_ok_and(|k| k > 0) => {
+                            cell[(a.key.text == "col") as usize] = t.parse().ok();
+                        }
+                        v => s.type_err(v, format!("expected a whole number `{}=1` or more", a.key.text)),
+                    }
+                }
+                if cell.iter().any(Option::is_some) {
+                    cells.push((v, cell, id.span));
+                }
                 for a in &lane {
                     match &a.value {
                         Value::Name(h) if h.text == id.text => s.diags.push(
@@ -783,6 +799,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                         a,
                         &[
                             "color", "fill", "text", "shape", "stack", "wrap", "place", "lane",
+                            "row", "col",
                         ],
                     ));
                 }
@@ -961,6 +978,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             Vec::new()
         }
     };
+    constraints.extend(grid_cells(&cells, &s.nodes, &mut s.diags));
     s.diags.extend(contradictions(&constraints));
     for (v, n) in s.nodes.iter().enumerate().filter(|(_, n)| n.aside) {
         let flows = edges.iter().any(|e| {
@@ -1000,6 +1018,54 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
         settings: set,
     };
     (g, s.diags)
+}
+
+/// grid_cells lowers `row=`/`col=` node attributes to hard alignment and order constraints.
+fn grid_cells(
+    cells: &[(usize, [Option<usize>; 2], Span)],
+    nodes: &[Node],
+    diags: &mut Vec<Diag>,
+) -> Vec<Constraint> {
+    let mut out = Vec::new();
+    for (k, &(v, cell, span)) in cells.iter().enumerate() {
+        if let Some(&(w, ..)) = cells[..k].iter().find(|c| c.1 == cell && cell.iter().all(Option::is_some)) {
+            diags.push(
+                Diag::error("E0007", format!("`{}` and `{}` take the same grid cell", nodes[w].id, nodes[v].id))
+                    .primary(span, "cell already taken"),
+            );
+            return out;
+        }
+    }
+    // axis 0 groups by row (one row, ordered by col), axis 1 groups by col.
+    for axis in 0..2 {
+        let mut lines: Vec<(usize, Vec<(usize, usize, Span)>)> = Vec::new();
+        for &(v, cell, span) in cells {
+            let Some(line) = cell[axis] else { continue };
+            let pos = cell[1 - axis].unwrap_or(0);
+            match lines.iter_mut().find(|l| l.0 == line) {
+                Some(l) => l.1.push((pos, v, span)),
+                None => lines.push((line, vec![(pos, v, span)])),
+            }
+        }
+        for (_, mut items) in lines.into_iter().filter(|l| l.1.len() > 1) {
+            items.sort_by_key(|i| i.0);
+            let span = items.iter().map(|i| i.2).reduce(Span::to).unwrap();
+            let hard = |rel| Constraint { rel, hard: true, weight: 1, span };
+            out.push(hard(Relation::Align {
+                side: if axis == 0 { Side::Row } else { Side::Column },
+                items: items.iter().map(|i| i.1).collect(),
+            }));
+            for w in items.windows(2).filter(|w| w[0].0 > 0 && w[0].0 < w[1].0) {
+                let (a, b, gap) = (w[0].1, w[1].1, Length::Em(1.0));
+                out.push(hard(if axis == 0 {
+                    Relation::LeftOf { a, b, gap }
+                } else {
+                    Relation::Above { a, b, gap }
+                }));
+            }
+        }
+    }
+    out
 }
 
 /// venn_sets moves every group into a set circle, where members may overlap freely.
@@ -1360,6 +1426,19 @@ mod tests {
 
     fn codes(src: &str) -> Vec<&'static str> {
         run(src).1.iter().map(|d| d.code).collect()
+    }
+
+    #[test]
+    fn grid_cells_lower_to_alignment_and_order() {
+        let (g, d) = run("node a row=1 col=1\nnode b row=1 col=2\nnode c row=2 col=1\nnode d row=2 col=2\n");
+        assert!(d.is_empty());
+        let count = |f: fn(&Relation) -> bool| g.constraints.iter().filter(|c| c.hard && f(&c.rel)).count();
+        assert_eq!(count(|r| matches!(r, Relation::Align { side: Side::Row, .. })), 2);
+        assert_eq!(count(|r| matches!(r, Relation::Align { side: Side::Column, .. })), 2);
+        assert_eq!(count(|r| matches!(r, Relation::LeftOf { a: 0, b: 1, .. })), 1);
+        assert_eq!(count(|r| matches!(r, Relation::Above { a: 1, b: 3, .. })), 1);
+        assert_eq!(codes("node a row=1 col=1\nnode b row=1 col=1\n"), ["E0007"]);
+        assert_eq!(codes("node a row=0\n"), ["E0006"]);
     }
 
     #[test]

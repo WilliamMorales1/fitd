@@ -28,6 +28,19 @@ fn edge_source_lists_fan_in() {
 }
 
 #[test]
+fn unconnected_grid_nodes_stack_in_layered() {
+    let src = tmp("grid.fitd");
+    std::fs::write(
+        &src,
+        "layout layered\nnode a row=1 col=1\nnode b row=1 col=2\nnode c row=2 col=1\nnode d row=2 col=2\n",
+    )
+    .unwrap();
+    let out = tmp("grid.svg");
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", out.to_str().unwrap()]);
+    assert!(ok && log.contains("0 errors"), "{log}");
+}
+
+#[test]
 fn builds_example_with_zero_errors() {
     let svg = tmp("group_theory.svg");
     let tex = tmp("group_theory.tex");

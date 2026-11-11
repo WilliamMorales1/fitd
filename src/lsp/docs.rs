@@ -216,6 +216,18 @@ pub const ATTRS: &[Attr] = &[
         doc: "Hangs the node on ID's dashed lifeline in a `lanes` layout, below its earlier lane nodes.",
     },
     Attr {
+        key: "row",
+        on: &["node"],
+        values: &["1", "2", "3"],
+        doc: "Grid row from 1: nodes with the same `row` align in a row, ordered by `col`.",
+    },
+    Attr {
+        key: "col",
+        on: &["node"],
+        values: &["1", "2", "3"],
+        doc: "Grid column from 1: nodes with the same `col` align in a column, ordered by `row`.",
+    },
+    Attr {
         key: "times",
         on: &["group"],
         values: &["2", "3", "4"],

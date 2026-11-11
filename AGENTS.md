@@ -74,10 +74,10 @@ Each row lists the figure type, the surveys (by number above) that name it, and 
 | Timeline | 1 | yes | `std/time` | `17-timeline` |
 | Gantt chart | 1 | yes | `std/grid` | `18-gantt` |
 | Mind / concept map | 1 | yes | core (radial) | `19-mind-map` |
-| 2x2 matrix (SWOT) | 1 | yes, as a figure grid | `std/grid` | `20-swot` |
+| 2x2 matrix (SWOT) | 1 | yes, nodes on a grid (`row=`/`col=`) or `grid.quad` | core, `std/grid` | `20-swot` |
 | Heat map | 3 | yes | `std/grid` | `08`, `grid.shade` |
 | Unit bar chart | 3, 4 | yes, small counts only | `std/grid` | `21-bar-chart` |
-| Commutative diagram | (math typology) | partial: square drawn as diamond | core | `22-commutative` |
+| Commutative diagram | (math typology) | yes, square via `row=`/`col=` | core | `22-commutative` |
 | Fishbone / Ishikawa | 1 | yes, as a tree into the effect | core | `23-fishbone` |
 | Swimlane activity | 6 | yes | core (lanes) | `24-swimlane` |
 | UML sequence | 5, 6 | yes, no activation bars or self-messages | `std/seq` | `25-sequence` |
@@ -135,7 +135,7 @@ Surveys 1, 3, 4, and 6 above classify figure types only. Survey 2 (Viziometrics)
 
 Only open work belongs here: planned changes, known problems, and caveats. Delete a plan once it is done, and move anything it left out into Known gaps. The plans are ordered to avoid redoing work. Each plan gives the change, where it goes, and when it is done.
 
-- The layout and feature plans (5 to 7) come first, smallest first. Each only re-checks its own renders.
+- The layout and feature plans (6 and 7) come first, smallest first. Each only re-checks its own renders.
 - Dependency arcs and Sankey (8) are low priority and stay last.
 
 ### Known gaps in finished work
@@ -148,14 +148,8 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Venn: no Euler diagrams (disjoint or nested sets drawn apart or inside) and no area-proportional circles.
 - User libraries: `include "user/LIB"` only looks beside the including file. There is no library search path or `FITD_PATH`; add one if libraries get shared across projects.
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
+- Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
-
-### 5. Grid placement
-
-Commutative squares and 2x2 node matrices need nodes on a grid. `require a above b` combined with `left-of` fails for unconnected nodes (E0110), so `22-commutative` draws a diamond.
-
-- Change: add `at row=R col=C` to node statements (or `align grid(a, b; c, d)`). It lowers to `align row` and `align column` constraints, which the solver already supports, plus an order constraint per row and column.
-- Done when `22-commutative` is a square and `20-swot` can use real nodes with bodies.
 
 ### 6. Ratio-aware folding of long chains
 

@@ -181,10 +181,28 @@ pub(crate) fn layering(g: &Graph, dir: Dir) -> Layering {
     for (bk, f) in back.iter_mut().zip(&flat) {
         *bk &= !f;
     }
-    let up: Vec<(usize, usize)> = (0..tree.len())
+    let mut up: Vec<(usize, usize)> = (0..tree.len())
         .filter(|&i| !back[i] && !flat[i])
         .map(|i| contracted[i])
         .collect();
+    // A hard order along the flow also orders layers, so unconnected nodes can stack.
+    let ordered: Vec<(usize, usize)> = g
+        .constraints
+        .iter()
+        .filter(|c| c.hard)
+        .filter_map(|c| match (dir, &c.rel) {
+            (Dir::Down, Relation::Above { a, b, .. }) | (Dir::Right, Relation::LeftOf { a, b, .. }) => {
+                Some((rep[*a], rep[*b]))
+            }
+            _ => None,
+        })
+        .filter(|&(a, b)| a != b)
+        .collect();
+    let mut with = up.clone();
+    with.extend(&ordered);
+    if !back_edges(n, &with).iter().any(|&b| b) {
+        up = with;
+    }
     let l = layers(n, &up);
     let layer = (0..n).map(|v| l[rep[v]]).collect();
     Layering {
