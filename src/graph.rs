@@ -36,6 +36,24 @@ pub struct Node {
     pub span: Span,
 }
 
+/// Head is the mark drawn at one end of an edge.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Head {
+    Arrow,
+    Triangle,
+    Diamond,
+    ODiamond,
+    Crow,
+    None,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Dash {
+    Solid,
+    Dashed,
+    Dotted,
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum EdgeKind {
     Tree,
@@ -49,6 +67,11 @@ pub struct Edge {
     pub directed: bool,
     pub label: Option<String>,
     pub color: Option<String>,
+    /// Mark at `b`; unset means an arrow when directed.
+    pub head: Option<Head>,
+    /// Mark at `a`; unset means none.
+    pub tail: Option<Head>,
+    pub dash: Option<Dash>,
     pub span: Span,
 }
 
@@ -206,7 +229,9 @@ pub struct KeyEntry {
     pub color: Option<String>,
     pub fill: Option<String>,
     pub shape: Option<Shape>,
-    pub line: Option<bool>,
+    /// Set for a line swatch.
+    pub line: Option<Dash>,
+    pub head: Option<Head>,
     /// Set when the entry's styles only frame groups, so its swatch is an open frame.
     pub frame: bool,
 }

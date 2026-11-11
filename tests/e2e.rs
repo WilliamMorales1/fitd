@@ -209,7 +209,7 @@ fn groups_frame_members_and_edges_take_colors() {
     );
     assert!(
         s.contains("stroke=\"#C62828\" stroke-width")
-            && s.contains("url(#mC62828)")
+            && s.contains("url(#maC62828)")
             && s.contains("stroke=\"#2E7D32\""),
         "{s}"
     );
@@ -1887,4 +1887,36 @@ fn diamond_edges_end_on_the_outline() {
     assert!(ends.iter().all(|r| (r - 1.0).abs() < 0.02), "{ends:?}");
     let t = std::fs::read_to_string(&tex).unwrap();
     assert!(t.contains("-- cycle;"), "{t}");
+}
+
+#[test]
+fn edge_heads_and_dashes_reach_svg_and_tikz() {
+    let src = tmp("heads.fitd");
+    let (svg, tex) = (tmp("heads.svg"), tmp("heads.tex"));
+    std::fs::write(
+        &src,
+        "layout layered\nnode a\nnode b\nnode c\na -> b head=triangle tail=odiamond\nb -- c head=crow line=dotted\n",
+    )
+    .unwrap();
+    let (ok, log) = fitd(&[
+        src.to_str().unwrap(),
+        "-o",
+        svg.to_str().unwrap(),
+        "--tikz",
+        tex.to_str().unwrap(),
+    ]);
+    assert!(ok && log.contains(" 0 errors"), "{log}");
+    let s = std::fs::read_to_string(&svg).unwrap();
+    let lines: Vec<&str> = s.lines().filter(|l| l.starts_with("<polyline")).collect();
+    assert_eq!(lines.len(), 2);
+    assert!(
+        lines[0].contains("marker-start=\"url(#mo") && lines[0].contains("marker-end=\"url(#mt")
+    );
+    assert!(
+        lines[1].contains("marker-end=\"url(#mc") && lines[1].contains("stroke-linecap=\"round\"")
+    );
+    assert!(!lines[1].contains("marker-start"));
+    let t = std::fs::read_to_string(&tex).unwrap();
+    assert!(t.contains("{Diamond[open]}-{Triangle[open]}"), "{t}");
+    assert!(t.contains("-{Straight Barb[reversed]}, dotted"), "{t}");
 }

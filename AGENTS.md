@@ -68,9 +68,9 @@ Each row lists the figure type, the surveys (by number above) that name it, and 
 | Data flow | 5 | yes | `std/arch` | `11-data-flow` |
 | Layer stack | 5 | yes | `std/arch` | `12-layer-stack` |
 | Stage / cycle | 5 | yes, drawn as a chain plus a back link | core | `13-cycle` |
-| UML class | 5, 6 | yes, relations told apart by colour | `std/uml` | `14-uml-class` |
+| UML class | 5, 6 | yes, UML heads (triangle, diamond, dashed) | `std/uml` | `14-uml-class` |
 | UML state machine | 6 | yes | `std/uml` | `15-state-machine` |
-| Entity-relationship | 5 | yes, relationship diamonds, cardinality as labels | `std/er` | `16-er` |
+| Entity-relationship | 5 | yes, relationship diamonds, cardinality labels, crow's feet | `std/er` | `16-er` |
 | Timeline | 1 | yes | `std/time` | `17-timeline` |
 | Gantt chart | 1 | yes | `std/grid` | `18-gantt` |
 | Mind / concept map | 1 | yes | core (radial) | `19-mind-map` |
@@ -113,18 +113,14 @@ The plans are ordered by how many common figure types each one unlocks for the e
 
 `shape=diamond` (`Shape::Diamond`, src/graph.rs) sizes the rhombus by scaling the padded content rect until every line corner fits, so it is at most twice the content box and smaller for ragged text. `inside_box` (src/layout/path.rs) tests the rhombus, so edge clipping, routing, and `check` follow the outline. SVG, PDF, TikZ, and key swatches draw it. `std/flow` uses it for `decide`, `std/er` has `er_relation(id, name, a, b, card)`, and the Mermaid `{}`, Graphviz `diamond`, and D2 `diamond` importers map to it. `diamond_edges_end_on_the_outline` checks the clipping.
 
-### 3. Edge heads and edge styles
+### 3. Edge heads and edge styles (done)
 
-UML needs hollow triangles (inheritance), diamonds (composition and aggregation), and dashed dependencies. ER needs crow's foot ends. Today edges accept only `color` (src/sema.rs:693), so `std/uml` tells relations apart by colour.
+Edges and edge styles take `head=` and `tail=` (`arrow|triangle|diamond|odiamond|crow|none`) and `line=solid|dashed|dotted` (`Head`, `Dash`, src/graph.rs). Nodes reject them with E0005. `decor` (src/emit.rs) resolves the marks at the drawn ends, swapping them when the layout draws an edge reversed. SVG uses one `<marker>` per mark and colour, TikZ uses `arrows.meta` tips, and PDF follows the SVG. Key swatches take `head=` too. Marks sit in the arrow clearance, so layout is unchanged.
 
-- Change: add `head=arrow|triangle|diamond|odiamond|crow|none`, `tail=` with the same values, and `line=solid|dashed|dotted` to edge attributes and edge styles.
-  - Draw heads in emit (SVG, TikZ, PDF).
-  - Heads are drawn inside the existing arrow clearance, so layout does not change.
-- Then:
-  - `uml_is` becomes a hollow triangle and `uml_has` a filled diamond.
-  - `er_rel` gets crow's feet at the "many" end.
-  - `uml_key()` and the colour coding become optional.
-- Done when gallery 14 and 16 read correctly in `theme mono`.
+- `uml_is` is a hollow triangle, `uml_has` a diamond at the whole, `uml_uses` dashed. The relation colours are gone; `uml_key()` shows the heads.
+- `er_rel` and `er_relation` put a crow's foot at every end whose cardinality is not `1`.
+- `edge_heads_and_dashes_reach_svg_and_tikz` checks both outputs.
+- Left out: Graphviz `arrowhead=`/`style=` import.
 
 ### 4. Lane layout: swimlanes and UML sequence diagrams
 

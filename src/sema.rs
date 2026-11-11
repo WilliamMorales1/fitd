@@ -1,8 +1,8 @@
 use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
 use crate::graph::{
-    Cell, Constraint, Dir, Edge, EdgeKind, Graph, KeyEntry, LayoutKind, Length, Node, Place,
-    Relation, Settings, Shape, Side,
+    Cell, Constraint, Dash, Dir, Edge, EdgeKind, Graph, Head, KeyEntry, LayoutKind, Length, Node,
+    Place, Relation, Settings, Shape, Side,
 };
 use crate::theme::{self, Overrides, Theme};
 use std::collections::HashMap;
@@ -190,6 +190,39 @@ struct Look {
     stack: Option<u8>,
     wrap_em: Option<f64>,
     aside: Option<bool>,
+    head: Option<Head>,
+    tail: Option<Head>,
+    dash: Option<Dash>,
+}
+
+const HEADS: &[&str] = &["arrow", "triangle", "diamond", "odiamond", "crow", "none"];
+const DASHES: &[&str] = &["solid", "dashed", "dotted"];
+/// EDGE_ONLY attributes style edges and key lines, never nodes.
+const EDGE_ONLY: &[&str] = &["head", "tail", "line"];
+
+fn head(v: &Value, diags: &mut Vec<Diag>) -> Option<Head> {
+    let Value::Name(n) = v else {
+        diags.push(
+            Diag::error("E0006", format!("expected one of {}", HEADS.join(", ")))
+                .primary(v.span(), "wrong type or unit"),
+        );
+        return None;
+    };
+    let h = [
+        Head::Arrow,
+        Head::Triangle,
+        Head::Diamond,
+        Head::ODiamond,
+        Head::Crow,
+        Head::None,
+    ];
+    match HEADS.iter().position(|&k| k == n.text) {
+        Some(i) => Some(h[i]),
+        None => {
+            diags.push(unknown("E0009", "head", n, HEADS));
+            None
+        }
+    }
 }
 
 fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
@@ -239,9 +272,22 @@ fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
                 Diag::error("E0006", "wrap width is in em, such as `24em`")
                     .primary(v.span(), "wrong type or unit"),
             ),
+            ("head", v) => l.head = head(v, diags).or(l.head),
+            ("tail", v) => l.tail = head(v, diags).or(l.tail),
+            ("line", Value::Name(n)) => match DASHES.iter().position(|&k| k == n.text) {
+                Some(i) => l.dash = Some([Dash::Solid, Dash::Dashed, Dash::Dotted][i]),
+                None => diags.push(unknown("E0009", "line", n, DASHES)),
+            },
+            ("line", v) => diags.push(
+                Diag::error("E0006", "expected `solid`, `dashed`, or `dotted`")
+                    .primary(v.span(), "wrong type or unit"),
+            ),
             _ => diags.push(bad_attr(
                 a,
-                &["color", "fill", "text", "shape", "stack", "wrap", "place"],
+                &[
+                    "color", "fill", "text", "shape", "stack", "wrap", "place", "head", "tail",
+                    "line",
+                ],
             )),
         }
     }
@@ -663,7 +709,17 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 let mut l = Look::default();
                 apply_styles(&mut s, &mut styles, classes, &mut l);
                 on_other.extend(classes.iter().map(|c| c.text.clone()));
-                look(attrs, &mut l, &mut s.diags);
+                let (edge_only, own): (Vec<Attr>, Vec<Attr>) = attrs
+                    .iter()
+                    .cloned()
+                    .partition(|a| EDGE_ONLY.contains(&a.key.text.as_str()));
+                for a in &edge_only {
+                    s.diags.push(bad_attr(
+                        a,
+                        &["color", "fill", "text", "shape", "stack", "wrap", "place"],
+                    ));
+                }
+                look(&own, &mut l, &mut s.diags);
                 let n = &mut s.nodes[v];
                 (n.color, n.fill, n.text, n.shape) = (l.color, l.fill, l.text, l.shape);
                 n.stack = l.stack;
@@ -701,8 +757,12 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 on_other.extend(classes.iter().map(|c| c.text.clone()));
                 for a in attrs {
                     match a.key.text.as_str() {
-                        "color" => l.color = color(&a.value, &mut s.diags).or(l.color.take()),
-                        _ => s.diags.push(bad_attr(a, &["color"])),
+                        "color" | "head" | "tail" | "line" => {
+                            look(std::slice::from_ref(a), &mut l, &mut s.diags)
+                        }
+                        _ => s
+                            .diags
+                            .push(bad_attr(a, &["color", "head", "tail", "line"])),
                     }
                 }
                 let a = s.node(from);
@@ -715,6 +775,9 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                             directed: *directed,
                             label: label.clone(),
                             color: l.color.clone(),
+                            head: l.head,
+                            tail: l.tail,
+                            dash: l.dash,
                             span: from.span.to(t.span),
                         });
                     }
@@ -727,31 +790,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             } => {
                 let mut l = Look::default();
                 apply_styles(&mut s, &mut styles, classes, &mut l);
-                let mut line = None;
-                let rest: Vec<Attr> = attrs
-                    .iter()
-                    .filter(|a| {
-                        if a.key.text != "line" {
-                            return true;
-                        }
-                        match &a.value {
-                            Value::Name(n) if n.text == "solid" => line = Some(false),
-                            Value::Name(n) if n.text == "dashed" => line = Some(true),
-                            Value::Name(n) => {
-                                s.diags
-                                    .push(unknown("E0009", "line", n, &["solid", "dashed"]))
-                            }
-                            v => s.diags.push(
-                                Diag::error("E0006", "expected `solid` or `dashed`")
-                                    .primary(v.span(), "wrong type or unit"),
-                            ),
-                        }
-                        false
-                    })
-                    .cloned()
-                    .collect();
-                look(&rest, &mut l, &mut s.diags);
-                if line.is_none() && !classes.is_empty() {
+                look(attrs, &mut l, &mut s.diags);
+                if l.dash.is_none() && !classes.is_empty() {
                     key_classes.push((key_entries.len(), classes.clone()));
                 }
                 key_entries.push(KeyEntry {
@@ -759,7 +799,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     color: l.color,
                     fill: l.fill,
                     shape: l.shape,
-                    line,
+                    line: l.dash,
+                    head: l.head,
                     frame: false,
                 });
             }
@@ -1291,6 +1332,20 @@ mod tests {
             matches!(&g.constraints[0], Constraint { rel: Relation::Group { items, title: Some(_), color: Some(_), .. }, hard: true, .. } if items == &[1, 2])
         );
         assert_eq!(codes("node a\nnode b\na -> b width=2pt\n"), vec!["E0005"]);
+        let (g, d) = run(
+            "style is head=triangle\nnode a\nnode b\na -> b .is\na -- b tail=diamond line=dotted\n",
+        );
+        assert!(d.is_empty());
+        assert_eq!(
+            (g.edges[0].head, g.edges[0].dash),
+            (Some(Head::Triangle), None)
+        );
+        assert_eq!(
+            (g.edges[1].tail, g.edges[1].dash),
+            (Some(Head::Diamond), Some(Dash::Dotted))
+        );
+        assert_eq!(codes("node a\nnode b\na -> b head=hook\n"), vec!["E0009"]);
+        assert_eq!(codes("node a head=crow\n"), vec!["E0005"]);
         assert_eq!(
             codes("node a\nnode b\nnode c\ngroup a, b\ngroup b, c\n"),
             vec!["E0010"]
@@ -1316,7 +1371,7 @@ mod tests {
             run("node a\nstyle s color=#f00\nkey \"X\" .s line=dashed\nkey \"Y\" shape=circle\n");
         assert!(d.is_empty());
         assert_eq!(g.key.len(), 2);
-        assert_eq!(g.key[0].line, Some(true));
+        assert_eq!(g.key[0].line, Some(Dash::Dashed));
         assert_eq!(g.key[1].shape, Some(Shape::Circle));
         assert_eq!(codes("node a\nkey \"X\" line=wavy\n"), ["E0009"]);
     }

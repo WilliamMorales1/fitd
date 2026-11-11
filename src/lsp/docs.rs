@@ -188,8 +188,26 @@ pub const ATTRS: &[Attr] = &[
     Attr {
         key: "line",
         on: &["key"],
-        values: &["solid", "dashed"],
+        values: &["solid", "dashed", "dotted"],
         doc: "Draws an edge swatch instead of a node swatch: `solid` for `->`, `dashed` for `..>`.",
+    },
+    Attr {
+        key: "line",
+        on: &["edge", "style"],
+        values: &["solid", "dashed", "dotted"],
+        doc: "Dash pattern of the edge. Default `solid`, `dashed` for `..>`.",
+    },
+    Attr {
+        key: "head",
+        on: &["edge", "style", "key"],
+        values: &["arrow", "triangle", "diamond", "odiamond", "crow", "none"],
+        doc: "Mark at the target end. Default `arrow` when directed, else `none`.",
+    },
+    Attr {
+        key: "tail",
+        on: &["edge", "style"],
+        values: &["arrow", "triangle", "diamond", "odiamond", "crow", "none"],
+        doc: "Mark at the source end. Default `none`.",
     },
     Attr {
         key: "times",
@@ -428,12 +446,15 @@ pub const WORDS: &[(&str, &str, &str)] = &[
     ("place=", "aside", "Moves to the strip after the flow."),
     ("dir", "down", "Flow runs top to bottom."),
     ("dir", "right", "Flow runs left to right."),
-    ("line", "solid", "Solid line swatch, for `->` edge colors."),
-    (
-        "line",
-        "dashed",
-        "Dashed line swatch, for `..>` link colors.",
-    ),
+    ("line", "solid", "Solid line."),
+    ("line", "dashed", "Dashed line, as `..>` links draw."),
+    ("line", "dotted", "Dotted line."),
+    ("head", "arrow", "Filled arrowhead."),
+    ("head", "triangle", "Hollow triangle: UML inheritance."),
+    ("head", "diamond", "Filled diamond: UML composition."),
+    ("head", "odiamond", "Hollow diamond: UML aggregation."),
+    ("head", "crow", "Crow's foot: the many end of an ER relationship."),
+    ("head", "none", "No mark."),
 ];
 
 /// word finds the documentation for `name` in role `role`.

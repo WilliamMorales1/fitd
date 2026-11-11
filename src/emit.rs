@@ -1,5 +1,5 @@
 use crate::geom::{P, Rect};
-use crate::graph::{Graph, KeyEntry, LayoutKind, Relation};
+use crate::graph::{Dash, Graph, Head, KeyEntry, LayoutKind, Relation};
 use crate::key::KeyPlan;
 use crate::layout::{
     Drawn, EdgeStyle, FRAME_PAD, Layout, Role, Shape, TITLE_BAND, TITLE_SIZE, TextLine, frame,
@@ -132,11 +132,100 @@ fn stroke<'a>(g: &'a Graph, e: &Drawn) -> Option<&'a str> {
         .and_then(|x| x.color.as_deref())
 }
 
-fn headed(g: &Graph, e: &Drawn) -> bool {
+/// Marks at the drawn start and end of `e`, and its dash pattern.
+fn decor(g: &Graph, e: &Drawn) -> (Head, Head, Dash) {
     let find = |a: usize, b: usize| g.edges.iter().find(|x| (x.a, x.b) == (a, b));
-    find(e.a, e.b)
-        .or_else(|| find(e.b, e.a))
-        .is_none_or(|x| x.directed)
+    let (x, flip) = match find(e.a, e.b) {
+        Some(x) => (Some(x), false),
+        None => (find(e.b, e.a), true),
+    };
+    let arrow = e.style != EdgeStyle::Line && x.is_none_or(|x| x.directed);
+    let head = x
+        .and_then(|x| x.head)
+        .unwrap_or(if arrow { Head::Arrow } else { Head::None });
+    let tail = x.and_then(|x| x.tail).unwrap_or(Head::None);
+    let dash = x
+        .and_then(|x| x.dash)
+        .unwrap_or(if e.style == EdgeStyle::Link {
+            Dash::Dashed
+        } else {
+            Dash::Solid
+        });
+    if flip {
+        (head, tail, dash)
+    } else {
+        (tail, head, dash)
+    }
+}
+
+/// SVG path in a 10x10 box pointing at +x, its tip x, and how it is painted.
+fn head_path(h: Head) -> (&'static str, f64, Ink) {
+    match h {
+        Head::Arrow => ("M0,0 L10,5 L0,10 z", 9.0, Ink::Fill),
+        Head::Triangle => ("M1,1 L9,5 L1,9 z", 9.0, Ink::Open),
+        Head::Diamond => ("M0,5 L5,2 L10,5 L5,8 z", 10.0, Ink::Fill),
+        Head::ODiamond => ("M1,5 L5.5,2.5 L10,5 L5.5,7.5 z", 10.0, Ink::Open),
+        Head::Crow => ("M0,5 L10,0 M0,5 L10,5 M0,5 L10,10", 10.0, Ink::Stroke),
+        Head::None => ("", 0.0, Ink::Stroke),
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Ink {
+    Fill,
+    Open,
+    Stroke,
+}
+
+fn head_svg(h: Head, c: &str, bg: &str) -> String {
+    let (d, _, paint) = head_path(h);
+    match paint {
+        Ink::Fill => format!(r#"<path d="{d}" fill="{c}"/>"#),
+        Ink::Open => format!(
+            r#"<path d="{d}" fill="{bg}" stroke="{c}" stroke-width="1.5" stroke-linejoin="round"/>"#
+        ),
+        Ink::Stroke => format!(r#"<path d="{d}" fill="none" stroke="{c}" stroke-width="1.5"/>"#),
+    }
+}
+
+fn marker_id(h: Head, c: &str) -> String {
+    let k = ["a", "t", "d", "o", "c", "n"][h as usize];
+    format!("m{k}{}", theme::rgb(c))
+}
+
+fn svg_dash(d: Dash, sw: f64, b: f64) -> String {
+    match d {
+        Dash::Solid => String::new(),
+        Dash::Dashed => format!(r#" stroke-dasharray="{:.1} {:.1}""#, 0.5 * b, 0.3 * b),
+        Dash::Dotted => format!(
+            r#" stroke-dasharray="0 {:.2}" stroke-linecap="round""#,
+            (2.5 * sw).max(0.25 * b)
+        ),
+    }
+}
+
+fn tikz_tip(h: Head) -> &'static str {
+    match h {
+        Head::Arrow => "{Stealth}",
+        Head::Triangle => "{Triangle[open]}",
+        Head::Diamond => "{Diamond}",
+        Head::ODiamond => "{Diamond[open]}",
+        Head::Crow => "{Straight Barb[reversed]}",
+        Head::None => "",
+    }
+}
+
+fn tikz_decor(start: Head, end: Head, dash: Dash) -> String {
+    let mut s = String::new();
+    if start != Head::None || end != Head::None {
+        s += &format!(", {}-{}", tikz_tip(start), tikz_tip(end));
+    }
+    s += match dash {
+        Dash::Solid => "",
+        Dash::Dashed => ", dashed",
+        Dash::Dotted => ", dotted",
+    };
+    s
 }
 
 struct Group<'a> {
@@ -253,17 +342,32 @@ pub fn png_view(g: &Graph, lay: &Layout, key: Option<&KeyPlan>, margin: f64) -> 
 
 fn key_swatch(e: &KeyEntry, th: &Theme, x: f64, y: f64, s: f64) -> String {
     let c = e.color.as_deref().unwrap_or(&th.edge);
-    if let Some(dashed) = e.line {
-        let dash = if dashed {
-            format!(r#" stroke-dasharray="{:.2} {:.2}""#, s * 0.3, s * 0.2)
-        } else {
-            String::new()
+    if let Some(d) = e.line {
+        let dash = match d {
+            Dash::Solid => String::new(),
+            Dash::Dashed => format!(r#" stroke-dasharray="{:.2} {:.2}""#, s * 0.3, s * 0.2),
+            Dash::Dotted => format!(
+                r#" stroke-dasharray="0 {:.2}" stroke-linecap="round""#,
+                s * 0.4
+            ),
         };
-        return format!(
+        let mut out = format!(
             r#"<line x1="{x:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{c}" stroke-width="{:.2}"{dash}/>"#,
             x + s,
             s / 5.0
         );
+        if let Some(h) = e.head.filter(|&h| h != Head::None) {
+            let k = s * 0.09;
+            let _ = write!(
+                out,
+                r#"<g transform="translate({:.2},{:.2}) scale({k:.3}) translate({:.1},-5)">{}</g>"#,
+                x + s,
+                y,
+                -head_path(h).1,
+                head_svg(h, c, &th.background)
+            );
+        }
+        return out;
     }
     if e.frame {
         return format!(
@@ -356,24 +460,32 @@ pub fn svg(
         fonts.fingerprint().replace("--", "- -")
     );
     o.push_str("<defs>");
-    let mut markers = vec![
-        ("arr".to_string(), th.edge.as_str()),
-        ("lnk".to_string(), th.link.as_str()),
-    ];
-    for e in lay
-        .edges
-        .iter()
-        .filter(|e| e.style != EdgeStyle::Line && headed(g, e))
-    {
-        if let Some(c) = stroke(g, e).filter(|c| !markers.iter().any(|m| m.1 == *c)) {
-            markers.push((format!("m{}", theme::rgb(c)), c));
+    let edge_color = |e: &Drawn| {
+        stroke(g, e).unwrap_or(match e.style {
+            EdgeStyle::Link => &th.link,
+            EdgeStyle::Arrow => &th.edge,
+            EdgeStyle::Line => &paint[e.b].accent,
+        })
+    };
+    let mut markers: Vec<String> = vec![];
+    for e in &lay.edges {
+        let (s, t, _) = decor(g, e);
+        let c = edge_color(e);
+        for h in [s, t] {
+            let id = marker_id(h, c);
+            if h == Head::None || markers.contains(&id) {
+                continue;
+            }
+            // UML and ER marks carry meaning in their outline, so they draw larger than arrows.
+            let m = if h == Head::Arrow { 6 } else { 9 };
+            let _ = write!(
+                o,
+                r#"<marker id="{id}" viewBox="0 0 10 10" refX="{}" refY="5" markerWidth="{m}" markerHeight="{m}" orient="auto-start-reverse">{}</marker>"#,
+                head_path(h).1,
+                head_svg(h, c, &th.background)
+            );
+            markers.push(id);
         }
-    }
-    for (id, c) in &markers {
-        let _ = write!(
-            o,
-            r#"<marker id="{id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="{c}"/></marker>"#
-        );
     }
     o.push_str("</defs>\n");
     if let Some(end) = &th.gradient {
@@ -427,46 +539,25 @@ pub fn svg(
             .map(|(x, y)| format!("{x:.1},{y:.1}"))
             .collect();
         let sw = e.width * b;
-        let marker = |c: &str| match headed(g, e) {
-            true => format!(
-                r#" marker-end="url(#{})""#,
-                markers
-                    .iter()
-                    .find(|m| m.1 == c)
-                    .map_or("arr", |m| m.0.as_str())
-            ),
-            false => String::new(),
-        };
-        match e.style {
-            EdgeStyle::Line => {
-                let _ = writeln!(
-                    o,
-                    r#"<polyline points="{}" fill="none" stroke="{}" stroke-opacity="0.7" stroke-width="{sw:.2}"/>"#,
-                    d.join(" "),
-                    stroke(g, e).unwrap_or(&paint[e.b].accent)
-                );
-            }
-            EdgeStyle::Arrow => {
-                let c = stroke(g, e).unwrap_or(&th.edge);
-                let _ = writeln!(
-                    o,
-                    r#"<polyline points="{}" fill="none" stroke="{c}" stroke-width="{sw:.2}"{}/>"#,
-                    d.join(" "),
-                    marker(c)
-                );
-            }
-            EdgeStyle::Link => {
-                let c = stroke(g, e).unwrap_or(&th.link);
-                let _ = writeln!(
-                    o,
-                    r#"<polyline points="{}" fill="none" stroke="{c}" stroke-width="{sw:.2}" stroke-dasharray="{:.1} {:.1}"{}/>"#,
-                    d.join(" "),
-                    0.5 * b,
-                    0.3 * b,
-                    marker(c)
-                );
+        let (start, end, dash) = decor(g, e);
+        let c = edge_color(e);
+        let mut marks = String::new();
+        for (h, at) in [(start, "start"), (end, "end")] {
+            if h != Head::None {
+                let _ = write!(marks, r#" marker-{at}="url(#{})""#, marker_id(h, c));
             }
         }
+        let opacity = if e.style == EdgeStyle::Line {
+            r#" stroke-opacity="0.7""#
+        } else {
+            ""
+        };
+        let _ = writeln!(
+            o,
+            r#"<polyline points="{}" fill="none" stroke="{c}"{opacity} stroke-width="{sw:.2}"{}{marks}/>"#,
+            d.join(" "),
+            svg_dash(dash, sw, b)
+        );
     }
     for (v, p) in paint.iter().enumerate() {
         let bx = &lay.boxes[v];
@@ -893,11 +984,12 @@ pub fn tikz(
             .collect();
         let lw = e.width * b;
         let col = |default: &str| cname(stroke(g, e).unwrap_or(default));
-        let head = if headed(g, e) { ", -{Stealth}" } else { "" };
+        let (start, end, dash) = decor(g, e);
+        let decor = tikz_decor(start, end, dash);
         let style = match e.style {
-            EdgeStyle::Line => format!("{}, opacity=0.7", col(&paint[e.b].accent)),
-            EdgeStyle::Arrow => format!("{}{head}", col(&th.edge)),
-            EdgeStyle::Link => format!("{}, dashed{head}", col(&th.link)),
+            EdgeStyle::Line => format!("{}, opacity=0.7{decor}", col(&paint[e.b].accent)),
+            EdgeStyle::Arrow => format!("{}{decor}", col(&th.edge)),
+            EdgeStyle::Link => format!("{}{decor}", col(&th.link)),
         };
         let _ = writeln!(
             o,
@@ -1070,8 +1162,8 @@ pub fn tikz(
                     (None, _) => (c.clone(), th.tint),
                 };
                 let s = k.size;
-                if let Some(dashed) = e.line {
-                    let dash = if dashed { ", dashed" } else { "" };
+                if let Some(d) = e.line {
+                    let dash = tikz_decor(Head::None, e.head.unwrap_or(Head::None), d);
                     let _ = writeln!(
                         o,
                         "\\draw[{c}{dash}, line width={:.2}bp] ({x:.2},{cy:.2}) -- ({:.2},{cy:.2});",

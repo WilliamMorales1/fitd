@@ -3,13 +3,13 @@ fitd: .fitd text -> SVG/PNG/PDF/TikZ at the largest font that fits.
 Build:  fitd FILE.fitd -o out.svg|.png|.pdf [--tikz out.tex] [--short]
 Book:   fitd A.fitd B.fitd -o out.pdf  (a page each)
 Stdin:  fitd - -o out.svg <<'EOF' ... EOF
-Exit 0 = written. Diagnostics on stderr; --short: 1 line.
+Exit 0 = written. Diagnostics on stderr.
 
-Syntax: one statement per line, # comment. Only `node` lines and edges are needed.
+Syntax: one statement per line, # comment. Only nodes and edges are needed.
   node ID "Title" .style        # ID: letters digits _ inner -; title defaults to ID
   | body line                   # detail text under the node above, any number
   ~ # %60 . _ LBL "two words"   # figure row: # solid %NN shade . outline _ gap, else label
-                                #   LBL*3 spans 3 columns; rows grid up: strips, masks, heatmaps, bars
+                                #   LBL*3 spans 3 columns; rows grid up: strips, heatmaps
   a -> b, c "label" -> d        # flow edge (-- undirected); hops chain
   a ..> b "label"               # cross link, dashed (.. undirected)
   title "Text"
@@ -32,7 +32,8 @@ REL:
   a near b within=4em
   a at top-left|top|top-right|left|center|right|bottom-left|bottom|bottom-right
   align row(a, b) | column(a, b) | top(..) | bottom(..) | left(..) | right(..)
-Lengths need units: pt mm cm in em. Edge color: a -> b color=#hex or .style.
+Units: pt mm cm in em. Edge: color=#hex line=solid|dashed|dotted
+  head=|tail=arrow|triangle|diamond|odiamond|crow|none, or .style
 
 Concept map:
   title "Photosynthesis"
@@ -56,6 +57,6 @@ Flowchart:
   check -> err "no"
   require out above err
 
-Fix loop: read the first error, edit that line, rebuild. `fitd explain CODE` details a code.
+Fix loop: fix the first error, rebuild. `fitd explain CODE` details a code.
 Unsat (E0110): drop or `prefer` one listed constraint, or use a larger page.
 No fit: lower the font floor, use a larger page, or follow the printed help.

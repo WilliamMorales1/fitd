@@ -177,6 +177,14 @@ Each target in a hop becomes a source for next hop. Thus `a -> b, c -> d` create
 a -> b, c "produces" -- d .important color=#1565C0
 ```
 
+Edges and edge styles take `color`, `head`, `tail`, and `line`. `head` marks the target end and `tail` the source end, each one of `arrow`, `triangle` (hollow), `diamond`, `odiamond` (hollow diamond), `crow` (crow's foot), or `none`. A directed edge defaults to `head=arrow`, an undirected one to none; `tail` defaults to none. `line=solid|dashed|dotted` sets the dash pattern; `..>` and `..` default to dashed. Marks sit inside the arrow clearance, so they never change the layout.
+
+```fitd
+style is head=triangle
+circle -> shape .is
+canvas -- shape tail=diamond line=dotted
+```
+
 ### Groups
 
 `group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010. A `.class` after the members sets the frame color from that style, so a group, its nodes, and its `key` entry can share one style.
@@ -189,7 +197,7 @@ group "Layers" attn, ff times=2 color=#3949AB
 
 ### Keys
 
-`key "LABEL" [.class] [attributes]` adds one legend entry. Entries are drawn in centered rows along the bottom of the page, wrapping when a row is full; the solver lays out the diagram in the space above. Swatches take `color`, `fill`, and `shape` from classes and attributes, as nodes do. `line=solid` or `line=dashed` draws a line swatch for edge colors instead of a node swatch. A key whose classes are used only by groups draws an open frame swatch. `page ... keysize=20pt` sets the swatch and text size (default 0.85 of the chosen body font); line thickness scales with it. In split output, keys repeat on every page.
+`key "LABEL" [.class] [attributes]` adds one legend entry. Entries are drawn in centered rows along the bottom of the page, wrapping when a row is full; the solver lays out the diagram in the space above. Swatches take `color`, `fill`, and `shape` from classes and attributes, as nodes do. `line=solid|dashed|dotted` draws a line swatch for edges instead of a node swatch, and `head=` adds a mark at its right end. A key whose classes are used only by groups draws an open frame swatch. `page ... keysize=20pt` sets the swatch and text size (default 0.85 of the chosen body font); line thickness scales with it. In split output, keys repeat on every page.
 
 ```fitd
 key "Investment" line=solid color=#4FC3E0
@@ -259,8 +267,8 @@ A path beginning with `std/` names a module of the bundled library instead of a 
 | `std/palette.fitd` | Okabe-Ito color-blind-safe classes `c1`..`c8` |
 | `std/grid.fitd` | Figure-row grids: `grid_head`, `grid_row`, `grid_title_row` (tables), `grid_heat`, `grid_shade` (heat maps, confusion matrices), `grid_bar` (unit bar charts), `grid_task`, `grid_scale` (Gantt), `grid_layers` (layer stacks), `grid_quad` (2x2 matrices) |
 | `std/arch.fitd` | Architecture and data flow: `arch_client`, `arch_service`, `arch_store`, `arch_queue`, `arch_ext`, `arch_layers`, the `arch_zone` group style, `arch_key()` |
-| `std/uml.fitd` | UML class and state diagrams: `uml_class`, `uml_iface`, `uml_state`, `uml_start`, `uml_final`, relations `uml_is`, `uml_has`, `uml_uses`, `uml_key()` |
-| `std/er.fitd` | Entity-relationship diagrams: `er_entity`, `er_weak`, `er_rel` with cardinality labels, `er_relation` diamonds |
+| `std/uml.fitd` | UML class and state diagrams: `uml_class`, `uml_iface`, `uml_state`, `uml_start`, `uml_final`, relations `uml_is` (hollow triangle), `uml_has` (diamond), `uml_uses` (dashed), `uml_key()` |
+| `std/er.fitd` | Entity-relationship diagrams: `er_entity`, `er_weak`, `er_rel` with cardinality labels and crow's feet, `er_relation` diamonds |
 | `std/tree.fitd` | Syntax trees, decision trees, org charts: `tree_cat`, `tree_word`, `tree_q`, `tree_leaf`, `tree_unit`, `tree_kids` |
 | `std/time.fitd` | Timelines: `time_event`, `time_mile`, `time_chain` |
 | `std/model.fitd` | Research models: `model_iv`, `model_dv`, `model_med`, `model_mod`, `model_ctl`, `model_hyp`, `model_key()` |

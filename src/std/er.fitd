@@ -1,4 +1,4 @@
-# Entity-relationship diagrams: entities list attributes, links carry cardinality.
+# Entity-relationship diagrams: entities list attributes, links carry cardinality and crow's feet.
 # Relationships are either a plain link (er_rel) or a named diamond (er_relation).
 # Attribute lists split on `;`: "PK id; name; FK dept".
 style er_entity color=#0072B2 shape=box
@@ -20,14 +20,31 @@ end
 
 # er_rel(a, b, card): a relationship such as "1:N" or "M:N".
 def er_rel(a, b, card)
-${a} -- ${b} "${card}" .er_link
+use er_edge(a, b, card, part(card, ":", 1), part(card, ":", 2))
 end
 
 # er_relation(id, name, a, b, card): a named diamond joining a and b, card such as "1:N".
 def er_relation(id, name, a, b, card)
 node ${id} "${name}" .er_relation
-${a} -- ${id} "${part(card, ":", 1)}" .er_link
-${id} -- ${b} "${part(card, ":", 2)}" .er_link
+use er_edge(a, id, part(card, ":", 1), part(card, ":", 1), "1")
+use er_edge(id, b, part(card, ":", 2), "1", part(card, ":", 2))
+end
+
+# A crow's foot marks each end whose cardinality is not 1.
+def er_edge(a, b, label, ta, hb)
+if ta == "1"
+if hb == "1"
+${a} -- ${b} "${label}" .er_link
+else
+${a} -- ${b} "${label}" .er_link head=crow
+end
+else
+if hb == "1"
+${a} -- ${b} "${label}" .er_link tail=crow
+else
+${a} -- ${b} "${label}" .er_link head=crow tail=crow
+end
+end
 end
 
 def er_lines(items)
