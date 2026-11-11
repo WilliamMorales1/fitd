@@ -13,6 +13,4 @@ node t1 "flaky CI" .cause
 p1 -> people
 p2 -> process
 t1 -> tools
-people -> effect
-process -> effect
-tools -> effect
+people, process, tools -> effect

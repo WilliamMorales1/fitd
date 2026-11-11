@@ -128,6 +128,10 @@ impl Parser<'_> {
 
     fn edge(&mut self) -> PResult<Vec<StmtKind>> {
         let mut froms = vec![self.name("a node name")?];
+        while *self.peek() == Tok::Comma {
+            self.bump();
+            froms.push(self.name("a node name")?);
+        }
         let mut hops = Vec::new();
         while self.arrow().is_some() {
             let (link, directed) = self.arrow().unwrap();
@@ -213,9 +217,13 @@ impl Parser<'_> {
     }
 
     fn stmt(&mut self) -> PResult<Vec<StmtKind>> {
-        if *self.peek() == Tok::Ident
+        let mut i = 0;
+        while *self.peek_at(i) == Tok::Ident && *self.peek_at(i + 1) == Tok::Comma {
+            i += 2;
+        }
+        if *self.peek_at(i) == Tok::Ident
             && matches!(
-                self.peek_at(1),
+                self.peek_at(i + 1),
                 Tok::Arrow | Tok::DashDash | Tok::DotArrow | Tok::DotDot
             )
         {
@@ -397,6 +405,20 @@ mod tests {
             if nodes.len() == 3 && ops.len() == 2 && attrs.len() == 1)
         );
         assert_eq!(parse("require a left-of b left-of\n").1.len(), 1);
+    }
+
+    #[test]
+    fn edge_sources_fan_out() {
+        let (stmts, errs) = parse("a, b -> c, d \"l\"\n");
+        assert!(errs.is_empty());
+        let froms: Vec<_> = stmts
+            .iter()
+            .map(|s| match &s.kind {
+                StmtKind::Edge { from, to, label: Some(_), .. } => (from.text.clone(), to.len()),
+                _ => panic!("not an edge"),
+            })
+            .collect();
+        assert_eq!(froms, [("a".into(), 2), ("b".into(), 2)]);
     }
 
     #[test]

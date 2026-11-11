@@ -10,7 +10,7 @@ Syntax: one statement per line, # comment. Only nodes and edges are needed.
   | body line                   # under node; lead spaces indent; **bold**
   ~ # %60 . _ LBL "two words"   # figure row: # solid %NN shade . outline _ gap, else label
                                 #   LBL*3 spans 3 columns; rows grid up: strips, heatmaps
-  a -> b, c "label" -> d        # flow edge (-- undirected); hops chain
+  a, b -> c, d "label" -> e     # flow edge (-- undirected); hops chain
   a ..> b "label"               # cross link, dashed (.. undirected)
   title "Text"
   layout radial root=ID         # default: mind map

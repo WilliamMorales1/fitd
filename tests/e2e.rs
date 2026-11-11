@@ -19,6 +19,15 @@ fn fitd(args: &[&str]) -> (bool, String) {
 }
 
 #[test]
+fn edge_source_lists_fan_in() {
+    let src = tmp("fan.fitd");
+    std::fs::write(&src, "layout layered\nnode a\nnode b\nnode c\nnode d\na, b -> c, d \"x\"\n").unwrap();
+    let out = tmp("fan.svg");
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", out.to_str().unwrap()]);
+    assert!(ok && log.contains("4 nodes, 4 edges"), "{log}");
+}
+
+#[test]
 fn builds_example_with_zero_errors() {
     let svg = tmp("group_theory.svg");
     let tex = tmp("group_theory.tex");

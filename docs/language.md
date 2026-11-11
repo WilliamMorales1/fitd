@@ -164,7 +164,7 @@ pre ..> enc "init"
 
 ### Edges
 
-An edge statement begins with source node identifier and contains one or more hops. Each hop contains operator, target list, and optional quoted label. All hops in one statement may be followed by shared classes and attributes.
+An edge statement begins with one or more source node identifiers, separated by commas, and contains one or more hops. Each hop contains operator, target list, and optional quoted label. All hops in one statement may be followed by shared classes and attributes.
 
 | Operator | Direction | Link type |
 | --- | --- | --- |
@@ -173,7 +173,7 @@ An edge statement begins with source node identifier and contains one or more ho
 | `..>` | Directed | Cross-link |
 | `..` | Undirected | Cross-link |
 
-Each target in a hop becomes a source for next hop. Thus `a -> b, c -> d` creates edges from `a` to `b` and `c`, then from both `b` and `c` to `d`.
+Each target in a hop becomes a source for next hop. Thus `a -> b, c -> d` creates edges from `a` to `b` and `c`, then from both `b` and `c` to `d`. A source list fans in: `a, b -> c` creates `a -> c` and `b -> c`, each with the hop's label.
 
 ```fitd
 a -> b, c "produces" -- d .important color=#1565C0

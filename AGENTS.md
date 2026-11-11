@@ -135,7 +135,7 @@ Surveys 1, 3, 4, and 6 above classify figure types only. Survey 2 (Viziometrics)
 
 Only open work belongs here: planned changes, known problems, and caveats. Delete a plan once it is done, and move anything it left out into Known gaps. The plans are ordered to avoid redoing work. Each plan gives the change, where it goes, and when it is done.
 
-- The layout and feature plans (4 to 7) come first, smallest first. Each only re-checks its own renders.
+- The layout and feature plans (5 to 7) come first, smallest first. Each only re-checks its own renders.
 - Dependency arcs and Sankey (8) are low priority and stay last.
 
 ### Known gaps in finished work
@@ -149,13 +149,6 @@ Finished plans are removed from this file; git history has them. These parts wer
 - User libraries: `include "user/LIB"` only looks beside the including file. There is no library search path or `FITD_PATH`; add one if libraries get shared across projects.
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
-
-### 4. Multi-source edges
-
-`a, b, c -> d` gives E0002. Fishbones and fan-in flows need it.
-
-- Change: in src/parse.rs, accept a comma list before the operator and expand it to one edge per source, keeping the label on each.
-- Done when `23-fishbone` uses one line and an e2e test parses `a, b -> c, d` into 4 edges.
 
 ### 5. Grid placement
 

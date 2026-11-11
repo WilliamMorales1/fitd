@@ -32,7 +32,7 @@ If the user wants the source kept, write it to `NAME.fitd` and build with `fitd 
 
 - Concept map or mind map (one topic branching out): the default, `layout radial`. Pick the center with `root=ID`; otherwise fitd picks it.
 - Process, pipeline, timeline, decision flow: `layout layered dir=down` or `dir=right`. Long flows wrap into bands; `bands=1` forbids wrapping. Trees (org chart, syntax tree): add `order=source` to keep children in edge order.
-- `->` edges build the hierarchy or flow. `..>` draws a dashed cross link that does not change the structure. Use cross links for "relates to" connections. Hops chain on one line: `a -> b -> c, d` is `a -> b`, `b -> c`, `b -> d`; a trailing `.style` or `color=` applies to every edge in it. `--` and `..` are the same without an arrowhead, for relations with no direction.
+- `->` edges build the hierarchy or flow. `..>` draws a dashed cross link that does not change the structure. Use cross links for "relates to" connections. Hops chain on one line: `a -> b -> c, d` is `a -> b`, `b -> c`, `b -> d`, and `a, b -> c` fans in; a trailing `.style` or `color=` applies to every edge in it. `--` and `..` are the same without an arrowhead, for relations with no direction.
 
 ## Repetition
 
@@ -40,7 +40,7 @@ When many nodes share one shape (numbered steps, one box per service, layers, re
 
 ## Start minimal
 
-Only `node` lines and edges are required. Leave out `page`, `font`, `theme`, and constraints at first: the defaults (A1 page, light theme, font searched) usually work. Add a `require` only when the user asks for a specific placement, because each one can make the layout unsatisfiable. Prefer `prefer` over `require` when the placement is a wish, not a rule.
+Only `node` lines and edges are required. Leave out `page`, `font`, `theme`, and constraints at first: the defaults (A1 page, paper theme, font searched) usually work. Add a `require` only when the user asks for a specific placement, because each one can make the layout unsatisfiable. Prefer `prefer` over `require` when the placement is a wish, not a rule.
 
 ## Fix loop
 
