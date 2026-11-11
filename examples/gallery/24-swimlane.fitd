@@ -1,5 +1,5 @@
 # Swimlane activity diagram (Reggio et al.). Each group is a lane, in declaration order.
-include "std/flow.fitd"
+include "flow"
 layout lanes
 page 4:3
 node order "Place order" .io

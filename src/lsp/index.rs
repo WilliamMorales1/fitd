@@ -139,7 +139,7 @@ impl<'a> Files<'a> {
             .entry(path.to_string())
             .or_insert_with(|| {
                 open(path)
-                    .or_else(|| crate::stdlib::get(path).map(str::to_string))
+                    .or_else(|| crate::stdlib::at_path(path).map(str::to_string))
                     .or_else(|| std::fs::read_to_string(path).ok())
             })
             .as_deref()
@@ -184,6 +184,20 @@ fn utf16(s: &str) -> usize {
 
 fn is_ident(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
+}
+
+/// template_name reads `name` or `MOD.name` from the start of `s`.
+pub fn template_name(s: &str) -> String {
+    let head: String = s.chars().take_while(|&c| is_ident(c)).collect();
+    let tail: String = s[head.len()..]
+        .strip_prefix('.')
+        .map(|r| r.chars().take_while(|&c| is_ident(c)).collect())
+        .unwrap_or_default();
+    if head.is_empty() || tail.is_empty() {
+        head
+    } else {
+        format!("{head}.{tail}")
+    }
 }
 
 struct Builder<'s, 'f, 'o> {
@@ -480,34 +494,41 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
         let file = file.to_string();
         let lead = line.len() - line.trim_start().len();
         let t = &line[lead..];
-        let w: String = t.chars().take_while(|&c| is_ident(c)).collect();
-        if !super::docs::MACRO_WORDS.contains(&w.as_str()) || t[w.len()..].starts_with('-') {
-            continue;
-        }
+        let module = src.module(i + 1);
         let at = |lo: usize, hi: usize| Loc {
             path: file.clone(),
             start: (n - 1, utf16(&line[..lo])),
             end: (n - 1, utf16(&line[..hi])),
         };
-        b.out.spots.push(Spot {
-            word: Word::Keyword(w.clone()),
-            loc: at(lead, lead + w.len()),
-        });
-        if w != "def" && w != "use" {
+        let call = template_name(t);
+        let (w, name_lo) = if call.contains('.') && t[call.len()..].trim_start().starts_with('(') {
+            ("use".to_string(), lead)
+        } else {
+            let w: String = t.chars().take_while(|&c| is_ident(c)).collect();
+            if !super::docs::MACRO_WORDS.contains(&w.as_str()) || t[w.len()..].starts_with('-') {
+                continue;
+            }
+            b.out.spots.push(Spot {
+                word: Word::Keyword(w.clone()),
+                loc: at(lead, lead + w.len()),
+            });
+            if w != "def" && w != "use" {
+                continue;
+            }
+            let rest = &t[w.len()..];
+            (w, lead + (t.len() - rest.trim_start().len()))
+        };
+        let written = template_name(&line[name_lo..]);
+        if written.is_empty() {
             continue;
         }
-        let rest = &t[w.len()..];
-        let name_lo = lead + w.len() + (rest.len() - rest.trim_start().len());
-        let name: String = line[name_lo..]
-            .chars()
-            .take_while(|&c| is_ident(c))
-            .collect();
-        if name.is_empty() {
-            continue;
-        }
-        let loc = at(name_lo, name_lo + name.len());
+        let loc = at(name_lo, name_lo + written.len());
+        let name = match module {
+            Some(m) if !written.contains('.') => format!("{m}.{written}"),
+            _ => written.clone(),
+        };
         if w == "def" {
-            let after = &line[name_lo + name.len()..];
+            let after = &line[name_lo + written.len()..];
             let params = after
                 .trim_start()
                 .strip_prefix('(')
@@ -536,7 +557,7 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
                 let whole = at(lead, line.len());
                 b.out.symbols.push(Symbol {
                     name: name.clone(),
-                    detail: line[name_lo + name.len()..].trim().to_string(),
+                    detail: line[name_lo + written.len()..].trim().to_string(),
                     kind: 12,
                     whole,
                     pick: loc.clone(),

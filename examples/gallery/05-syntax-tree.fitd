@@ -1,16 +1,16 @@
 # Syntax tree (ACL-Fig: NLP grammar examples, trees).
-include "std/tree.fitd"
+include "tree"
 layout layered order=source
 page 4:3
 font 9pt..28pt
-use tree_cat("s", "S")
-use tree_cat("np", "NP")
-use tree_cat("vp", "VP")
-use tree_cat("np2", "NP")
-use tree_word("she", "she")
-use tree_word("saw", "saw")
-use tree_word("it", "it")
-use tree_kids("s", "np; vp")
-use tree_kids("np", "she")
-use tree_kids("vp", "saw; np2")
-use tree_kids("np2", "it")
+tree.cat("s", "S")
+tree.cat("np", "NP")
+tree.cat("vp", "VP")
+tree.cat("np2", "NP")
+tree.word("she", "she")
+tree.word("saw", "saw")
+tree.word("it", "it")
+tree.kids("s", "np; vp")
+tree.kids("np", "she")
+tree.kids("vp", "saw; np2")
+tree.kids("np2", "it")

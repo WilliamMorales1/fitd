@@ -59,8 +59,8 @@ enum T {
     Op(&'static str),
 }
 
-const OPS: [&str; 16] = [
-    "..", "==", "!=", "<=", ">=", "+", "-", "*", "/", "%", "<", ">", "(", ")", ",", "=",
+const OPS: [&str; 17] = [
+    "..", "==", "!=", "<=", ">=", "+", "-", "*", "/", "%", "<", ">", "(", ")", ",", "=", ".",
 ];
 
 fn tokens(s: &str) -> Result<Vec<T>, String> {
@@ -173,6 +173,15 @@ impl P {
             }
             _ => Err(format!("expected {what}")),
         }
+    }
+
+    /// template reads a template name, either `name` or `MOD.name`.
+    fn template(&mut self, what: &str) -> Result<String, String> {
+        let mut n = self.name(what)?;
+        if self.op(".") {
+            n = format!("{n}.{}", self.name(what)?);
+        }
+        Ok(n)
     }
 
     fn expect(&mut self, o: &str) -> Result<(), String> {
@@ -432,13 +441,27 @@ fn is_kw_line(t: &str) -> Option<(&str, &str)> {
     Some((w, r))
 }
 
+/// is_call_line reports whether `t` starts with `MOD.name(`, a module template call.
+fn is_call_line(t: &str) -> bool {
+    let word = |s: &str| {
+        s.find(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .filter(|&k| k > 0 && !s.starts_with(|c: char| c.is_ascii_digit()))
+    };
+    let Some(k) = word(t) else { return false };
+    let Some(r) = t[k..].strip_prefix('.') else {
+        return false;
+    };
+    word(r).is_some_and(|j| r[j..].trim_start().starts_with('('))
+}
+
 fn classify(line: &str) -> Result<Line, String> {
     let t = line.trim();
     let verbatim = t.starts_with('|') || t.starts_with('~');
     if t.starts_with('#') || verbatim && !t.contains("${") {
         return Ok(Line::Item(Kind::Plain));
     }
-    let Some((w, rest)) = is_kw_line(t) else {
+    let call = is_call_line(t).then_some(("use", t));
+    let Some((w, rest)) = call.or_else(|| is_kw_line(t)) else {
         let cut = if verbatim {
             line.len()
         } else {
@@ -496,7 +519,7 @@ fn classify(line: &str) -> Result<Line, String> {
             Line::Def(name, params)
         }
         _ => {
-            let name = p.name("a template name: `use NAME(args)`")?;
+            let name = p.template("a template name: `MOD.name(args)` or `use NAME(args)`")?;
             p.expect("(")?;
             let args = p.args()?;
             p.done()?;
@@ -588,6 +611,7 @@ fn list(s: &str) -> Result<Vec<Val>, String> {
 
 struct Builder<'a> {
     lines: &'a [&'a str],
+    mods: &'a [Option<&'a str>],
     i: usize,
     defs: HashMap<String, Def>,
     errs: Vec<(usize, Diag)>,
@@ -659,22 +683,26 @@ impl Builder<'_> {
                     self.close(at, &stop, "def");
                     if !top {
                         self.err(at, "`def` is allowed only at the top level");
-                    } else if let Some(old) = self.defs.get(&name) {
-                        let line = old.line;
-                        self.errs.push((
-                            at,
-                            Diag::error("E0012", format!("template `{name}` is defined twice"))
-                                .note(format!("first defined at {}", at_marker(line))),
-                        ));
                     } else {
-                        self.defs.insert(
-                            name,
-                            Def {
+                        let key = match self.mods[at] {
+                            Some(m) => format!("{m}.{name}"),
+                            None => name,
+                        };
+                        if let Some(old) = self.defs.get(&key) {
+                            let line = old.line;
+                            self.errs.push((
+                                at,
+                                Diag::error("E0012", format!("template `{key}` is defined twice"))
+                                    .note(format!("first defined at {}", at_marker(line))),
+                            ));
+                        } else {
+                            let def = Def {
                                 params,
                                 body,
                                 line: at,
-                            },
-                        );
+                            };
+                            self.defs.insert(key, def);
+                        }
                     }
                     Kind::Skip
                 }
@@ -699,6 +727,7 @@ impl Builder<'_> {
 
 struct Expander<'a> {
     lines: &'a [&'a str],
+    mods: &'a [Option<&'a str>],
     defs: &'a HashMap<String, Def>,
     text: String,
     parse: String,
@@ -1035,7 +1064,10 @@ impl Expander<'_> {
             }
             Kind::Use(name, args) => {
                 let defs = self.defs;
-                let Some(def) = defs.get(name) else {
+                let local = self.mods[at]
+                    .filter(|_| !name.contains('.'))
+                    .and_then(|m| defs.get(&format!("{m}.{name}")));
+                let Some(def) = local.or_else(|| defs.get(name)) else {
                     let mut known: Vec<&String> = defs.keys().collect();
                     known.sort();
                     let hint = if known.is_empty() {
@@ -1111,7 +1143,7 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
     };
     if !lines
         .iter()
-        .any(|l| l.contains("${") || is_kw_line(l.trim()).is_some())
+        .any(|l| l.contains("${") || is_kw_line(l.trim()).is_some() || is_call_line(l.trim()))
     {
         let parse = a.text.clone();
         return Loaded {
@@ -1120,8 +1152,10 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
             diags: inc,
         };
     }
+    let mods: Vec<Option<&str>> = (0..lines.len()).map(|i| a.module(i + 1)).collect();
     let mut b = Builder {
         lines,
+        mods: &mods,
         i: 0,
         defs: HashMap::new(),
         errs: Vec::new(),
@@ -1129,6 +1163,7 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
     let (items, _, _) = b.block(true);
     let mut x = Expander {
         lines,
+        mods: &mods,
         defs: &b.defs,
         text: String::new(),
         parse: String::new(),
@@ -1156,6 +1191,7 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
             line,
             path: path.to_string(),
             file_line: fl,
+            module: None,
         });
     }
     if segs.is_empty() {
@@ -1163,6 +1199,7 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
             line: 1,
             path: a.path.clone(),
             file_line: 1,
+            module: None,
         });
     }
     let src = Source::spliced(&a.path, &x.text, segs);

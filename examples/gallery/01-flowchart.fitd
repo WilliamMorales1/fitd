@@ -1,5 +1,5 @@
 # Flowchart (DocFigure, Nickerson: tight genre). std/flow gives the role colours.
-include "std/flow.fitd"
+include "flow"
 layout layered
 page 3:4
 font 9pt..28pt
@@ -11,4 +11,4 @@ req -> auth
 auth -> serve "yes"
 auth -> login "no"
 login -> serve
-use flow_key()
+flow.key()

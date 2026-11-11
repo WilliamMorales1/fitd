@@ -1378,8 +1378,8 @@ fn gallery_and_every_std_module_compile_cleanly() {
         assert!(ok && !log.contains("warning["), "{src}\n{log}");
     }
     for path in glob("src/std/*.fitd") {
-        let module = path.trim_start_matches("src/");
-        let name = module.replace('/', "-");
+        let module = path.trim_start_matches("src/std/").trim_end_matches(".fitd");
+        let name = format!("std-{module}.fitd");
         let input = tmp(&name);
         std::fs::write(
             &input,
@@ -1616,7 +1616,7 @@ fn library_modules_are_included_by_name() {
     let f = tmp("usestd.fitd");
     std::fs::write(
         &f,
-        "include \"std/nn.fitd\"\nuse nn_input(\"x\", \"Tokens\", \"B x L\")\nuse nn_layer(\"e\", \"Encoder\", \"d 64\", 2)\nuse nn_mask(\"m\", \"Causal\", 4, 1)\nx -> e -> m\n",
+        "include \"nn\"\nnn.input(\"x\", \"Tokens\", \"B x L\")\nnn.layer(\"e\", \"Encoder\", \"d 64\", 2)\nnn.mask(\"m\", \"Causal\", 4, 1)\nx -> e -> m\n",
     )
     .unwrap();
     let o = tmp("usestd.svg");
@@ -1628,7 +1628,7 @@ fn library_modules_are_included_by_name() {
     assert_eq!(svg.matches("fill-opacity=\"1.00\"").count(), 12, "{svg}");
 
     let bad = tmp("badstd.fitd");
-    std::fs::write(&bad, "include \"std/nope.fitd\"\nnode a\nnode b\na -> b\n").unwrap();
+    std::fs::write(&bad, "include \"nope\"\nnode a\nnode b\na -> b\n").unwrap();
     let (ok, log) = fitd(&[
         bad.to_str().unwrap(),
         "-o",
@@ -1636,6 +1636,26 @@ fn library_modules_are_included_by_name() {
         "--short",
     ]);
     assert!(!ok && log.contains("no library module"), "{log}");
+
+    let build = |name: &str, src: &str| {
+        let f = tmp(&format!("{name}.fitd"));
+        std::fs::write(&f, src).unwrap();
+        let o = tmp(&format!("{name}.svg"));
+        fitd(&[f.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"])
+    };
+    // Module templates live under the module name, so a file's own `input` does not clash.
+    let (ok, log) = build(
+        "stdown",
+        "include \"nn\"\ndef input(id)\nnode ${id}\nend\nuse input(\"a\")\nnn.input(\"x\", \"X\", \"1\")\na -> x\n",
+    );
+    assert!(ok && log.contains("0 errors"), "{log}");
+    let (ok, log) = build("stdold", "include \"std/nn.fitd\"\nnode a\n");
+    assert!(!ok && log.contains("cannot read"), "{log}");
+    let (ok, log) = build(
+        "stdoldcall",
+        "include \"nn\"\nuse nn_input(\"x\", \"X\", \"1\")\nnode a\n",
+    );
+    assert!(!ok && log.contains("unknown template `nn_input`"), "{log}");
 }
 
 #[test]
@@ -1952,13 +1972,13 @@ fn build_svg(name: &str, src: &str) -> String {
 #[test]
 fn sequence_messages_keep_source_order() {
     // Steps zig-zag between lanes declared right to left, so only source order sorts them.
-    let mut src = String::from("include \"std/seq.fitd\"\nlayout lanes order=source\n");
+    let mut src = String::from("include \"seq\"\nlayout lanes order=source\n");
     for (id, name) in [("c", "Cc"), ("b", "Bb"), ("a", "Aa")] {
-        src += &format!("use seq_actor(\"{id}\", \"{name}\")\n");
+        src += &format!("seq.actor(\"{id}\", \"{name}\")\n");
     }
     let steps = [("a", "c"), ("b", "a"), ("c", "b"), ("a", "b"), ("c", "a")];
     for (i, (from, to)) in steps.iter().enumerate() {
-        src += &format!("use seq_msg(\"m{i}\", \"{from}\", \"{to}\", \"msg{i}\")\n");
+        src += &format!("seq.msg(\"m{i}\", \"{from}\", \"{to}\", \"msg{i}\")\n");
     }
     let svg = build_svg("seq-order", &src);
     let ys: Vec<f64> = (0..steps.len())
@@ -2100,8 +2120,8 @@ fn venn_rejects_a_fourth_set() {
 
 #[test]
 fn algorithm_lines_keep_indent_and_bold_keywords() {
-    let src = "layout layered\ninclude \"std/algo.fitd\"\n\
-               use algo_block(\"a\", \"Algo\", \"**Qkw** Qa;   Qb;     Qc; Qd\")\n";
+    let src = "layout layered\ninclude \"algo\"\n\
+               algo.block(\"a\", \"Algo\", \"**Qkw** Qa;   Qb;     Qc; Qd\")\n";
     let svg = build_svg("algo-indent", src);
     let x = |w: &str| text_at(&svg, w).0;
     let step = x("Qb") - x("Qkw");

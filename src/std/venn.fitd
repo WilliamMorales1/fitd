@@ -3,49 +3,49 @@ style venn_a color=#E69F00
 style venn_b color=#0072B2
 style venn_c color=#009E73
 
-# venn_items(id, items): one node per `;`-separated item, with ids id1, id2, ...
-def venn_items(id, items)
+# venn.items(id, items): one node per `;`-separated item, with ids id1, id2, ...
+def items(id, items)
 for i in 1..count(items, ";")
 node ${id}${i} "${part(items, ";", i)}"
 end
 end
 
-# venn_set(title, style, ids): a set holding the `,`-separated ids, blanks skipped.
-def venn_set(title, style, ids)
-use venn_set_acc(title, style, "", ids, 1)
+# venn.set(title, style, ids): a set holding the `,`-separated ids, blanks skipped.
+def set(title, style, ids)
+use set_acc(title, style, "", ids, 1)
 end
 
-def venn_set_acc(title, style, acc, ids, i)
+def set_acc(title, style, acc, ids, i)
 if i > count(ids, ",")
 group "${title}" ${acc} .${style}
 else if part(ids, ",", i) == ""
-use venn_set_acc(title, style, acc, ids, i + 1)
+use set_acc(title, style, acc, ids, i + 1)
 else if acc == ""
-use venn_set_acc(title, style, part(ids, ",", i), ids, i + 1)
+use set_acc(title, style, part(ids, ",", i), ids, i + 1)
 else
-use venn_set_acc(title, style, acc + ", " + part(ids, ",", i), ids, i + 1)
+use set_acc(title, style, acc + ", " + part(ids, ",", i), ids, i + 1)
 end
 end
 
-# venn_two(a, b, only_a, both, only_b): two sets with `;`-separated items per region.
-def venn_two(a, b, xa, xab, xb)
-use venn_items("venn_a", xa)
-use venn_items("venn_b", xb)
-use venn_items("venn_ab", xab)
-use venn_set(a, "venn_a", names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";")))
-use venn_set(b, "venn_b", names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";")))
+# venn.two(a, b, only_a, both, only_b): two sets with `;`-separated items per region.
+def two(a, b, xa, xab, xb)
+use items("venn_a", xa)
+use items("venn_b", xb)
+use items("venn_ab", xab)
+use set(a, "venn_a", names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";")))
+use set(b, "venn_b", names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";")))
 end
 
-# venn_three(a, b, c, only_a, only_b, only_c, ab, ac, bc, abc): three sets with `;`-separated items per region.
-def venn_three(a, b, c, xa, xb, xc, xab, xac, xbc, xabc)
-use venn_items("venn_a", xa)
-use venn_items("venn_b", xb)
-use venn_items("venn_c", xc)
-use venn_items("venn_ab", xab)
-use venn_items("venn_ac", xac)
-use venn_items("venn_bc", xbc)
-use venn_items("venn_abc", xabc)
-use venn_set(a, "venn_a", names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_abc", 1, count(xabc, ";")))
-use venn_set(b, "venn_b", names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";")))
-use venn_set(c, "venn_c", names("venn_c", 1, count(xc, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";")))
+# venn.three(a, b, c, only_a, only_b, only_c, ab, ac, bc, abc): three sets with `;`-separated items per region.
+def three(a, b, c, xa, xb, xc, xab, xac, xbc, xabc)
+use items("venn_a", xa)
+use items("venn_b", xb)
+use items("venn_c", xc)
+use items("venn_ab", xab)
+use items("venn_ac", xac)
+use items("venn_bc", xbc)
+use items("venn_abc", xabc)
+use set(a, "venn_a", names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_abc", 1, count(xabc, ";")))
+use set(b, "venn_b", names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";")))
+use set(c, "venn_c", names("venn_c", 1, count(xc, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";")))
 end

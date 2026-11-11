@@ -1,8 +1,8 @@
 # Unit bar chart (DocFigure: bar plot). Only small counts; real plots belong to a plotting tool.
-include "std/grid.fitd"
+include "grid"
 page 4:3
 font 9pt..28pt
 node votes "Votes per option" .grid
-use grid_bar("A", 7)
-use grid_bar("B", 4)
-use grid_bar("C", 9)
+grid.bar("A", 7)
+grid.bar("B", 4)
+grid.bar("C", 9)

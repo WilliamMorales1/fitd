@@ -129,7 +129,7 @@ fn front_end(path: &str, text: &str) -> Diags {
         let file_text = if file == path {
             Some(text.to_string())
         } else {
-            crate::stdlib::get(&file)
+            crate::stdlib::at_path(&file)
                 .map(str::to_string)
                 .or_else(|| std::fs::read_to_string(&file).ok())
         };
@@ -786,5 +786,25 @@ mod tests {
             names.contains(&"pair") && names.contains(&"a") && names.contains(&"hot"),
             "{names:?}"
         );
+    }
+
+    #[test]
+    fn module_templates_answer_by_qualified_name() {
+        let text = "include \"nn\"\nnn.layer(\"e\", \"Enc\", \"d\", 2)\nnn.\n";
+        let none = |_: &str| None;
+        let d = doc("file:///m.fitd", "/m.fitd", text, &none);
+        let h = features::hover(&d, &json!({ "line": 1, "character": 4 }), &[]);
+        assert!(h["contents"]["value"].as_str().unwrap().contains("nn.layer("), "{h}");
+        let sig = features::signature_help(&d, &json!({ "line": 1, "character": 15 }));
+        assert_eq!(sig["signatures"][0]["label"], "nn.layer(id, name, dims, times)");
+        assert_eq!(sig["activeParameter"], 1);
+        let items = features::completion(&d, &json!({ "line": 2, "character": 3 }), false);
+        let labels: Vec<&str> = items
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v["label"].as_str().unwrap())
+            .collect();
+        assert!(labels.contains(&"input") && labels.contains(&"layer"), "{labels:?}");
     }
 }

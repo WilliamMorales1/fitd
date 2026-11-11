@@ -9,7 +9,7 @@ struct Splice {
 }
 
 impl Splice {
-    fn seg(&mut self, path: &str, file_line: usize) {
+    fn seg(&mut self, path: &str, file_line: usize, module: Option<&str>) {
         let line = self.text.matches('\n').count() + 1;
         if self.segs.last().is_some_and(|s| s.line == line) {
             self.segs.pop();
@@ -18,6 +18,7 @@ impl Splice {
             line,
             path: path.to_string(),
             file_line,
+            module: module.map(String::from),
         });
     }
 }
@@ -29,7 +30,7 @@ pub fn expand(path: &str, text: &str) -> (Source, Vec<Diag>) {
         diags: Vec::new(),
     };
     let mut stack = vec![canonical(Path::new(path))];
-    splice(&mut out, path, text, &mut stack);
+    splice(&mut out, path, text, &mut stack, None);
     (Source::spliced(path, &out.text, out.segs), out.diags)
 }
 
@@ -37,13 +38,28 @@ pub fn unused_shared_style(src: &Source, d: &Diag) -> bool {
     d.code == "W0203" && src.file_line(src.line_col(d.pos()).0).0 != src.path
 }
 
+/// resolve maps an include target to the file it names and the module whose templates it defines.
+///
+/// A bare name like `nn` names a bundled module; anything else is a path relative to `dir`.
+fn resolve<'t>(target: &'t str, dir: &Path) -> Result<(PathBuf, Option<&'t str>), Diag> {
+    if !target.contains(['/', '.']) {
+        if crate::stdlib::get(target).is_none() {
+            return Err(Diag::error("E0011", format!("no library module `{target}`")).note(
+                format!("the library has: {}", crate::stdlib::names().join(", ")),
+            ));
+        }
+        return Ok((PathBuf::from(format!("std/{target}.fitd")), Some(target)));
+    }
+    Ok((dir.join(target), None))
+}
+
 fn canonical(p: &Path) -> PathBuf {
     p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
 }
 
-fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
+fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>, module: Option<&str>) {
     let (stmts, _) = crate::parse::parse(text);
-    out.seg(path, 1);
+    out.seg(path, 1, module);
     let mut cursor = 0;
     for st in stmts {
         let StmtKind::Include(target) = &st.kind else {
@@ -58,18 +74,23 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
             out.text.push('\n');
         }
         let span = Span::new(base + st.span.lo, base + st.span.hi);
-        let lib = crate::stdlib::get(target);
         let dir = Path::new(path).parent().unwrap_or(Path::new(""));
-        let file = if lib.is_some() {
-            PathBuf::from(target)
-        } else {
-            dir.join(target)
+        let (file, lib_mod) = match resolve(target, dir) {
+            Ok(r) => r,
+            Err(d) => {
+                out.diags.push(d.primary(span, "included here"));
+                cursor = end;
+                out.seg(path, text[..end].matches('\n').count() + 1, module);
+                continue;
+            }
         };
+        let lib = lib_mod.and_then(crate::stdlib::get);
         let key = if lib.is_some() {
             file.clone()
         } else {
             canonical(&file)
         };
+        let name = file.to_string_lossy().into_owned();
         if let Some(k) = stack.iter().position(|p| *p == key) {
             let chain: Vec<String> = stack[k..]
                 .iter()
@@ -80,31 +101,15 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
                 .primary(span, "this include closes a cycle");
             out.diags
                 .push(d.note(format!("cycle: {}", chain.join(" -> "))));
-        } else if target.starts_with("std/") {
-            match lib {
-                Some(child) => {
-                    stack.push(key);
-                    splice(out, target, child, stack);
-                    stack.pop();
-                    if !out.text.ends_with('\n') {
-                        out.text.push('\n');
-                    }
-                }
-                None => out.diags.push(
-                    Diag::error("E0011", format!("no library module `{target}`"))
-                        .primary(span, "included here")
-                        .note(format!(
-                            "the library has: {}",
-                            crate::stdlib::names().join(", ")
-                        )),
-                ),
-            }
         } else {
-            match std::fs::read_to_string(&file) {
+            let child = match lib {
+                Some(t) => Ok(t.to_string()),
+                None => std::fs::read_to_string(&file),
+            };
+            match child {
                 Ok(child) => {
-                    let name = file.to_string_lossy().into_owned();
                     stack.push(key);
-                    splice(out, &name, &child, stack);
+                    splice(out, &name, &child, stack, lib_mod);
                     stack.pop();
                     if !out.text.ends_with('\n') {
                         out.text.push('\n');
@@ -117,7 +122,7 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
             }
         }
         cursor = end;
-        out.seg(path, text[..end].matches('\n').count() + 1);
+        out.seg(path, text[..end].matches('\n').count() + 1, module);
     }
     out.text += &text[cursor..];
 }

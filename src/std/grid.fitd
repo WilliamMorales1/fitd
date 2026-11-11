@@ -3,72 +3,72 @@
 # Text lists split on `;`, number lists on spaces: "name; type; size", "90 5 5".
 style grid color=#0072B2 shape=box
 
-# grid_head(labels): a header row of outlined labels over the value columns, leaving the row-label column blank.
-def grid_head(labels)
-use grid_cells("_", labels, ";", "", 1)
+# grid.head(labels): a header row of outlined labels over the value columns, leaving the row-label column blank.
+def head(labels)
+use cells("_", labels, ";", "", 1)
 end
 
-# grid_row(cells): one table row of outlined labelled cells.
-def grid_row(cells)
-use grid_cells("", cells, ";", "", 1)
+# grid.row(cells): one table row of outlined labelled cells.
+def row(cells)
+use cells("", cells, ";", "", 1)
 end
 
-# grid_title_row(cells): a table row of solid cells, for a header without a row-label column.
-def grid_title_row(cells)
-use grid_cells("", cells, ";", "#", 1)
+# grid.title_row(cells): a table row of solid cells, for a header without a row-label column.
+def title_row(cells)
+use cells("", cells, ";", "#", 1)
 end
 
-# grid_heat(label, values): a heat-map row; values are percents 0..100 and each cell prints its value.
-def grid_heat(label, values)
-use grid_heat_acc("\"" + label + "\"", values, 1)
+# grid.heat(label, values): a heat-map row; values are percents 0..100 and each cell prints its value.
+def heat(label, values)
+use heat_acc("\"" + label + "\"", values, 1)
 end
 
-def grid_heat_acc(acc, values, i)
+def heat_acc(acc, values, i)
 if i > count(values, " ")
 ~ ${acc}
 else
-use grid_heat_acc(acc + " %" + part(values, " ", i) + "\"" + part(values, " ", i) + "\"", values, i + 1)
+use heat_acc(acc + " %" + part(values, " ", i) + "\"" + part(values, " ", i) + "\"", values, i + 1)
 end
 end
 
-# grid_shade(label, values): a heat-map row without numbers, for dense maps.
-def grid_shade(label, values)
-use grid_shade_acc("\"" + label + "\"", values, 1)
+# grid.shade(label, values): a heat-map row without numbers, for dense maps.
+def shade(label, values)
+use shade_acc("\"" + label + "\"", values, 1)
 end
 
-def grid_shade_acc(acc, values, i)
+def shade_acc(acc, values, i)
 if i > count(values, " ")
 ~ ${acc}
 else
-use grid_shade_acc(acc + " %" + part(values, " ", i), values, i + 1)
+use shade_acc(acc + " %" + part(values, " ", i), values, i + 1)
 end
 end
 
-# grid_bar(label, n): a unit bar chart row of n solid cells after its label.
-def grid_bar(label, n)
-use grid_span("\"" + label + "\"", 0, n)
+# grid.bar(label, n): a unit bar chart row of n solid cells after its label.
+def bar(label, n)
+use span("\"" + label + "\"", 0, n)
 end
 
-# grid_task(label, start, len): a Gantt row; the bar covers columns start..start+len-1, counted from 1.
-def grid_task(label, start, len)
-use grid_span("\"" + label + "\"", start - 1, len)
+# grid.task(label, start, len): a Gantt row; the bar covers columns start..start+len-1, counted from 1.
+def task(label, start, len)
+use span("\"" + label + "\"", start - 1, len)
 end
 
-# grid_scale(first, last): a Gantt header numbering the time columns first..last.
-def grid_scale(first, last)
-use grid_cells("_", names("", first, last), ",", "", 1)
+# grid.scale(first, last): a Gantt header numbering the time columns first..last.
+def scale(first, last)
+use cells("_", names("", first, last), ",", "", 1)
 end
 
-# grid_layers(names): a layer stack, one full-width solid row per name, top layer first.
-def grid_layers(names)
+# grid.layers(names): a layer stack, one full-width solid row per name, top layer first.
+def layers(names)
 for i in 1..count(names, ";")
 ~ #"${part(names, ";", i)}"*4
 end
 end
 
-def grid_span(acc, gaps, n)
+def span(acc, gaps, n)
 if gaps > 0
-use grid_span(acc + " _", gaps - 1, n)
+use span(acc + " _", gaps - 1, n)
 else if n > 1
 ~ ${acc} #*${n}
 else if n == 1
@@ -78,16 +78,16 @@ else
 end
 end
 
-def grid_cells(acc, items, sep, shade, i)
+def cells(acc, items, sep, shade, i)
 if i > count(items, sep)
 ~ ${acc}
 else
-use grid_cells(acc + " " + shade + "\"" + part(items, sep, i) + "\"", items, sep, shade, i + 1)
+use cells(acc + " " + shade + "\"" + part(items, sep, i) + "\"", items, sep, shade, i + 1)
 end
 end
 
-# grid_quad(tl, tr, bl, br): a 2x2 matrix (SWOT, effort/impact) with the diagonal shaded darker.
-def grid_quad(tl, tr, bl, br)
+# grid.quad(tl, tr, bl, br): a 2x2 matrix (SWOT, effort/impact) with the diagonal shaded darker.
+def quad(tl, tr, bl, br)
 ~ %80"${tl}" %25"${tr}"
 ~ %25"${bl}" %80"${br}"
 end

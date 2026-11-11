@@ -131,7 +131,7 @@ fn run(args: &[String]) -> FitdResult<ExitCode> {
             match args.get(1) {
                 Some(name) => print!(
                     "{}",
-                    stdlib::get(&format!("std/{name}")).ok_or(format!(
+                    stdlib::get(name).ok_or(format!(
                         "no library module {name}; the library has: {}",
                         stdlib::names().join(", ")
                     ))?
@@ -139,7 +139,7 @@ fn run(args: &[String]) -> FitdResult<ExitCode> {
                 None => {
                     for (name, text) in stdlib::MODULES {
                         let what = text.lines().next().unwrap_or("").trim_start_matches("# ");
-                        println!("std/{name}.fitd  {what}");
+                        println!("{name:8} {what}");
                     }
                 }
             }

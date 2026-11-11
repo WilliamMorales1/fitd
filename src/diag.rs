@@ -106,6 +106,8 @@ pub struct Seg {
     pub line: usize,
     pub path: String,
     pub file_line: usize,
+    /// module names the library whose templates these lines define, for `MOD.name(...)` calls.
+    pub module: Option<String>,
 }
 
 impl Source {
@@ -117,6 +119,7 @@ impl Source {
                 line: 1,
                 path: path.to_string(),
                 file_line: 1,
+                module: None,
             }],
         )
     }
@@ -139,6 +142,11 @@ impl Source {
     pub fn file_line(&self, line: usize) -> (&str, usize) {
         let s = self.seg(line);
         (&s.path, s.file_line + line - s.line)
+    }
+
+    /// module returns the library module that supplied `line`, if any.
+    pub fn module(&self, line: usize) -> Option<&str> {
+        self.seg(line).module.as_deref()
     }
 
     pub fn line_col(&self, off: usize) -> (usize, usize) {

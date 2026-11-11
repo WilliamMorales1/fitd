@@ -22,7 +22,7 @@ impl Doc<'_> {
     fn uri(&self, path: &str) -> Value {
         if path == self.path {
             json!(self.uri)
-        } else if crate::stdlib::get(path).is_some() {
+        } else if crate::stdlib::at_path(path).is_some() {
             std_uri(path).map_or(Value::Null, Value::from)
         } else {
             json!(uri_of(path))
@@ -37,7 +37,7 @@ impl Doc<'_> {
 
 /// std_uri writes a library module to a cache file, so editors can open it.
 fn std_uri(target: &str) -> Option<String> {
-    let text = crate::stdlib::get(target)?;
+    let text = crate::stdlib::at_path(target)?;
     let dir = std::env::temp_dir().join(format!("fitd-std-{}", env!("CARGO_PKG_VERSION")));
     let file = dir.join(target.strip_prefix("std/")?);
     if std::fs::read_to_string(&file).ok().as_deref() != Some(text) {
@@ -284,7 +284,7 @@ pub fn definition(doc: &Doc, p: &Value) -> Value {
         && let Word::Include(t) = &s.word
     {
         let path = if crate::stdlib::get(t).is_some() {
-            t.clone()
+            format!("std/{t}.fitd")
         } else {
             std::path::Path::new(doc.path)
                 .parent()
@@ -344,7 +344,7 @@ pub fn highlights(doc: &Doc, p: &Value) -> Value {
 
 fn in_std(idx: &Index, kind: Kind, name: &str) -> bool {
     idx.all(kind, name)
-        .any(|o| crate::stdlib::get(&o.loc.path).is_some())
+        .any(|o| crate::stdlib::at_path(&o.loc.path).is_some())
 }
 
 pub fn prepare_rename(doc: &Doc, p: &Value) -> Value {
@@ -543,20 +543,19 @@ pub fn color_presentation(params: &Value) -> Value {
     json!([{ "label": label, "textEdit": { "range": params["range"], "newText": label } }])
 }
 
-/// Call is a `use NAME(args)` line: name, each argument's UTF-16 start and text, and whether `)` closed it.
+/// Call is a `MOD.name(args)` or `use NAME(args)` line: name, each argument's UTF-16 start and text, and whether `)` closed it.
 type Call = (String, Vec<(usize, String)>, bool);
 
 fn call(line: &str) -> Option<Call> {
     let lead = line.len() - line.trim_start().len();
-    let rest = line[lead..].strip_prefix("use")?;
-    if !rest.starts_with([' ', '\t']) {
+    let name_lo = match line[lead..].strip_prefix("use") {
+        Some(rest) if rest.starts_with([' ', '\t']) => line.len() - rest.trim_start().len(),
+        _ => lead,
+    };
+    let name = index::template_name(&line[name_lo..]);
+    if name.is_empty() || name_lo == lead && !name.contains('.') {
         return None;
     }
-    let name_lo = line.len() - rest.trim_start().len();
-    let name: String = line[name_lo..]
-        .chars()
-        .take_while(|&c| c.is_alphanumeric() || c == '_')
-        .collect();
     let after = name_lo + name.len();
     let open = after + line[after..].find('(')?;
     let (mut args, mut depth, mut quoted, mut start) = (Vec::new(), 0, false, open + 1);
@@ -852,10 +851,7 @@ fn statement(first: &str) -> &'static str {
 fn include_items(path: &str, typed: &str) -> Vec<Value> {
     let mut out: Vec<Value> = crate::stdlib::MODULES
         .iter()
-        .map(|(n, _)| {
-            let t = format!("std/{n}.fitd");
-            item(&t, 9, "bundled module", &module_doc(&t).unwrap_or_default())
-        })
+        .map(|(n, _)| item(n, 9, "bundled module", &module_doc(n).unwrap_or_default()))
         .collect();
     let base = std::path::Path::new(path)
         .parent()
@@ -933,6 +929,31 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                             .map(|(i, p)| format!("${{{}:{p}}}", i + 1))
                             .collect();
                         v["insertText"] = json!(format!("{}({})", d.name, ps.join(", ")));
+                        v["insertTextFormat"] = json!(2);
+                    }
+                    v
+                })
+                .collect(),
+        );
+    }
+    if words.len() == 1
+        && let Some(m) = first.strip_suffix('.')
+        && idx.defs.iter().any(|d| d.name.starts_with(&format!("{m}.")))
+    {
+        return Value::Array(
+            idx.defs
+                .iter()
+                .filter_map(|d| Some((d, d.name.strip_prefix(m)?.strip_prefix('.')?)))
+                .map(|(d, short)| {
+                    let mut v = item(short, 3, &signature(d), &d.doc);
+                    if snippets {
+                        let ps: Vec<String> = d
+                            .params
+                            .iter()
+                            .enumerate()
+                            .map(|(i, p)| format!("${{{}:{p}}}", i + 1))
+                            .collect();
+                        v["insertText"] = json!(format!("{short}({})", ps.join(", ")));
                         v["insertTextFormat"] = json!(2);
                     }
                     v

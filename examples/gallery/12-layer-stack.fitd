@@ -1,5 +1,5 @@
 # Layer / stack diagram (Nickerson: layers).
-include "std/arch.fitd"
+include "arch"
 page 3:4
 font 9pt..28pt
-use arch_layers("osi", "Internet stack", "Application; Transport; Network; Link")
+arch.layers("osi", "Internet stack", "Application; Transport; Network; Link")

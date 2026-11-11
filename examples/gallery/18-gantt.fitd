@@ -1,10 +1,10 @@
 # Gantt chart (project plans, grant proposals).
-include "std/grid.fitd"
+include "grid"
 page 16:9
 font 9pt..28pt
 node plan "Thesis plan (months)" .grid
-use grid_scale(1, 8)
-use grid_task("Survey", 1, 2)
-use grid_task("Build", 2, 4)
-use grid_task("Study", 5, 2)
-use grid_task("Write", 6, 3)
+grid.scale(1, 8)
+grid.task("Survey", 1, 2)
+grid.task("Build", 2, 4)
+grid.task("Study", 5, 2)
+grid.task("Write", 6, 3)

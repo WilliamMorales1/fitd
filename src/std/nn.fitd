@@ -8,63 +8,63 @@ style nn_loss color=#D55E00
 style nn_note shape=none
 style nn_op color=#3949AB shape=circle
 
-# nn_input(id, name, dims): a data block labelled with its shape.
-def nn_input(id, name, dims)
+# nn.input(id, name, dims): a data block labelled with its shape.
+def input(id, name, dims)
 node ${id} "${name}" .nn_data
 ~ #"${dims}"*4
 end
 
-# nn_layer(id, name, dims, times): one block drawn as `times` stacked copies.
-def nn_layer(id, name, dims, times)
+# nn.layer(id, name, dims, times): one block drawn as `times` stacked copies.
+def layer(id, name, dims, times)
 node ${id} "${name}" .nn_block stack=${times}
 ~ #"${dims}"*4
 end
 
-# nn_step(id, name): an operator with no parameters (pool, concat, softmax).
-def nn_step(id, name)
+# nn.step(id, name): an operator with no parameters (pool, concat, softmax).
+def step(id, name)
 node ${id} "${name}" .nn_step
 end
 
-# nn_out(id, name, dims): the model output.
-def nn_out(id, name, dims)
+# nn.out(id, name, dims): the model output.
+def out(id, name, dims)
 node ${id} "${name}" .nn_result
 ~ #"${dims}"*4
 end
 
-# nn_mask(id, name, n, causal): an n x n attention mask; causal=1 hides the future.
-def nn_mask(id, name, n, causal)
+# nn.mask(id, name, n, causal): an n x n attention mask; causal=1 hides the future.
+def mask(id, name, n, causal)
 node ${id} "${name}" .nn_block
-use nn_mask_rows(n, causal)
+use mask_rows(n, causal)
 end
 
-# nn_mask_rows(n, causal): the mask figure alone, drawn inside the node above.
-def nn_mask_rows(n, causal)
-use nn_mask_pad_rows(n, 0, causal)
+# nn.mask_rows(n, causal): the mask figure alone, drawn inside the node above.
+def mask_rows(n, causal)
+use mask_pad_rows(n, 0, causal)
 end
 
-# nn_mask_pad_rows(n, pad, causal): the same mask with `pad` hidden key columns after the n real tokens.
-def nn_mask_pad_rows(n, pad, causal)
+# nn.mask_pad_rows(n, pad, causal): the same mask with `pad` hidden key columns after the n real tokens.
+def mask_pad_rows(n, pad, causal)
 for i in 1..n
-use nn_mask_row("", 1, n, pad, i, causal)
+use mask_row("", 1, n, pad, i, causal)
 end
 end
 
-def nn_mask_row(acc, j, n, pad, i, causal)
+def mask_row(acc, j, n, pad, i, causal)
 if j > n + pad
 ~ ${acc}
 else if j > n or (causal and j > i)
-use nn_mask_row(acc + ". ", j + 1, n, pad, i, causal)
+use mask_row(acc + ". ", j + 1, n, pad, i, causal)
 else
-use nn_mask_row(acc + "# ", j + 1, n, pad, i, causal)
+use mask_row(acc + "# ", j + 1, n, pad, i, causal)
 end
 end
 
-# nn_note(id, text): a frameless margin annotation, as used for axis and lane labels.
-def nn_note(id, text)
+# nn.note(id, text): a frameless margin annotation, as used for axis and lane labels.
+def note(id, text)
 node ${id} "${text}" .nn_note
 end
 
-# nn_add(id): the small circled `+` that marks a residual or merge point.
-def nn_add(id)
+# nn.add(id): the small circled `+` that marks a residual or merge point.
+def add(id)
 node ${id} "+" .nn_op shape=circle
 end

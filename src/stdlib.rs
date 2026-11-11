@@ -1,4 +1,4 @@
-//! The bundled library: `include "std/NAME.fitd"` splices one of these files.
+//! The bundled library: `include "NAME"` splices one of these files.
 
 /// MODULES holds every library module, as (name, source).
 pub const MODULES: &[(&str, &str)] = &[
@@ -17,11 +17,14 @@ pub const MODULES: &[(&str, &str)] = &[
     ("algo", include_str!("std/algo.fitd")),
 ];
 
-/// get returns the source of a `std/...` include target.
-pub fn get(target: &str) -> Option<&'static str> {
-    let name = target.strip_prefix("std/")?;
-    let name = name.strip_suffix(".fitd").unwrap_or(name);
+/// get returns the source of the module `name`.
+pub fn get(name: &str) -> Option<&'static str> {
     MODULES.iter().find(|(n, _)| *n == name).map(|&(_, t)| t)
+}
+
+/// at_path returns the source behind `std/NAME.fitd`, the path spliced lines from a module carry.
+pub fn at_path(path: &str) -> Option<&'static str> {
+    get(path.strip_prefix("std/")?.strip_suffix(".fitd")?)
 }
 
 /// names lists the module names, for help text and diagnostics.

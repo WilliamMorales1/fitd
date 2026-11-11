@@ -29,10 +29,10 @@ These are the design goals from the [README](README.md#design-goals). Each one h
 - Stdlib modules:
   - A module lives at `src/std/NAME.fitd` and is registered in `MODULES` in `src/stdlib.rs`.
   - The first comment line is the summary printed by `fitd std`.
-  - Style names are global, so prefix every style and template with the module name (`uml_class`, `er_rel`).
-  - Every exported `def` gets a one-line comment above it in the form `# name(args): what it draws`.
+  - Templates are called as `MOD.name(...)`, so `def` names carry no prefix. Style names are global, so prefix every style with the module name (`uml_class`, `er_rel`).
+  - Every exported `def` gets a one-line comment above it in the form `# MOD.name(args): what it draws`.
   - Each module needs a gallery file and a row in the `docs/language.md` Includes table.
-- Macro helpers that recurse should accumulate a string and emit once, as `grid_cells` does. Partial lines cannot be emitted.
+- Macro helpers that recurse should accumulate a string and emit once, as `grid.heat` does with `heat_acc`. Partial lines cannot be emitted.
 
 ## What diagrams people use
 
@@ -75,7 +75,7 @@ Each row lists the figure type, the surveys (by number above) that name it, and 
 | Gantt chart | 1 | yes | `std/grid` | `18-gantt` |
 | Mind / concept map | 1 | yes | core (radial) | `19-mind-map` |
 | 2x2 matrix (SWOT) | 1 | yes, as a figure grid | `std/grid` | `20-swot` |
-| Heat map | 3 | yes | `std/grid` | `08`, `grid_shade` |
+| Heat map | 3 | yes | `std/grid` | `08`, `grid.shade` |
 | Unit bar chart | 3, 4 | yes, small counts only | `std/grid` | `21-bar-chart` |
 | Commutative diagram | (math typology) | partial: square drawn as diamond | core | `22-commutative` |
 | Fishbone / Ishikawa | 1 | yes, as a tree into the effect | core | `23-fishbone` |
@@ -104,7 +104,7 @@ These cover a large share of the figures in surveys 2 to 4. fitd should not grow
 
 Only open work belongs here: planned changes, known problems, and caveats. Delete a plan once it is done, and move anything it left out into Known gaps. The plans are ordered to avoid redoing work. Each plan gives the change, where it goes, and when it is done.
 
-- Module syntax (1) and user libraries (2) come first. They rewrite every gallery file and doc once, so later plans write new gallery files in the final syntax. Neither changes renders, so `committed_docs_match_a_fresh_build` checks them without looking at images.
+- User libraries (2) come first. They reuse the module syntax (`include "nn"`, `nn.input(...)`) and change no renders, so `committed_docs_match_a_fresh_build` checks them without looking at images.
 - Default styling (3) comes next. It changes every render and may change the fonts and metrics, so it goes before the layout plans. Layout tuning and done checks (larger font in 6, the square in 5) then run against the final metrics, and the full image review happens once.
 - The layout and feature plans (4 to 7) follow, smallest first. Each only re-checks its own renders.
 - Dependency arcs and Sankey (8) are low priority and stay last.
@@ -119,21 +119,11 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Venn: no Euler diagrams (disjoint or nested sets drawn apart or inside) and no area-proportional circles.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
 
-### 1. Module syntax for the standard library
-
-Stdlib includes and calls read as paths and prefixed names today: `include "std/nn.fitd"` and `use nn_input(...)`.
-
-- Change: accept `include "nn"` for a stdlib module, and call its templates as `nn.input(...)` on their own line instead of `use nn_input(...)`.
-  - The include resolver (src/include.rs) maps a bare module name to `MODULES` in src/stdlib.rs.
-  - The macro expander (src/macros.rs) resolves `MOD.name(...)` to the module's `def`, so templates no longer need the module prefix in their names. Styles stay global, so style names keep the prefix.
-  - Keep the old forms working until the gallery, docs, guide, and LSP completions move to the new ones.
-- Done when every gallery file and `docs/language.md` use `include "MOD"` and `MOD.func(...)`, and the old forms still compile.
-
 ### 2. User libraries
 
 Nothing shows that a non-stdlib file can serve as a library.
 
-- Change: accept `include "user/LIB"` for a user library, with calls written `LIB.func(...)` as in plan 1. Decide where `user/` resolves (beside the including file, or a configured library directory) and document it.
+- Change: accept `include "user/LIB"` for a user library, with calls written `LIB.func(...)` as for stdlib modules. Decide where `user/` resolves (beside the including file, or a configured library directory) and document it.
 - Add e2e tests that write a small library file, include it, and call its templates, plus an example under `examples/` that does the same.
 - Done when the tests pass and the example builds with no errors.
 

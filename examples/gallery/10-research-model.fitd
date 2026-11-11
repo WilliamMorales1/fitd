@@ -1,14 +1,14 @@
 # Research model with hypotheses (Nickerson: models, 101 of 983).
-include "std/model.fitd"
+include "model"
 layout layered dir=right
 page 16:9
 font 9pt..28pt
-use model_iv("ease", "Ease of use")
-use model_med("use", "Usefulness")
-use model_dv("adopt", "Adoption")
-use model_mod("exp", "Experience")
-use model_hyp("ease", "use", 1, "+")
-use model_hyp("use", "adopt", 2, "+")
-use model_hyp("ease", "adopt", 3, "+")
+model.iv("ease", "Ease of use")
+model.med("use", "Usefulness")
+model.dv("adopt", "Adoption")
+model.mod("exp", "Experience")
+model.hyp("ease", "use", 1, "+")
+model.hyp("use", "adopt", 2, "+")
+model.hyp("ease", "adopt", 3, "+")
 exp ..> adopt "H4"
-use model_key()
+model.key()

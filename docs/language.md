@@ -223,7 +223,7 @@ c1 -> s1 "GET /orders"
 require align row(c1, s1)
 ```
 
-`std/seq.fitd` wraps this as `seq_actor`, `seq_msg`, and `seq_reply`.
+The `seq` module wraps this as `seq.actor`, `seq.msg`, and `seq.reply`.
 
 `layout venn` draws a Venn diagram. It takes no attributes. Each group is a set circle, drawn in its `.class` color or the next palette color with its title outside the circle. Groups may share nodes in any way, and every node sits in the region of exactly the sets that list it; a node in no group sits outside all circles. Nodes default to `shape=none`. Two sets sit side by side and three sit in a triangle, with the overlap sized for the most crowded region. A fourth set gives E0010:
 
@@ -236,7 +236,7 @@ group "Scripting" py, both
 group "Compiled" go, both
 ```
 
-`std/venn.fitd` wraps this as `venn_two` and `venn_three`, which take each region's items as one `;`-separated string.
+The `venn` module wraps this as `venn.two` and `venn.three`, which take each region's items as one `;`-separated string.
 
 ### Page and font settings
 
@@ -288,31 +288,31 @@ prefer output at right weight=2
 
 `include "PATH"` inserts source file before macro expansion and parsing. Path is resolved relative to including file. Include cycles and missing files produce diagnostics.
 
-A path beginning with `std/` names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one.
+A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name(args)` on a line of its own; `use` is not needed. Styles are global and keep the module prefix (`.nn_layer`).
 
 | Module | Contents |
 | --- | --- |
-| `std/nn.fitd` | Neural-network blocks: `nn_input`, `nn_layer`, `nn_step`, `nn_out`, `nn_mask`, `nn_mask_rows`, `nn_mask_pad_rows`, `nn_note`, `nn_add`, plus the `nn_*` styles |
-| `std/flow.fitd` | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow_key()` |
-| `std/palette.fitd` | Okabe-Ito color-blind-safe classes `c1`..`c8` |
-| `std/grid.fitd` | Figure-row grids: `grid_head`, `grid_row`, `grid_title_row` (tables), `grid_heat`, `grid_shade` (heat maps, confusion matrices), `grid_bar` (unit bar charts), `grid_task`, `grid_scale` (Gantt), `grid_layers` (layer stacks), `grid_quad` (2x2 matrices) |
-| `std/arch.fitd` | Architecture and data flow: `arch_client`, `arch_service`, `arch_store`, `arch_queue`, `arch_ext`, `arch_layers`, the `arch_zone` group style, `arch_key()` |
-| `std/uml.fitd` | UML class and state diagrams: `uml_class`, `uml_iface`, `uml_state`, `uml_start`, `uml_final`, relations `uml_is` (hollow triangle), `uml_has` (diamond), `uml_uses` (dashed), `uml_key()` |
-| `std/er.fitd` | Entity-relationship diagrams: `er_entity`, `er_weak`, `er_rel` with cardinality labels and crow's feet, `er_relation` diamonds |
-| `std/tree.fitd` | Syntax trees, decision trees, org charts: `tree_cat`, `tree_word`, `tree_q`, `tree_leaf`, `tree_unit`, `tree_kids` |
-| `std/time.fitd` | Timelines: `time_event`, `time_mile`, `time_chain` |
-| `std/seq.fitd` | UML sequence diagrams for `layout lanes`: `seq_actor`, `seq_msg`, `seq_reply` (dashed) |
-| `std/venn.fitd` | Venn diagrams for `layout venn`: `venn_two`, `venn_three`, `venn_items`, `venn_set`, set styles `venn_a`..`venn_c` |
-| `std/algo.fitd` | Algorithm and pseudocode blocks: `algo_block` with `;`-separated, indentable lines and `**` keywords |
-| `std/model.fitd` | Research models: `model_iv`, `model_dv`, `model_med`, `model_mod`, `model_ctl`, `model_hyp`, `model_key()` |
+| `nn` | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus the `nn_*` styles |
+| `flow` | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow.key()` |
+| `palette` | Okabe-Ito color-blind-safe classes `c1`..`c8` |
+| `grid` | Figure-row grids: `grid.head`, `grid.row`, `grid.title_row` (tables), `grid.heat`, `grid.shade` (heat maps, confusion matrices), `grid.bar` (unit bar charts), `grid.task`, `grid.scale` (Gantt), `grid.layers` (layer stacks), `grid.quad` (2x2 matrices) |
+| `arch` | Architecture and data flow: `arch.client`, `arch.service`, `arch.store`, `arch.queue`, `arch.ext`, `arch.layers`, the `arch_zone` group style, `arch.key()` |
+| `uml` | UML class and state diagrams: `uml.class`, `uml.iface`, `uml.state`, `uml.start`, `uml.final`, relations `uml.is` (hollow triangle), `uml.has` (diamond), `uml.uses` (dashed), `uml.key()` |
+| `er` | Entity-relationship diagrams: `er.entity`, `er.weak`, `er.rel` with cardinality labels and crow's feet, `er.relation` diamonds |
+| `tree` | Syntax trees, decision trees, org charts: `tree.cat`, `tree.word`, `tree.q`, `tree.leaf`, `tree.unit`, `tree.kids` |
+| `time` | Timelines: `time.event`, `time.mile`, `time.chain` |
+| `seq` | UML sequence diagrams for `layout lanes`: `seq.actor`, `seq.msg`, `seq.reply` (dashed) |
+| `venn` | Venn diagrams for `layout venn`: `venn.two`, `venn.three`, `venn.items`, `venn.set`, set styles `venn_a`..`venn_c` |
+| `algo` | Algorithm and pseudocode blocks: `algo.block` with `;`-separated, indentable lines and `**` keywords |
+| `model` | Research models: `model.iv`, `model.dv`, `model.med`, `model.mod`, `model.ctl`, `model.hyp`, `model.key()` |
 
 [examples/gallery](../examples/gallery/) has one diagram per common academic figure type, each built on these modules.
 
 ```fitd
-include "std/nn.fitd"
-use nn_input("x", "Tokens", "B x L")
-use nn_layer("e", "Encoder", "d 64", 2)
-use nn_mask("m", "Causal mask", 4, 1)
+include "nn"
+nn.input("x", "Tokens", "B x L")
+nn.layer("e", "Encoder", "d 64", 2)
+nn.mask("m", "Causal mask", 4, 1)
 x -> e -> m
 ```
 
@@ -320,7 +320,7 @@ x -> e -> m
 
 ![Macro directives, expressions, scope, and expansion limits](language/05-macros.png)
 
-Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, and `${expression}` interpolation. Directives use indentation for readability; block boundaries are marked by `end`. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
+Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, module template calls `MOD.name(...)`, and `${expression}` interpolation. Directives use indentation for readability; block boundaries are marked by `end`. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
 
 Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for node lists. `count(s, sep)` gives the number of fields in `s`; `part(s, sep, i)` gives field `i`, counted from 1, without trailing spaces or the one space after the separator. Further leading spaces stay, so a `|` body line built from a field keeps its indent. A whitespace separator splits on runs of whitespace, and an empty string has no fields, so templates can take lists as one string:
 

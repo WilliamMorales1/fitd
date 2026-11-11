@@ -81,7 +81,7 @@ pub const KEYWORDS: &[Keyword] = &[
         "include",
         "include \"$1\"",
         "include \"PATH\"",
-        "Splices another file before macros run. Paths are relative to this file; `std/NAME.fitd` names a bundled module.",
+        "Splices another file before macros run. Paths are relative to this file; a bare name like `nn` names a bundled module, whose templates are called as `nn.input(...)`.",
     ),
     (
         "for",
