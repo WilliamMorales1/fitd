@@ -220,7 +220,7 @@ A ratio `W:H` such as `16:9`, `4:3`, or `1.414:1` fixes only the page shape. fit
 
 `theme [PRESET] [attributes]` selects theme and applies overrides. Presets are `dark`, `light`, and `mono`; default preset is `dark`. `style NAME attributes` declares reusable node or edge attributes. A declaration may use multiple classes; class attributes are applied in order.
 
-On nodes, edges, and groups, `color`, `fill`, and `text` specify border, fill, and text colors where supported. `shape` accepts `box`, `circle`, or `none` for nodes and styles, and `stack` accepts 1 to 8 copies for nodes and styles. `shape=none` draws the text and figure with no frame or fill, for margin annotations and lane labels; such a node still participates in layout, edges, and constraints. Attribute support depends on statement kind; unknown or ill-typed attributes produce diagnostics.
+On nodes, edges, and groups, `color`, `fill`, and `text` specify border, fill, and text colors where supported. `shape` accepts `box`, `circle`, `diamond`, or `none` for nodes and styles, and `stack` accepts 1 to 8 copies for nodes and styles. `shape=none` draws the text and figure with no frame or fill, for margin annotations and lane labels; such a node still participates in layout, edges, and constraints. Attribute support depends on statement kind; unknown or ill-typed attributes produce diagnostics.
 
 `gradient=COLOR` on `theme` paints the page with a diagonal gradient from `background` to `COLOR`. `background` remains the solid color used behind labels.
 
@@ -255,12 +255,12 @@ A path beginning with `std/` names a module of the bundled library instead of a 
 | Module | Contents |
 | --- | --- |
 | `std/nn.fitd` | Neural-network blocks: `nn_input`, `nn_layer`, `nn_step`, `nn_out`, `nn_mask`, `nn_mask_rows`, `nn_mask_pad_rows`, `nn_note`, `nn_add`, plus the `nn_*` styles |
-| `std/flow.fitd` | Flowchart role styles (`io`, `step`, `decide`, `done`, `drop`) and `flow_key()` |
+| `std/flow.fitd` | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow_key()` |
 | `std/palette.fitd` | Okabe-Ito color-blind-safe classes `c1`..`c8` |
 | `std/grid.fitd` | Figure-row grids: `grid_head`, `grid_row`, `grid_title_row` (tables), `grid_heat`, `grid_shade` (heat maps, confusion matrices), `grid_bar` (unit bar charts), `grid_task`, `grid_scale` (Gantt), `grid_layers` (layer stacks), `grid_quad` (2x2 matrices) |
 | `std/arch.fitd` | Architecture and data flow: `arch_client`, `arch_service`, `arch_store`, `arch_queue`, `arch_ext`, `arch_layers`, the `arch_zone` group style, `arch_key()` |
 | `std/uml.fitd` | UML class and state diagrams: `uml_class`, `uml_iface`, `uml_state`, `uml_start`, `uml_final`, relations `uml_is`, `uml_has`, `uml_uses`, `uml_key()` |
-| `std/er.fitd` | Entity-relationship diagrams: `er_entity`, `er_weak`, `er_rel` with cardinality labels |
+| `std/er.fitd` | Entity-relationship diagrams: `er_entity`, `er_weak`, `er_rel` with cardinality labels, `er_relation` diamonds |
 | `std/tree.fitd` | Syntax trees, decision trees, org charts: `tree_cat`, `tree_word`, `tree_q`, `tree_leaf`, `tree_unit`, `tree_kids` |
 | `std/time.fitd` | Timelines: `time_event`, `time_mile`, `time_chain` |
 | `std/model.fitd` | Research models: `model_iv`, `model_dv`, `model_med`, `model_mod`, `model_ctl`, `model_hyp`, `model_key()` |

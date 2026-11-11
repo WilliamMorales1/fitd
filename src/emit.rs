@@ -50,7 +50,9 @@ fn paints(g: &Graph, t: &Tree, lay: &Layout, th: &Theme) -> Vec<Paint> {
                     (th.root.clone(), 1.0, theme::on(&th.root).to_string())
                 }
                 (Shape::Circle, _, None) => (acc[v].clone(), 1.0, theme::on(&acc[v]).to_string()),
-                (Shape::Rect, _, None) => (acc[v].clone(), th.tint, th.text.clone()),
+                (Shape::Rect | Shape::Diamond, _, None) => {
+                    (acc[v].clone(), th.tint, th.text.clone())
+                }
                 (Shape::Plain, _, None) => (th.background.clone(), 0.0, th.text.clone()),
             };
             let accent = if lay.boxes[v].role == Role::Root && n.color.is_none() {
@@ -84,6 +86,32 @@ fn clipped(lay: &Layout, e: &Drawn) -> (P, P) {
         outside
     };
     (lerp(exit(a, 0.0, 1.0)), lerp(exit(b, 1.0, 0.0)))
+}
+
+/// rhombus gives the corners of a diamond centred on (cx, cy), top first in SVG order.
+fn rhombus(cx: f64, cy: f64, w: f64, h: f64) -> [P; 4] {
+    [
+        (cx, cy - h / 2.0),
+        (cx + w / 2.0, cy),
+        (cx, cy + h / 2.0),
+        (cx - w / 2.0, cy),
+    ]
+}
+
+fn svg_points(pts: &[P]) -> String {
+    let s: Vec<String> = pts
+        .iter()
+        .map(|p| format!("{:.1},{:.1}", p.0, p.1))
+        .collect();
+    s.join(" ")
+}
+
+fn tikz_points(pts: &[P]) -> String {
+    let s: Vec<String> = pts
+        .iter()
+        .map(|p| format!("({:.1},{:.1})", p.0, p.1))
+        .collect();
+    format!("{} -- cycle", s.join(" -- "))
 }
 
 fn edge_points(lay: &Layout, e: &Drawn) -> Vec<P> {
@@ -258,6 +286,13 @@ fn key_swatch(e: &KeyEntry, th: &Theme, x: f64, y: f64, s: f64) -> String {
             y,
             s / 2.0
         ),
+        (Some(Shape::Diamond), f) => {
+            let (fill, op) = f.as_deref().map_or((c, th.tint), |f| (f, 1.0));
+            format!(
+                r#"<polygon points="{}" fill="{fill}" fill-opacity="{op:.2}" stroke="{c}" stroke-width="1" stroke-linejoin="round"/>"#,
+                svg_points(&rhombus(x + s / 2.0, y, s, s))
+            )
+        }
         (_, f) => {
             let (fill, op) = f.as_deref().map_or((c, th.tint), |f| (f, 1.0));
             format!(
@@ -455,6 +490,14 @@ pub fn svg(
                     0.08 * b
                 ),
                 Shape::Plain => Ok(()),
+                Shape::Diamond => writeln!(
+                    o,
+                    r#"<polygon points="{}" fill="{}" stroke="{}" stroke-width="{:.2}" stroke-linejoin="round"/>"#,
+                    svg_points(&rhombus(fcx + d, fcy - d, bw, bh)),
+                    th.background,
+                    p.accent,
+                    0.08 * b
+                ),
                 Shape::Rect => writeln!(
                     o,
                     r#"<rect x="{:.1}" y="{:.1}" width="{bw:.1}" height="{bh:.1}" rx="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#,
@@ -485,6 +528,18 @@ pub fn svg(
                     r#"<circle cx="{fcx:.1}" cy="{fcy:.1}" r="{:.1}" fill="{}"/>"#,
                     bw / 2.0,
                     p.fill
+                );
+            }
+            (Shape::Diamond, _) => {
+                let pts = svg_points(&rhombus(fcx, fcy, bw, bh));
+                let _ = writeln!(o, r#"<polygon points="{pts}" fill="{}"/>"#, th.background);
+                let _ = writeln!(
+                    o,
+                    r#"<polygon points="{pts}" fill="{}" fill-opacity="{}" stroke="{}" stroke-width="{:.2}" stroke-linejoin="round"/>"#,
+                    p.fill,
+                    p.opacity,
+                    p.accent,
+                    0.1 * b
                 );
             }
             (Shape::Rect, _) => {
@@ -870,6 +925,12 @@ pub fn tikz(
                     bw / 2.0
                 ),
                 Shape::Plain => Ok(()),
+                Shape::Diamond => writeln!(
+                    o,
+                    "\\filldraw[fill={bg}, draw={c}, line width={:.2}bp, line join=round] {};",
+                    0.08 * b,
+                    tikz_points(&rhombus(fcx + d, fcy - d, bw, bh))
+                ),
                 Shape::Rect => writeln!(
                     o,
                     "\\filldraw[fill={bg}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
@@ -898,6 +959,16 @@ pub fn tikz(
                     "\\fill[{f}] ({fcx:.1},{fcy:.1}) circle ({:.1});",
                     bw / 2.0
                 );
+            }
+            (Shape::Diamond, _) => {
+                let pts = tikz_points(&rhombus(fcx, fcy, bw, bh));
+                let _ = writeln!(
+                    o,
+                    "\\filldraw[fill={}, draw={c}, line width={:.2}bp, line join=round] {pts};",
+                    cname(&th.background),
+                    0.1 * b
+                );
+                let _ = writeln!(o, "\\fill[{f}, opacity={}] {pts};", p.opacity);
             }
             (Shape::Rect, _) => {
                 let _ = writeln!(
@@ -1006,6 +1077,12 @@ pub fn tikz(
                         "\\draw[{c}{dash}, line width={:.2}bp] ({x:.2},{cy:.2}) -- ({:.2},{cy:.2});",
                         s / 5.0,
                         x + s
+                    );
+                } else if e.shape == Some(Shape::Diamond) && !e.frame {
+                    let _ = writeln!(
+                        o,
+                        "\\filldraw[fill={fill}, fill opacity={op:.2}, draw={c}, line width=1bp, line join=round] {};",
+                        tikz_points(&rhombus(x + s / 2.0, cy, s, s))
                     );
                 } else if e.shape == Some(Shape::Circle) && !e.frame {
                     let _ = writeln!(

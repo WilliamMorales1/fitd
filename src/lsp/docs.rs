@@ -164,7 +164,7 @@ pub const ATTRS: &[Attr] = &[
     Attr {
         key: "shape",
         on: LOOK,
-        values: &["box", "circle", "none"],
+        values: &["box", "circle", "diamond", "none"],
         doc: "Frame shape. `none` draws text and figure with no frame, for margin notes and lane labels.",
     },
     Attr {
@@ -418,6 +418,11 @@ pub const WORDS: &[(&str, &str, &str)] = &[
     ),
     ("shape", "box", "Rectangular frame."),
     ("shape", "circle", "Circular frame."),
+    (
+        "shape",
+        "diamond",
+        "Rhombus frame, for decisions and relationships.",
+    ),
     ("shape", "none", "No frame or fill."),
     ("place=", "flow", "Stays in the flow (default)."),
     ("place=", "aside", "Moves to the strip after the flow."),

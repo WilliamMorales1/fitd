@@ -4,6 +4,8 @@ use crate::diag::Span;
 pub enum Shape {
     Circle,
     Rect,
+    /// Rhombus whose inscribed text rect is half its width and height.
+    Diamond,
     /// Text with no frame, for margin annotations and lane labels.
     Plain,
 }

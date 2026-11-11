@@ -96,7 +96,12 @@ pub fn measure(
     let wrap_w = node.wrap_em.map_or(wrap_w, |em| em * b);
     let shape = node.shape.unwrap_or(shape);
     // A frameless node has no border to clear, so it keeps only enough padding to breathe.
-    let pad = if shape == Shape::Plain { 0.15 * b } else { pad };
+    let pad = match shape {
+        Shape::Plain => 0.15 * b,
+        // A diamond already leaves room at its corners.
+        Shape::Diamond => 0.25 * b,
+        _ => pad,
+    };
     let mut raw: Vec<(String, f64, bool)> = Vec::new();
     for part in node.title.split('\n') {
         for l in wrap(fonts, part, ts, true, wrap_w) {
@@ -136,7 +141,7 @@ pub fn measure(
         0.0
     };
     let text_w = lines.iter().map(|l| l.width).fold(0.0, f64::max);
-    let beside = beside && fig_gap > 0.0 && shape != Shape::Circle;
+    let beside = beside && fig_gap > 0.0 && matches!(shape, Shape::Rect | Shape::Plain);
     let content_w = if beside {
         text_w + 2.0 * fig_gap + fw
     } else {
@@ -170,6 +175,32 @@ pub fn measure(
                 content_h + 2.0 * pad,
                 pad + (content_w - fw) / 2.0,
                 pad + text_h + fig_gap,
+            )
+        }
+        Shape::Diamond => {
+            // Scale the padded content rect until every line corner lies inside the rhombus.
+            let (a, c) = (content_w / 2.0 + pad, content_h / 2.0 + pad);
+            let corner =
+                |hw: f64, y0: f64, y1: f64| (hw + pad) / a + (y0.abs().max(y1.abs()) + pad) / c;
+            let mut s: f64 = 0.0;
+            for l in &lines {
+                let y0 = l.baseline - 0.96 * l.size - content_h / 2.0;
+                s = s.max(corner(l.width / 2.0, y0, y0 + line_height(l.size)));
+            }
+            if fh > 0.0 {
+                let y0 = text_h + fig_gap - content_h / 2.0;
+                s = s.max(corner(fw / 2.0, y0, y0 + fh));
+            }
+            let (rx, ry) = (s * a, s * c);
+            for l in &mut lines {
+                l.x = rx - l.width / 2.0;
+                l.baseline += ry - content_h / 2.0;
+            }
+            (
+                2.0 * rx,
+                2.0 * ry,
+                rx - fw / 2.0,
+                ry - content_h / 2.0 + text_h + fig_gap,
             )
         }
         Shape::Circle => {
@@ -367,7 +398,16 @@ fn even_layers(g: &Graph, dir: Dir, boxes: &mut [Boxed]) {
         if extra <= 0.0 {
             continue;
         }
-        // Text stays left and top; only the figure recenters.
+        // Text stays left and top, except in a diamond, where it is centred; the figure recenters.
+        if bx.shape == Shape::Diamond {
+            for l in &mut bx.lines {
+                if dir == Dir::Right {
+                    l.x += extra / 2.0;
+                } else {
+                    l.baseline += extra / 2.0;
+                }
+            }
+        }
         for c in &mut bx.cells {
             let l = c.label.as_mut();
             if dir == Dir::Right {

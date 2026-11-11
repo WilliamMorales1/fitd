@@ -1838,3 +1838,53 @@ fn source_order_keeps_children_in_edge_order() {
         "leaves out of edge order: {xs:?}"
     );
 }
+
+#[test]
+fn diamond_edges_end_on_the_outline() {
+    let src = tmp("diamond.fitd");
+    let (svg, tex) = (tmp("diamond.svg"), tmp("diamond.tex"));
+    std::fs::write(
+        &src,
+        "layout layered\nnode a \"Alpha\"\nnode d \"Decide?\" shape=diamond\nnode b \"B\"\nnode c \"C\"\na -> d\nd -> b, c\n",
+    )
+    .unwrap();
+    let (ok, log) = fitd(&[
+        src.to_str().unwrap(),
+        "-o",
+        svg.to_str().unwrap(),
+        "--tikz",
+        tex.to_str().unwrap(),
+    ]);
+    assert!(ok && log.contains(" 0 errors"), "{log}");
+    let s = std::fs::read_to_string(&svg).unwrap();
+    let pts = |l: &str, key: &str| -> Vec<(f64, f64)> {
+        let i = l.find(key).unwrap() + key.len();
+        l[i..i + l[i..].find('"').unwrap()]
+            .split(' ')
+            .map(|p| {
+                let (x, y) = p.split_once(',').unwrap();
+                (x.parse().unwrap(), y.parse().unwrap())
+            })
+            .collect()
+    };
+    let shape = s
+        .lines()
+        .find(|l| l.starts_with("<polygon") && l.contains("stroke="))
+        .expect("diamond outline");
+    let q = pts(shape, "points=\"");
+    let (cx, cy, rx, ry) = (q[0].0, q[1].1, q[1].0 - q[0].0, q[1].1 - q[0].1);
+    let ends: Vec<f64> = s
+        .lines()
+        .filter(|l| l.starts_with("<polyline"))
+        .flat_map(|l| {
+            let p = pts(l, "points=\"");
+            [p[0], p[p.len() - 1]]
+        })
+        .map(|(x, y)| (x - cx).abs() / rx + (y - cy).abs() / ry)
+        .filter(|&r| r < 1.5)
+        .collect();
+    assert_eq!(ends.len(), 3, "{s}");
+    assert!(ends.iter().all(|r| (r - 1.0).abs() < 0.02), "{ends:?}");
+    let t = std::fs::read_to_string(&tex).unwrap();
+    assert!(t.contains("-- cycle;"), "{t}");
+}

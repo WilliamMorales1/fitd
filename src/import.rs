@@ -6,7 +6,8 @@ struct INode {
     label: Option<String>,
     color: Option<String>,
     fill: Option<String>,
-    circle: bool,
+    /// shape is a fitd shape name other than the default box.
+    shape: Option<&'static str>,
     group: Option<usize>,
 }
 
@@ -175,8 +176,8 @@ impl Doc {
             if let Some(c) = &n.fill {
                 o += &format!(" fill={c}");
             }
-            if n.circle {
-                o += " shape=circle";
+            if let Some(s) = n.shape {
+                o += &format!(" shape={s}");
             }
             o.push('\n');
         }
@@ -578,8 +579,9 @@ impl DotParser {
                 "label" if val == "\\N" => {}
                 "label" => self.doc.nodes[v].label = Some(val.clone()),
                 "shape" if matches!(val.as_str(), "circle" | "doublecircle" | "point") => {
-                    self.doc.nodes[v].circle = true
+                    self.doc.nodes[v].shape = Some("circle")
                 }
+                "shape" if val == "diamond" => self.doc.nodes[v].shape = Some("diamond"),
                 "shape"
                     if matches!(
                         val.as_str(),
@@ -638,7 +640,7 @@ fn from_dot(text: &str) -> Result<Doc, String> {
     Ok(p.doc)
 }
 
-fn mermaid_node(s: &str) -> Option<(String, Option<String>, bool, &str)> {
+fn mermaid_node(s: &str) -> Option<(String, Option<String>, Option<&'static str>, &str)> {
     let s = s.trim_start();
     let mut end = 0;
     for (i, c) in s.char_indices() {
@@ -656,23 +658,24 @@ fn mermaid_node(s: &str) -> Option<(String, Option<String>, bool, &str)> {
     rest = rest.strip_prefix(":::").map_or(rest, |r| {
         r.trim_start_matches(|c: char| c.is_alphanumeric() || c == '_' || c == '-')
     });
-    const SHAPES: [(&str, &str, bool); 14] = [
-        ("(((", ")))", true),
-        ("((", "))", true),
-        ("([", "])", false),
-        ("[[", "]]", false),
-        ("[(", ")]", false),
-        ("[/", "/]", false),
-        ("[\\", "\\]", false),
-        ("[/", "\\]", false),
-        ("[\\", "/]", false),
-        ("{{", "}}", false),
-        ("[", "]", false),
-        ("(", ")", false),
-        ("{", "}", false),
-        (">", "]", false),
+    const C: Option<&str> = Some("circle");
+    const SHAPES: [(&str, &str, Option<&str>); 14] = [
+        ("(((", ")))", C),
+        ("((", "))", C),
+        ("([", "])", None),
+        ("[[", "]]", None),
+        ("[(", ")]", None),
+        ("[/", "/]", None),
+        ("[\\", "\\]", None),
+        ("[/", "\\]", None),
+        ("[\\", "/]", None),
+        ("{{", "}}", None),
+        ("[", "]", None),
+        ("(", ")", None),
+        ("{", "}", Some("diamond")),
+        (">", "]", None),
     ];
-    for (open, close, circle) in SHAPES {
+    for (open, close, shape) in SHAPES {
         if let Some(r) = rest.strip_prefix(open) {
             let (text, after) = match r.trim_start().strip_prefix('"') {
                 Some(q) => {
@@ -687,10 +690,10 @@ fn mermaid_node(s: &str) -> Option<(String, Option<String>, bool, &str)> {
                     (r[..j].trim().to_string(), &r[j + close.len()..])
                 }
             };
-            return Some((id, Some(text), circle, after));
+            return Some((id, Some(text), shape, after));
         }
     }
-    Some((id, None, false, rest))
+    Some((id, None, None, rest))
 }
 
 fn mermaid_arrow<'a>(
@@ -828,14 +831,14 @@ fn from_mermaid(text: &str) -> Result<Doc, String> {
         loop {
             let mut here = Vec::new();
             loop {
-                let Some((id, text, circle, r)) = mermaid_node(rest) else {
+                let Some((id, text, shape, r)) = mermaid_node(rest) else {
                     return Err(format!("line {}: cannot read `{raw}`", i + 1));
                 };
                 let v = doc.node(&id, group);
                 if let Some(t) = text {
                     doc.nodes[v].label = Some(strip_html(&t, &mut doc.dropped));
                 }
-                doc.nodes[v].circle |= circle;
+                doc.nodes[v].shape = shape.or(doc.nodes[v].shape);
                 here.push(v);
                 rest = r.trim_start();
                 match rest.strip_prefix('&') {
@@ -1074,7 +1077,7 @@ const D2_PROPS: &[&str] = &[
 #[derive(Default)]
 struct D2Node {
     label: Option<String>,
-    circle: bool,
+    shape: Option<&'static str>,
     color: Option<String>,
     fill: Option<String>,
     parent: Option<usize>,
@@ -1158,7 +1161,8 @@ impl D2Doc {
             }
             (Some(v), "label") => self.nodes[v].label = Some(value.to_string()),
             (Some(v), "shape") => match value {
-                "circle" | "oval" => self.nodes[v].circle = true,
+                "circle" | "oval" => self.nodes[v].shape = Some("circle"),
+                "diamond" => self.nodes[v].shape = Some("diamond"),
                 "rectangle" | "square" => {}
                 s => {
                     self.dropped.insert(format!("shape `{s}` (drawn as a box)"));
@@ -1483,8 +1487,8 @@ fn from_d2(text: &str) -> Result<Doc, String> {
             .label
             .clone()
             .or_else(|| (last != path).then(|| last.to_string()));
-        (doc.nodes[w].circle, doc.nodes[w].color, doc.nodes[w].fill) =
-            (n.circle, n.color.clone(), n.fill.clone());
+        (doc.nodes[w].shape, doc.nodes[w].color, doc.nodes[w].fill) =
+            (n.shape, n.color.clone(), n.fill.clone());
         at[v] = Some(w);
     }
     let mut first = at.clone();
@@ -1556,7 +1560,7 @@ fn from_mindmap(text: &str) -> Result<Doc, String> {
         };
         let v = doc.node(&key, None);
         doc.nodes[v].label = Some(label).filter(|l| *l != key);
-        doc.nodes[v].circle = circle;
+        doc.nodes[v].shape = circle.then_some("circle");
         let indent = line.len() - line.trim_start().len();
         while stack.last().is_some_and(|&(d, _)| d >= indent) {
             stack.pop();
@@ -1777,6 +1781,7 @@ mod tests {
             out.contains("node A \"Start\"\n") && out.contains("node C \"Done\" shape=circle\n"),
             "{out}"
         );
+        assert!(out.contains("node B \"Is it?\" shape=diamond\n"), "{out}");
         assert!(
             out.contains("B -> C \"Yes\"\nB -> D \"Yes\"\nB -> E \"No\"\nE ..> A\n"),
             "{out}"

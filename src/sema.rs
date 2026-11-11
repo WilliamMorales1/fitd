@@ -200,12 +200,16 @@ fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
             ("text", v) => l.text = color(v, diags).or(l.text.take()),
             ("shape", Value::Name(n)) if n.text == "circle" => l.shape = Some(Shape::Circle),
             ("shape", Value::Name(n)) if n.text == "box" => l.shape = Some(Shape::Rect),
+            ("shape", Value::Name(n)) if n.text == "diamond" => l.shape = Some(Shape::Diamond),
             ("shape", Value::Name(n)) if n.text == "none" => l.shape = Some(Shape::Plain),
-            ("shape", Value::Name(n)) => {
-                diags.push(unknown("E0009", "shape", n, &["circle", "box", "none"]))
-            }
+            ("shape", Value::Name(n)) => diags.push(unknown(
+                "E0009",
+                "shape",
+                n,
+                &["circle", "box", "diamond", "none"],
+            )),
             ("shape", v) => diags.push(
-                Diag::error("E0006", "expected `circle` or `box`")
+                Diag::error("E0006", "expected `box`, `circle`, `diamond`, or `none`")
                     .primary(v.span(), "wrong type or unit"),
             ),
             ("stack", Value::Num(t, _)) if t.parse::<u8>().is_ok_and(|k| (1..=8).contains(&k)) => {
@@ -1229,13 +1233,14 @@ mod tests {
     #[test]
     fn resolves_forward_references_and_styles() {
         let (g, d) = run(
-            "a -> b\nstyle hub shape=circle color=#123456\nnode a .hub\n| line\nnode b color=#abcdef\n",
+            "a -> b\nstyle hub shape=circle color=#123456\nnode a .hub\n| line\nnode b color=#abcdef shape=diamond\n",
         );
         assert!(d.is_empty());
         assert_eq!(g.edges.len(), 1);
         assert_eq!(g.nodes[0].shape, Some(Shape::Circle));
         assert_eq!(g.nodes[0].body, vec!["line"]);
         assert_eq!(g.nodes[1].color.as_deref(), Some("#abcdef"));
+        assert_eq!(g.nodes[1].shape, Some(Shape::Diamond));
     }
 
     #[test]

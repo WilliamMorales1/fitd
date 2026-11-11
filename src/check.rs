@@ -247,6 +247,13 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
                         && l.baseline - 0.96 * l.size >= 0.0
                         && l.baseline - 0.96 * l.size + line_height(l.size) <= b.h + 0.01
                 }
+                Shape::Diamond => {
+                    let (rx, ry) = ((b.w - b.shift) / 2.0, (b.h - b.shift) / 2.0);
+                    let top = l.baseline - 0.96 * l.size - b.shift - ry;
+                    let far = top.abs().max((top + line_height(l.size)).abs());
+                    let dx = (l.x + width / 2.0 - rx).abs() + width / 2.0;
+                    dx / rx + far / ry <= 1.0 + 1e-3
+                }
                 Shape::Circle => {
                     let r = b.w / 2.0;
                     let top = l.baseline - 0.96 * l.size - r;

@@ -70,7 +70,7 @@ Each row lists the figure type, the surveys (by number above) that name it, and 
 | Stage / cycle | 5 | yes, drawn as a chain plus a back link | core | `13-cycle` |
 | UML class | 5, 6 | yes, relations told apart by colour | `std/uml` | `14-uml-class` |
 | UML state machine | 6 | yes | `std/uml` | `15-state-machine` |
-| Entity-relationship | 5 | yes, cardinality as labels | `std/er` | `16-er` |
+| Entity-relationship | 5 | yes, relationship diamonds, cardinality as labels | `std/er` | `16-er` |
 | Timeline | 1 | yes | `std/time` | `17-timeline` |
 | Gantt chart | 1 | yes | `std/grid` | `18-gantt` |
 | Mind / concept map | 1 | yes | core (radial) | `19-mind-map` |
@@ -109,17 +109,9 @@ The plans are ordered by how many common figure types each one unlocks for the e
 
 - Left out: the per-group `ordered` flag. A group draws a frame, so it is a poor switch for ordering alone. Add one only if a figure needs source order in one part and crossing reduction in another.
 
-### 2. Node shapes: diamond, and per-node shape on templates
+### 2. Node shapes: diamond (done)
 
-Flowchart decisions and ER relationships use diamonds.
-
-- Change:
-  - Add `Shape::Diamond` (src/graph.rs).
-  - Measure it as a box whose inscribed text rect is half the width and height.
-  - Clip edges at the diamond outline in emit and check.
-  - Accept `shape=diamond` in style attributes (src/sema.rs).
-- Then `std/flow` uses it for `decide`, and `std/er` gains `er_relation` diamonds.
-- Done when the 01 and 16 gallery files use diamonds and edges end on the outline.
+`shape=diamond` (`Shape::Diamond`, src/graph.rs) sizes the rhombus by scaling the padded content rect until every line corner fits, so it is at most twice the content box and smaller for ragged text. `inside_box` (src/layout/path.rs) tests the rhombus, so edge clipping, routing, and `check` follow the outline. SVG, PDF, TikZ, and key swatches draw it. `std/flow` uses it for `decide`, `std/er` has `er_relation(id, name, a, b, card)`, and the Mermaid `{}`, Graphviz `diamond`, and D2 `diamond` importers map to it. `diamond_edges_end_on_the_outline` checks the clipping.
 
 ### 3. Edge heads and edge styles
 
