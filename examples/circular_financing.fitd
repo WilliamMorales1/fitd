@@ -1,0 +1,52 @@
+# Circular financing: Meta funds, leases from, and buys power through entities it part-owns.
+title "How Meta, Blue Owl and Entergy Fund the Hyperion Data Center"
+layout radial root=jv
+theme light
+page a4 landscape
+font 10pt..30pt wrap=18em
+
+style hub color=#222222 fill=#FFFFFF
+style party color=#888888 fill=#EEEEEE
+style small color=#888888 fill=#F6F6F6
+
+node jv "Beignet JV (Hyperion)" .hub
+| $27B development cost
+| Blue Owl 80%, Meta 20%
+node meta "Meta (Laidley LLC)" .hub
+| ~$50B+ total pledge
+node owl "Blue Owl Capital" .party
+node spv "Bond SPV" .party
+| $27.3B senior-secured notes
+node inv "PIMCO, BlackRock" .party
+| anchor note buyers
+node entergy "Entergy Louisiana" .party
+| 10 gas plants, 7+ GW
+node rate "Entergy ratepayers" .party
+| disputed risk
+node state "State of Louisiana, LED" .party
+node parish "Richland Parish" .party
+node ins "Insurers" .small
+| coverage only to ~$4B
+
+owl -> jv "~$23B equity (Blue Owl share)" color=#4FC3E0
+meta -> jv "~$5.8B equity, covers overruns above 105%; got ~$3B distribution" color=#4FC3E0
+inv -> spv "buy notes" color=#4FC3E0
+spv -> jv "$27.3B debt" color=#2D5BE0
+jv ..> meta "leases campus (4-yr terms, residual value guarantee)" color=#2D5BE0
+meta -> entergy "15-yr minimum bill, $3.2B for 3 plants; pays full cost of 7 more" color=#2D5BE0
+entergy ..> meta "power, 5+ GW" color=#E0449A
+rate -> entergy "fuel, $550M line, post-15-yr plant costs (per critics)" color=#E0449A
+state -> meta "sales tax exemption on GPUs, servers" color=#4CAF50
+state -> entergy "ITEP: ~$237M property tax forgone (2 plants)" color=#4CAF50
+parish -> meta "PILOT: up to 60% property tax exempt" color=#4CAF50
+meta ..> parish "$7.9M first PILOT and sales tax payment" color=#4CAF50
+meta ..> state "$270M roads, $340M water, $5M training" color=#2D5BE0
+ins -> jv "flood-plain coverage up to ~$4B" color=#2D5BE0
+owl -> spv "creates SPV" color=#2D5BE0
+
+key "Investment" line=solid color=#4FC3E0
+key "Services and debt" line=dashed color=#2D5BE0
+key "Power and ratepayer costs" line=solid color=#E0449A
+key "Public incentives" line=solid color=#4CAF50
+key "Principal" shape=circle fill=#FFFFFF color=#222222
+key "Counterparty" shape=box fill=#EEEEEE color=#888888
