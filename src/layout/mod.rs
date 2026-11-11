@@ -531,15 +531,12 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
             if hard.is_empty() || probe(cfg.min_font, &[], cfg.budget, &mut stats).is_none() {
                 let crowded = match g.settings.layout {
                     Some(LayoutKind::Layered(dir)) => {
-                        layered::plan(
-                            g,
-                            fonts,
-                            &measure_all(g, t, fonts, cfg, cfg.min_font),
-                            cfg,
-                            cfg.min_font,
-                            dir,
-                        )
-                        .crowded
+                        let boxes = measure_all(g, t, fonts, cfg, cfg.min_font);
+                        let plan = match g.settings.lanes {
+                            true => crate::lanes::plan,
+                            false => layered::plan,
+                        };
+                        plan(g, fonts, &boxes, cfg, cfg.min_font, dir).crowded
                     }
                     _ => None,
                 };

@@ -14,6 +14,7 @@ mod key;
 
 /// KEY_RATIO is the key text size relative to the body font when `keysize` is not set.
 const KEY_RATIO: f64 = 0.85;
+mod lanes;
 mod layered;
 mod layout;
 mod lex;

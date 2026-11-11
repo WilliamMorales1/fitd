@@ -1,5 +1,5 @@
 use crate::geom::{P, Rect};
-use crate::graph::{Dash, Graph, Head, KeyEntry, LayoutKind, Relation};
+use crate::graph::{Dash, Dir, Graph, Head, KeyEntry, LayoutKind, Relation};
 use crate::key::KeyPlan;
 use crate::layout::{
     Drawn, EdgeStyle, FRAME_PAD, Layout, Role, Shape, TITLE_BAND, TITLE_SIZE, TextLine, frame,
@@ -243,8 +243,9 @@ fn groups<'a>(g: &'a Graph, lay: &Layout) -> Vec<Group<'a>> {
         .filter(|r| matches!(r, Relation::Group { .. }))
         .collect();
     rels.sort_by_key(|r| std::cmp::Reverse(r.depth()));
-    rels.into_iter()
-        .map(|r| {
+    let mut out: Vec<Group> = rels
+        .iter()
+        .map(|&r| {
             let Relation::Group {
                 title,
                 color,
@@ -261,7 +262,42 @@ fn groups<'a>(g: &'a Graph, lay: &Layout) -> Vec<Group<'a>> {
                 dashed: *dashed,
             }
         })
-        .collect()
+        .collect();
+    if let (true, Some(LayoutKind::Layered(dir))) = (g.settings.lanes, g.settings.layout) {
+        stretch_lanes(&rels, &mut out, dir);
+    }
+    out
+}
+
+/// stretch_lanes gives every outermost lane frame the same extent along the flow.
+fn stretch_lanes(rels: &[&Relation], out: &mut [Group], dir: Dir) {
+    let items = |r: &Relation| match r {
+        Relation::Group { items, .. } => items.clone(),
+        _ => Vec::new(),
+    };
+    let top: Vec<usize> = (0..rels.len())
+        .filter(|&i| {
+            let a = items(rels[i]);
+            !rels.iter().enumerate().any(|(j, r)| {
+                let b = items(r);
+                j != i && b.len() > a.len() && a.iter().all(|v| b.contains(v))
+            })
+        })
+        .collect();
+    let down = matches!(dir, Dir::Down);
+    let span = |r: &Rect| if down { (r.y0, r.y1) } else { (r.x0, r.x1) };
+    let (lo, hi) = top.iter().fold((f64::MAX, f64::MIN), |(lo, hi), &i| {
+        let (a, b) = span(&out[i].rect);
+        (lo.min(a), hi.max(b))
+    });
+    for &i in &top {
+        let r = &mut out[i].rect;
+        if down {
+            (r.y0, r.y1) = (lo, hi);
+        } else {
+            (r.x0, r.x1) = (lo, hi);
+        }
+    }
 }
 
 pub fn bounds(g: &Graph, lay: &Layout) -> Rect {

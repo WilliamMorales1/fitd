@@ -206,7 +206,22 @@ key "Principal" shape=circle fill=#FFFFFF color=#222222
 
 ### Layout selection
 
-`layout NAME` selects layout algorithm and accepts layout-specific attributes. Supported algorithms include `radial` and `layered`. Radial layouts use `root=ID`; layered layouts accept `dir=down` or `dir=right`, `bands=N`, and `order=source`. By default a layered layout reorders nodes within a layer to cut edge crossings; `order=source` instead keeps roots in declaration order and children in the order of their incoming edges, which org charts, syntax trees, and fishbones need.
+`layout NAME` selects layout algorithm and accepts layout-specific attributes. Supported algorithms are `radial`, `layered`, and `lanes`. Radial layouts use `root=ID`; layered layouts accept `dir=down` or `dir=right`, `bands=N`, and `order=source`. By default a layered layout reorders nodes within a layer to cut edge crossings; `order=source` instead keeps roots in declaration order and children in the order of their incoming edges, which org charts, syntax trees, and fishbones need.
+
+`layout lanes` draws swimlanes and sequence diagrams. It takes `dir` and `order` like `layered`. Each top-level group is a lane, and lanes sit side by side in declaration order with frames that span the whole flow. Nodes stack along their lane in flow order, and edges cross between lanes. A node with `lane=ID` hangs on a dashed lifeline below ID, after the earlier nodes on that lane; ID heads the lane and its lane nodes share it. An empty `shape=none` node draws as a point on the lifeline. With `order=source`, heads take the first row and each later row holds one `align row` set, in declaration order, so messages keep source order:
+
+```fitd
+layout lanes order=source
+style pt shape=none
+node c "Client"
+node s "Server"
+node c1 "" .pt lane=c
+node s1 "" .pt lane=s
+c1 -> s1 "GET /orders"
+require align row(c1, s1)
+```
+
+`std/seq.fitd` wraps this as `seq_actor`, `seq_msg`, and `seq_reply`.
 
 ### Page and font settings
 
@@ -271,6 +286,7 @@ A path beginning with `std/` names a module of the bundled library instead of a 
 | `std/er.fitd` | Entity-relationship diagrams: `er_entity`, `er_weak`, `er_rel` with cardinality labels and crow's feet, `er_relation` diamonds |
 | `std/tree.fitd` | Syntax trees, decision trees, org charts: `tree_cat`, `tree_word`, `tree_q`, `tree_leaf`, `tree_unit`, `tree_kids` |
 | `std/time.fitd` | Timelines: `time_event`, `time_mile`, `time_chain` |
+| `std/seq.fitd` | UML sequence diagrams for `layout lanes`: `seq_actor`, `seq_msg`, `seq_reply` (dashed) |
 | `std/model.fitd` | Research models: `model_iv`, `model_dv`, `model_med`, `model_mod`, `model_ctl`, `model_hyp`, `model_key()` |
 
 [examples/gallery](../examples/gallery/) has one diagram per common academic figure type, each built on these modules.

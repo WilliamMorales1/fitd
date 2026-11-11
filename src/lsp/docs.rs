@@ -210,6 +210,12 @@ pub const ATTRS: &[Attr] = &[
         doc: "Mark at the source end. Default `none`.",
     },
     Attr {
+        key: "lane",
+        on: &["node"],
+        values: &[],
+        doc: "Hangs the node on ID's dashed lifeline in a `lanes` layout, below its earlier lane nodes.",
+    },
+    Attr {
         key: "times",
         on: &["group"],
         values: &["2", "3", "4"],
@@ -225,7 +231,7 @@ pub const ATTRS: &[Attr] = &[
         key: "dir",
         on: &["layout"],
         values: &["down", "right"],
-        doc: "Flow direction of a `layered` layout.",
+        doc: "Flow direction of a `layered` or `lanes` layout.",
     },
     Attr {
         key: "bands",
@@ -237,7 +243,7 @@ pub const ATTRS: &[Attr] = &[
         key: "order",
         on: &["layout"],
         values: &["auto", "source"],
-        doc: "Sibling order in a `layered` layout: `auto` cuts crossings, `source` keeps declaration and edge order.",
+        doc: "Sibling order in a `layered` or `lanes` layout: `auto` cuts crossings, `source` keeps declaration and edge order.",
     },
     Attr {
         key: "margin",
@@ -406,6 +412,11 @@ pub const WORDS: &[(&str, &str, &str)] = &[
     ),
     (
         "layout",
+        "lanes",
+        "Swimlanes and sequence diagrams: each top-level group or lifeline is a lane. Takes `dir=down|right` and `order=auto|source`.",
+    ),
+    (
+        "layout",
         "radial",
         "Radial layout for mind maps around `root=ID`.",
     ),
@@ -453,7 +464,11 @@ pub const WORDS: &[(&str, &str, &str)] = &[
     ("head", "triangle", "Hollow triangle: UML inheritance."),
     ("head", "diamond", "Filled diamond: UML composition."),
     ("head", "odiamond", "Hollow diamond: UML aggregation."),
-    ("head", "crow", "Crow's foot: the many end of an ER relationship."),
+    (
+        "head",
+        "crow",
+        "Crow's foot: the many end of an ER relationship.",
+    ),
     ("head", "none", "No mark."),
 ];
 

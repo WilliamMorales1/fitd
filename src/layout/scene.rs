@@ -519,6 +519,9 @@ pub(super) fn build<'a>(
     let n = g.nodes.len();
     let plan = match kind {
         LayoutKind::Radial => radial::plan(g, t, boxes, cfg, b, rot),
+        LayoutKind::Layered(dir) if g.settings.lanes => {
+            crate::lanes::plan(g, fonts, boxes, cfg, b, dir)
+        }
         LayoutKind::Layered(dir) => layered::plan(g, fonts, boxes, cfg, b, dir),
     };
     let mut plan = plan;

@@ -1920,3 +1920,119 @@ fn edge_heads_and_dashes_reach_svg_and_tikz() {
     assert!(t.contains("{Diamond[open]}-{Triangle[open]}"), "{t}");
     assert!(t.contains("-{Straight Barb[reversed]}, dotted"), "{t}");
 }
+
+/// text_at finds where a text element reading `word` is drawn.
+fn text_at(svg: &str, word: &str) -> (f64, f64) {
+    let end = svg
+        .find(&format!(">{word}</"))
+        .unwrap_or_else(|| panic!("no text {word}"));
+    let start = svg[..end].rfind("<text ").unwrap();
+    let tag = &svg[start..end];
+    let f = |k: &str| -> f64 {
+        let i = tag.find(&format!(" {k}=\"")).unwrap() + k.len() + 3;
+        tag[i..i + tag[i..].find('"').unwrap()].parse().unwrap()
+    };
+    (f("x"), f("y"))
+}
+
+fn build_svg(name: &str, src: &str) -> String {
+    let path = tmp(&format!("{name}.fitd"));
+    std::fs::write(&path, src).unwrap();
+    let svg = tmp(&format!("{name}.svg"));
+    let (ok, log) = fitd(&[
+        path.to_str().unwrap(),
+        "-o",
+        svg.to_str().unwrap(),
+        "--short",
+    ]);
+    assert!(ok, "{log}");
+    std::fs::read_to_string(&svg).unwrap()
+}
+
+#[test]
+fn sequence_messages_keep_source_order() {
+    // Steps zig-zag between lanes declared right to left, so only source order sorts them.
+    let mut src = String::from("include \"std/seq.fitd\"\nlayout lanes order=source\n");
+    for (id, name) in [("c", "Cc"), ("b", "Bb"), ("a", "Aa")] {
+        src += &format!("use seq_actor(\"{id}\", \"{name}\")\n");
+    }
+    let steps = [("a", "c"), ("b", "a"), ("c", "b"), ("a", "b"), ("c", "a")];
+    for (i, (from, to)) in steps.iter().enumerate() {
+        src += &format!("use seq_msg(\"m{i}\", \"{from}\", \"{to}\", \"msg{i}\")\n");
+    }
+    let svg = build_svg("seq-order", &src);
+    let ys: Vec<f64> = (0..steps.len())
+        .map(|i| text_at(&svg, &format!("msg{i}")).1)
+        .collect();
+    assert!(
+        ys.windows(2).all(|w| w[0] < w[1]),
+        "messages out of order: {ys:?}"
+    );
+    let heads: Vec<f64> = ["Cc", "Bb", "Aa"]
+        .iter()
+        .map(|n| text_at(&svg, n).0)
+        .collect();
+    assert!(
+        heads.windows(2).all(|w| w[0] < w[1]),
+        "lanes out of order: {heads:?}"
+    );
+    assert!(text_at(&svg, "Cc").1 < ys[0], "heads below a message");
+}
+
+#[test]
+fn swimlanes_keep_declaration_order() {
+    // The flow runs x, y, z but the lanes are declared z, y, x.
+    let svg = build_svg(
+        "swim-order",
+        "layout lanes\nnode x \"Xx\"\nnode y \"Yy\"\nnode z \"Zz\"\nx -> y -> z\n\
+         group \"Lz\" z\ngroup \"Ly\" y\ngroup \"Lx\" x\n",
+    );
+    let lanes: Vec<f64> = ["Lz", "Ly", "Lx"]
+        .iter()
+        .map(|n| text_at(&svg, n).0)
+        .collect();
+    assert!(
+        lanes.windows(2).all(|w| w[0] < w[1]),
+        "lanes out of order: {lanes:?}"
+    );
+    let nodes: Vec<(f64, f64)> = ["Zz", "Yy", "Xx"]
+        .iter()
+        .map(|n| text_at(&svg, n))
+        .collect();
+    assert!(
+        nodes.windows(2).all(|w| w[0].0 < w[1].0),
+        "nodes left their lanes: {nodes:?}"
+    );
+    assert!(
+        nodes.windows(2).all(|w| w[0].1 > w[1].1),
+        "nodes out of flow order: {nodes:?}"
+    );
+    // Every lane frame spans the same height.
+    let frames: Vec<(f64, f64)> = outlines(&svg).iter().map(|o| (o.1, o.3)).collect();
+    let tallest = frames.iter().map(|f| f.1).fold(0.0, f64::max);
+    assert_eq!(
+        frames.iter().filter(|f| f.1 == tallest).count(),
+        3,
+        "{frames:?}"
+    );
+}
+
+#[test]
+fn lane_rejects_itself_and_nested_heads() {
+    for (body, want) in [
+        ("node a \"A\" lane=a\n", "cannot be its own lane"),
+        (
+            "node h \"H\"\nnode a \"A\" lane=h\nnode b \"B\" lane=a\n",
+            "is itself on a lane",
+        ),
+    ] {
+        let src = tmp("lane-err.fitd");
+        std::fs::write(&src, format!("layout lanes\n{body}")).unwrap();
+        let (ok, log) = fitd(&[
+            src.to_str().unwrap(),
+            "-o",
+            tmp("lane-err.svg").to_str().unwrap(),
+        ]);
+        assert!(!ok && log.contains("E0007") && log.contains(want), "{log}");
+    }
+}

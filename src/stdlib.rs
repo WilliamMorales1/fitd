@@ -12,6 +12,7 @@ pub const MODULES: &[(&str, &str)] = &[
     ("tree", include_str!("std/tree.fitd")),
     ("time", include_str!("std/time.fitd")),
     ("model", include_str!("std/model.fitd")),
+    ("seq", include_str!("std/seq.fitd")),
 ];
 
 /// get returns the source of a `std/...` include target.

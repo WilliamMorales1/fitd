@@ -33,6 +33,8 @@ pub struct Node {
     pub wrap_em: Option<f64>,
     /// Set by `place=aside`: in a layered layout, sits in a strip after the flow.
     pub aside: bool,
+    /// Set by `lane=ID`: hangs on ID's dashed lifeline and shares its lane.
+    pub lane: Option<usize>,
     pub span: Span,
 }
 
@@ -214,6 +216,8 @@ pub struct Settings {
     pub bands: Option<usize>,
     /// Set by `layout layered order=source`: siblings keep declaration order.
     pub source_order: bool,
+    /// Set by `layout lanes`: groups and lifelines become side-by-side lanes.
+    pub lanes: bool,
     pub margin: Option<f64>,
     pub key_size: Option<f64>,
     pub font: Option<(f64, f64)>,

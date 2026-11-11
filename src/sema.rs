@@ -225,6 +225,39 @@ fn head(v: &Value, diags: &mut Vec<Diag>) -> Option<Head> {
     }
 }
 
+/// lifelines chains each `lane=` head through its members, in declaration order, with dashed edges.
+fn lifelines(nodes: &[Node], edges: &mut Vec<Edge>, diags: &mut Vec<Diag>) {
+    let mut last: HashMap<usize, usize> = HashMap::new();
+    for (v, n) in nodes.iter().enumerate() {
+        let Some(h) = n.lane else { continue };
+        if let Some(hh) = nodes[h].lane {
+            diags.push(
+                Diag::error(
+                    "E0007",
+                    format!("lane head `{}` is itself on a lane", nodes[h].id),
+                )
+                .primary(n.span, "joins this lane")
+                .help(format!("use `lane={}`", nodes[hh].id)),
+            );
+            continue;
+        }
+        let a = *last.get(&h).unwrap_or(&h);
+        last.insert(h, v);
+        edges.push(Edge {
+            a,
+            b: v,
+            kind: EdgeKind::Tree,
+            directed: false,
+            label: None,
+            color: None,
+            head: Some(Head::None),
+            tail: None,
+            dash: Some(Dash::Dashed),
+            span: n.span,
+        });
+    }
+}
+
 fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
     for a in attrs {
         match (a.key.text.as_str(), &a.value) {
@@ -479,6 +512,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     stack: None,
                     wrap_em: None,
                     aside: false,
+                    lane: None,
                     span: id.span,
                 });
                 s.decl.push(st.span);
@@ -555,15 +589,26 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 let allowed: &[&str] = match kind.text.as_str() {
                     "radial" => {
                         set.layout = Some(LayoutKind::Radial);
+                        set.lanes = false;
                         &["root"]
                     }
                     "layered" => {
                         set.layout = Some(LayoutKind::Layered(Dir::Down));
+                        set.lanes = false;
                         &["dir", "bands", "order"]
                     }
+                    "lanes" => {
+                        set.layout = Some(LayoutKind::Layered(Dir::Down));
+                        set.lanes = true;
+                        &["dir", "order"]
+                    }
                     _ => {
-                        s.diags
-                            .push(unknown("E0009", "layout", kind, &["radial", "layered"]));
+                        s.diags.push(unknown(
+                            "E0009",
+                            "layout",
+                            kind,
+                            &["radial", "layered", "lanes"],
+                        ));
                         &[]
                     }
                 };
@@ -713,10 +758,27 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     .iter()
                     .cloned()
                     .partition(|a| EDGE_ONLY.contains(&a.key.text.as_str()));
+                let (lane, own): (Vec<Attr>, Vec<Attr>) =
+                    own.into_iter().partition(|a| a.key.text == "lane");
+                for a in &lane {
+                    match &a.value {
+                        Value::Name(h) if h.text == id.text => s.diags.push(
+                            Diag::error("E0007", format!("`{}` cannot be its own lane", id.text))
+                                .primary(h.span, "names this node"),
+                        ),
+                        Value::Name(h) => {
+                            let h = s.node(h);
+                            s.nodes[v].lane = h.or(s.nodes[v].lane);
+                        }
+                        v => s.type_err(v, "expected a node name".into()),
+                    }
+                }
                 for a in &edge_only {
                     s.diags.push(bad_attr(
                         a,
-                        &["color", "fill", "text", "shape", "stack", "wrap", "place"],
+                        &[
+                            "color", "fill", "text", "shape", "stack", "wrap", "place", "lane",
+                        ],
                     ));
                 }
                 look(&own, &mut l, &mut s.diags);
@@ -886,6 +948,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 .primary(*span, "declared here"),
         );
     }
+    lifelines(&s.nodes, &mut edges, &mut s.diags);
     nest_groups(&mut constraints, &grouped, &s.nodes, &mut s.diags);
     s.diags.extend(contradictions(&constraints));
     for (v, n) in s.nodes.iter().enumerate().filter(|(_, n)| n.aside) {

@@ -3,7 +3,7 @@ fitd: .fitd text -> SVG/PNG/PDF/TikZ at the largest font that fits.
 Build:  fitd FILE.fitd -o out.svg|.png|.pdf [--tikz out.tex] [--short]
 Book:   fitd A.fitd B.fitd -o out.pdf  (a page each)
 Stdin:  fitd - -o out.svg <<'EOF' ... EOF
-Exit 0 = written. Diagnostics on stderr.
+Exit 0 = written. Diagnostics: stderr.
 
 Syntax: one statement per line, # comment. Only nodes and edges are needed.
   node ID "Title" .style        # ID: letters digits _ inner -; title defaults to ID
@@ -14,18 +14,18 @@ Syntax: one statement per line, # comment. Only nodes and edges are needed.
   a ..> b "label"               # cross link, dashed (.. undirected)
   title "Text"
   layout radial root=ID         # default; mind map around root
-  layout layered dir=down|right bands=N order=source # flowchart; bands=1 no wrap;
-                                #   source: keep sibling order
+  layout layered dir=down|right bands=N order=source # flowchart; source: sibling order
+  layout lanes dir=down|right order=source # groups are lanes; node lane=HEAD: lifeline
   page a0..a4|WxHmm|16:9 portrait|landscape margin=1cm # a1, may turn; 16:9 tightest
-  font 8pt..30pt wrap=16em      # range searched; one size fixes it
+  font 8pt..30pt wrap=16em      # range searched
   theme light|dark|mono
   style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle|diamond|none stack=N (copies)
         wrap=24em place=aside (layered: strip after flow, ..> to flow)
-  group "Title" a, b, c .style color=#hex times=N  # framed; times=N: dashed frame titled `Nx`
+  group "Title" a, b, c .style color=#hex times=N  # framed; times=N: dashed, titled `Nx`
   require REL                   # must hold, else E0110
   prefer REL weight=2           # soft; W0205 if unmet
-  include "part.fitd"           # splice; path relative to file
-  include "std/uml.fitd"        # std: nn flow palette grid arch uml er tree time model
+  include "part.fitd"           # splice; relative to file
+  include "std/uml.fitd"        # std: nn flow palette grid arch uml er tree time model seq
   for i in 1..3 / if X / def f(a)...end; use f(1); ${i}; count(s,";") part(s,";",i)
 REL:
   a left-of b gap=2em | right-of | above | below   # chains: a above b above c
@@ -57,6 +57,6 @@ Flowchart:
   check -> err "no"
   require out above err
 
-Fix loop: fix the first error, rebuild. `fitd explain CODE` details a code.
+Fix loop: fix first error, rebuild. `fitd explain CODE` details a code.
 Unsat (E0110): drop or `prefer` one listed constraint, or use a larger page.
 No fit: lower the font floor, use a larger page, or follow the printed help.

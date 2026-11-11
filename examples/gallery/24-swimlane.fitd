@@ -1,0 +1,20 @@
+# Swimlane activity diagram (Reggio et al.). Each group is a lane, in declaration order.
+include "std/flow.fitd"
+layout lanes
+page 4:3
+node order "Place order" .io
+node pay "Take payment" .step
+node stock "In stock?" .decide
+node ship "Pack and ship" .step
+node refund "Refund" .step
+node receipt "Send receipt" .step
+node done "Receive parcel" .done
+order -> pay
+pay -> stock
+stock -> ship "yes"
+stock -> refund "no"
+ship -> receipt
+receipt -> done
+group "Customer" order, done
+group "Shop" pay, stock, refund, receipt
+group "Warehouse" ship

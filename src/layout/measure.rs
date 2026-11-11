@@ -96,14 +96,20 @@ pub fn measure(
     let wrap_w = node.wrap_em.map_or(wrap_w, |em| em * b);
     let shape = node.shape.unwrap_or(shape);
     // A frameless node has no border to clear, so it keeps only enough padding to breathe.
+    // An empty frameless node is a point, such as a message end on a lifeline.
+    let point = shape == Shape::Plain
+        && node.title.is_empty()
+        && node.body.is_empty()
+        && node.figure.is_empty();
     let pad = match shape {
+        _ if point => 0.05 * b,
         Shape::Plain => 0.15 * b,
         // A diamond already leaves room at its corners.
         Shape::Diamond => 0.25 * b,
         _ => pad,
     };
     let mut raw: Vec<(String, f64, bool)> = Vec::new();
-    for part in node.title.split('\n') {
+    for part in node.title.split('\n').filter(|_| !point) {
         for l in wrap(fonts, part, ts, true, wrap_w) {
             raw.push((l, ts, true));
         }
@@ -372,7 +378,10 @@ fn in_strip(g: &Graph, v: usize) -> bool {
 
 /// even_layers gives look-alike nodes in one layer the same length along the flow.
 fn even_layers(g: &Graph, dir: Dir, boxes: &mut [Boxed]) {
-    let layer = crate::layered::layering(g, dir).layer;
+    let layer = match g.settings.lanes {
+        true => crate::lanes::layer(g, dir),
+        false => crate::layered::layering(g, dir).layer,
+    };
     let n = boxes.len();
     let alike = |u: usize, v: usize| {
         let (a, c) = (&g.nodes[u], &g.nodes[v]);

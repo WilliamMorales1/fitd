@@ -79,9 +79,9 @@ Each row lists the figure type, the surveys (by number above) that name it, and 
 | Unit bar chart | 3, 4 | yes, small counts only | `std/grid` | `21-bar-chart` |
 | Commutative diagram | (math typology) | partial: square drawn as diamond | core | `22-commutative` |
 | Fishbone / Ishikawa | 1 | yes, as a tree into the effect | core | `23-fishbone` |
+| Swimlane activity | 6 | yes | core (lanes) | `24-swimlane` |
+| UML sequence | 5, 6 | yes, no activation bars or self-messages | `std/seq` | `25-sequence` |
 | Venn / Euler | 3, 4, 5 | **no** | planned | |
-| UML sequence | 5, 6 | **no** | planned | |
-| Swimlane activity | 6 | **no** | planned | |
 | Algorithm / pseudocode | 3, 4 | **no** | planned | |
 | UML use case | 6 | partial: no actor glyph | planned | |
 | Dependency arcs (NLP) | 4 | **no** | planned, low priority | |
@@ -122,17 +122,15 @@ Edges and edge styles take `head=` and `tail=` (`arrow|triangle|diamond|odiamond
 - `edge_heads_and_dashes_reach_svg_and_tikz` checks both outputs.
 - Left out: Graphviz `arrowhead=`/`style=` import.
 
-### 4. Lane layout: swimlanes and UML sequence diagrams
+### 4. Lane layout: swimlanes and UML sequence diagrams (done)
 
-Survey 6 ranks sequence diagrams second among UML types. Activity diagrams with swimlanes are common too. Both need nodes pinned to lanes, with order along the lane given by source order or by time.
+`layout lanes dir=down|right order=source` runs `lanes::plan` (src/lanes.rs) beside `layered::plan`. Each top-level group is a lane, then each loose node, in declaration order. Rows come from `layered::layering`, or with `order=source` from lane heads first and then one row per `align row` set in declaration order. A node alone in its lane and row sits on the lane center, and emit stretches the top-level frames to one extent along the flow.
 
-- Change: add `layout lanes dir=down|right`.
-  - Each `group` is a lane, and lanes sit side by side in declaration order.
-  - Inside a lane, nodes stack in flow order.
-  - Edges between lanes route straight across.
-  - Built as a new planner beside `layered::plan`, which can reuse its layering for rank (time) and assign the cross axis from lane membership.
-- A sequence diagram then sets every lane's head node as the participant and messages as edges with rank = statement order. A new `std/seq.fitd` gives `seq_actor`, `seq_msg(a, b, text)`, `seq_reply`, and draws the lifeline as a dashed frame of the lane.
-- Done when gallery files `24-swimlane` and `25-sequence` exist, messages keep source order, and lanes keep declaration order.
+- `lane=ID` on a node (src/sema.rs `lifelines`) hangs it on ID's lane and adds a dashed, headless edge from the previous node on that lane, which is the lifeline. E0007 rejects a node as its own lane and a head that is itself on a lane.
+- An empty `shape=none` node measures as a point, so messages meet the lifeline.
+- `std/seq` gives `seq_actor`, `seq_msg(step, a, b, text)`, and `seq_reply`; each message is two points and an `align row`.
+- `sequence_messages_keep_source_order`, `swimlanes_keep_declaration_order`, and `lane_rejects_itself_and_nested_heads` check it.
+- Left out: activation bars, self-messages, and lane-relative `group` frames inside a sequence.
 
 ### 5. Overlapping regions: Venn and Euler diagrams
 

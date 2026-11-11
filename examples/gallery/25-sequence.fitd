@@ -1,0 +1,14 @@
+# UML sequence diagram (Reggio et al., Nickerson: second UML type). Lanes keep message order.
+include "std/seq.fitd"
+layout lanes order=source
+page 4:3
+use seq_actor("user", "User")
+use seq_actor("app", "App")
+use seq_actor("api", "API")
+use seq_actor("db", "Database")
+use seq_msg("m1", "user", "app", "log in")
+use seq_msg("m2", "app", "api", "POST /session")
+use seq_msg("m3", "api", "db", "find user")
+use seq_reply("m4", "db", "api", "row")
+use seq_reply("m5", "api", "app", "token")
+use seq_reply("m6", "app", "user", "home page")

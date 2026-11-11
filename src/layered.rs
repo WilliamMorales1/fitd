@@ -127,7 +127,7 @@ fn order(n: usize, layer: &[usize], dag: &[(usize, usize)], source: bool) -> Vec
     rows
 }
 
-fn merged(g: &Graph, dir: Dir) -> Vec<usize> {
+pub(crate) fn merged(g: &Graph, dir: Dir) -> Vec<usize> {
     let side = match dir {
         Dir::Down => Side::Row,
         Dir::Right => Side::Column,

@@ -1,0 +1,28 @@
+# UML sequence diagrams. Use with `layout lanes order=source`; messages keep source order.
+# Each message takes a unique step id, which names the points it joins on the lifelines.
+style seq_actor color=#0072B2 shape=box
+style seq_point shape=none
+style seq_msg head=arrow
+style seq_reply head=arrow line=dashed
+
+# seq_actor(id, name): a participant heading its dashed lifeline.
+def seq_actor(id, name)
+node ${id} "${name}" .seq_actor
+end
+
+# seq_msg(step, a, b, text): a call from a to b, below every earlier message.
+def seq_msg(step, a, b, text)
+use seq_arrow(step, a, b, text, "seq_msg")
+end
+
+# seq_reply(step, a, b, text): a dashed return from a to b.
+def seq_reply(step, a, b, text)
+use seq_arrow(step, a, b, text, "seq_reply")
+end
+
+def seq_arrow(step, a, b, text, kind)
+node ${step}_from "" .seq_point lane=${a}
+node ${step}_to "" .seq_point lane=${b}
+${step}_from -> ${step}_to "${text}" .${kind}
+require align row(${step}_from, ${step}_to)
+end

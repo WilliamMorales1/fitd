@@ -15,7 +15,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0002",
-        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `key \"Label\" [.style] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
+        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `key \"Label\" [.style] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
     ),
     (
         "E0003",
@@ -35,7 +35,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0007",
-        "A constraint names the same node twice, or an alignment lists fewer than two nodes.",
+        "A constraint names the same node twice, an alignment lists fewer than two nodes, or `lane=` names the node itself or a node that is on a lane.",
     ),
     (
         "E0008",
