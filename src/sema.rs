@@ -804,12 +804,10 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     nest_groups(&mut constraints, &grouped, &s.nodes, &mut s.diags);
     s.diags.extend(contradictions(&constraints));
     for (v, n) in s.nodes.iter().enumerate().filter(|(_, n)| n.aside) {
-        let flows = edges
-            .iter()
-            .any(|e| {
-                let other = if e.a == v { e.b } else { e.a };
-                e.kind == EdgeKind::Tree && (e.a == v || e.b == v) && !s.nodes[other].aside
-            });
+        let flows = edges.iter().any(|e| {
+            let other = if e.a == v { e.b } else { e.a };
+            e.kind == EdgeKind::Tree && (e.a == v || e.b == v) && !s.nodes[other].aside
+        });
         let grouped = constraints
             .iter()
             .any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)));

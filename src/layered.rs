@@ -251,7 +251,11 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         .map(|r| r.iter().map(|&v| size(v).0).fold(0.0, f64::max))
         .collect();
     let mut room = vec![2.0 * b; rows.len()];
-    for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Tree && !side(e)) {
+    for e in g
+        .edges
+        .iter()
+        .filter(|e| e.kind == EdgeKind::Tree && !side(e))
+    {
         let (la, lb) = (layer[e.a].min(layer[e.b]), layer[e.a].max(layer[e.b]));
         if let (Some(l), true) = (&e.label, lb == la + 1) {
             let (w, h) = label_size(fonts, l, b);
@@ -481,7 +485,11 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         };
         edges.push(Drawn::new(e.a, e.b, style, 0.12, e.label.clone()));
     }
-    for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Tree && side(e)) {
+    for e in g
+        .edges
+        .iter()
+        .filter(|e| e.kind == EdgeKind::Tree && side(e))
+    {
         edges.push(Drawn::new(e.a, e.b, EdgeStyle::Arrow, 0.1, e.label.clone()));
     }
     for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Link) {

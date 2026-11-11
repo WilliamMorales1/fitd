@@ -781,7 +781,10 @@ pub(super) fn build<'a>(
         if routing && links.contains(&i) {
             let (a, b2) = (sc.routes[i].a, sc.routes[i].b);
             push(&mut sc, &[], &[i], Kind::LinkPage(i), 0);
-            let members = sc.routes[i].frame.as_ref().map_or(Vec::new(), |f| f.1.clone());
+            let members = sc.routes[i]
+                .frame
+                .as_ref()
+                .map_or(Vec::new(), |f| f.1.clone());
             for u in (0..n).filter(|&u| u != a && u != b2 && !members.contains(&u)) {
                 push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, 0.0), 40);
                 push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, CLEAR), 2);
