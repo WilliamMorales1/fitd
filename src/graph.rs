@@ -218,6 +218,8 @@ pub struct Settings {
     pub source_order: bool,
     /// Set by `layout lanes`: groups and lifelines become side-by-side lanes.
     pub lanes: bool,
+    /// Set by `layout venn`: groups become overlapping set circles.
+    pub venn: bool,
     pub margin: Option<f64>,
     pub key_size: Option<f64>,
     pub font: Option<(f64, f64)>,
@@ -240,6 +242,14 @@ pub struct KeyEntry {
     pub frame: bool,
 }
 
+/// VennSet is one circle of a `layout venn` diagram, made from a top-level group.
+pub struct VennSet {
+    pub items: Vec<usize>,
+    pub title: Option<String>,
+    pub color: Option<String>,
+    pub span: Span,
+}
+
 pub struct Graph {
     pub key: Vec<KeyEntry>,
     pub title: Option<String>,
@@ -247,5 +257,6 @@ pub struct Graph {
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,
     pub constraints: Vec<Constraint>,
+    pub sets: Vec<VennSet>,
     pub settings: Settings,
 }

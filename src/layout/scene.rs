@@ -515,9 +515,21 @@ pub(super) fn build<'a>(
     kind: LayoutKind,
     boxes: &[Boxed],
     rot: f64,
+    venn: Option<&crate::venn::Venn>,
 ) -> (Scene<'a>, Vec<Drawn>, (f64, f64, f64)) {
     let n = g.nodes.len();
+    // A carried-over spot from another font size may fall outside its venn region.
+    let fits = |v: usize, q: P| {
+        venn.is_none_or(|vn| {
+            vn.admits(
+                vn.mask[v],
+                &Rect::centered(q, boxes[v].w, boxes[v].h),
+                vn.margin,
+            )
+        })
+    };
     let plan = match kind {
+        _ if venn.is_some() => crate::venn::plan(g, venn.unwrap(), boxes, b),
         LayoutKind::Radial => radial::plan(g, t, boxes, cfg, b, rot),
         LayoutKind::Layered(dir) if g.settings.lanes => {
             crate::lanes::plan(g, fonts, boxes, cfg, b, dir)
@@ -527,7 +539,9 @@ pub(super) fn build<'a>(
     let mut plan = plan;
     if let Some(a) = cfg.anchor {
         for (v, c) in plan.cands.iter_mut().enumerate() {
-            if let Some(q) = a.pos[v] {
+            if let Some(q) = a.pos[v]
+                && fits(v, q)
+            {
                 c.insert(
                     0,
                     Cand {
@@ -541,6 +555,9 @@ pub(super) fn build<'a>(
     }
     if let Users::Shrunk(prev) | Users::All(prev) | Users::Routes(prev) = users {
         for (v, c) in plan.cands.iter_mut().enumerate() {
+            if matches!(users, Users::Shrunk(_)) && !fits(v, prev.pos[v]) {
+                continue;
+            }
             c.insert(
                 0,
                 Cand {
@@ -938,6 +955,7 @@ mod tests {
             nodes: vec![],
             edges: vec![],
             constraints: vec![],
+            sets: vec![],
             settings: Settings::default(),
         };
         let (mut sat, mut unsat, mut jumps) = (0, 0, 0);

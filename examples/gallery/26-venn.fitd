@@ -1,0 +1,6 @@
+# Venn diagram of two sets (concept overlap, comparisons).
+include "std/venn.fitd"
+layout venn
+page 4:3
+font 9pt..28pt
+use venn_two("Supervised", "Unsupervised", "regression; classification", "semi-supervised; self-training", "clustering; dimension reduction")

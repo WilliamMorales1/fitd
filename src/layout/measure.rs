@@ -94,7 +94,10 @@ pub fn measure(
     };
     let node = &g.nodes[v];
     let wrap_w = node.wrap_em.map_or(wrap_w, |em| em * b);
-    let shape = node.shape.unwrap_or(shape);
+    let shape = match g.settings.venn {
+        true => node.shape.unwrap_or(Shape::Plain),
+        false => node.shape.unwrap_or(shape),
+    };
     // A frameless node has no border to clear, so it keeps only enough padding to breathe.
     // An empty frameless node is a point, such as a message end on a lifeline.
     let point = shape == Shape::Plain

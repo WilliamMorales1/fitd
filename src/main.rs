@@ -29,6 +29,7 @@ mod split;
 mod stdlib;
 mod theme;
 mod tree;
+mod venn;
 
 use diag::{Diag, Level};
 use error::FitdResult;

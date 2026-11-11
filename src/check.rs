@@ -15,7 +15,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0002",
-        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `key \"Label\" [.style] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
+        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes|venn`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `key \"Label\" [.style] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
     ),
     (
         "E0003",
@@ -47,7 +47,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0010",
-        "Two `group` statements share some nodes, but neither holds every node of the other, or both list the same nodes. Groups may nest: a group whose nodes all belong to a larger group is framed inside it. Partial overlap cannot be drawn with rectangles, since each frame must hold its own members and nothing else.",
+        "Two `group` statements share some nodes, but neither holds every node of the other, or both list the same nodes. Groups may nest: a group whose nodes all belong to a larger group is framed inside it. Partial overlap cannot be drawn with rectangles, since each frame must hold its own members and nothing else; use `layout venn` for overlapping sets. A venn diagram takes at most three sets.",
     ),
     (
         "E0011",
@@ -84,7 +84,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0108",
-        "The finished layout breaks a `require` constraint or a `group` (its frame leaves the page, holds a node that is not a member, or meets another frame). The solver should never produce this; it indicates a solver bug.",
+        "The finished layout breaks a `require` constraint, a `group` (its frame leaves the page, holds a node that is not a member, or meets another frame), or a venn region. The solver should never produce this; it indicates a solver bug.",
     ),
     (
         "E0109",
@@ -390,6 +390,16 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
                     .primary(c.span, "this frame")
                     .secondary(g.constraints[cj].span, "meets this one"),
             );
+        }
+    }
+    if let Some(v) = &lay.venn {
+        for u in (0..n).filter(|&u| !v.admits(v.mask[u], &rect(u), -lay.tol)) {
+            let mut x = Diag::error("E0108", format!("{} sits outside its venn region", id(u)))
+                .primary(g.nodes[u].span, "violated by the layout");
+            if let Some(s) = g.sets.iter().find(|s| s.items.contains(&u)) {
+                x = x.secondary(s.span, "member of this set");
+            }
+            d.push(x);
         }
     }
     for c in &g.constraints {

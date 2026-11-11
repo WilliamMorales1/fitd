@@ -187,7 +187,7 @@ canvas -- shape tail=diamond line=dotted
 
 ### Groups
 
-`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010. A `.class` after the members sets the frame color from that style, so a group, its nodes, and its `key` entry can share one style.
+`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn`. A `.class` after the members sets the frame color from that style, so a group, its nodes, and its `key` entry can share one style.
 
 `times=N` (2 to 99) marks the framed subgraph as repeated N times: the frame is drawn dashed and `Nx` is prefixed to its title, which is the conventional notation for a repeated stack of layers. A value outside the range, or a non-numeric one, produces E0006.
 
@@ -206,7 +206,7 @@ key "Principal" shape=circle fill=#FFFFFF color=#222222
 
 ### Layout selection
 
-`layout NAME` selects layout algorithm and accepts layout-specific attributes. Supported algorithms are `radial`, `layered`, and `lanes`. Radial layouts use `root=ID`; layered layouts accept `dir=down` or `dir=right`, `bands=N`, and `order=source`. By default a layered layout reorders nodes within a layer to cut edge crossings; `order=source` instead keeps roots in declaration order and children in the order of their incoming edges, which org charts, syntax trees, and fishbones need.
+`layout NAME` selects layout algorithm and accepts layout-specific attributes. Supported algorithms are `radial`, `layered`, `lanes`, and `venn`. Radial layouts use `root=ID`; layered layouts accept `dir=down` or `dir=right`, `bands=N`, and `order=source`. By default a layered layout reorders nodes within a layer to cut edge crossings; `order=source` instead keeps roots in declaration order and children in the order of their incoming edges, which org charts, syntax trees, and fishbones need.
 
 `layout lanes` draws swimlanes and sequence diagrams. It takes `dir` and `order` like `layered`. Each top-level group is a lane, and lanes sit side by side in declaration order with frames that span the whole flow. Nodes stack along their lane in flow order, and edges cross between lanes. A node with `lane=ID` hangs on a dashed lifeline below ID, after the earlier nodes on that lane; ID heads the lane and its lane nodes share it. An empty `shape=none` node draws as a point on the lifeline. With `order=source`, heads take the first row and each later row holds one `align row` set, in declaration order, so messages keep source order:
 
@@ -222,6 +222,19 @@ require align row(c1, s1)
 ```
 
 `std/seq.fitd` wraps this as `seq_actor`, `seq_msg`, and `seq_reply`.
+
+`layout venn` draws a Venn diagram. It takes no attributes. Each group is a set circle, drawn in its `.class` color or the next palette color with its title outside the circle. Groups may share nodes in any way, and every node sits in the region of exactly the sets that list it; a node in no group sits outside all circles. Nodes default to `shape=none`. Two sets sit side by side and three sit in a triangle, with the overlap sized for the most crowded region. A fourth set gives E0010:
+
+```fitd
+layout venn
+node py "Python"
+node both "garbage collected"
+node go "Go"
+group "Scripting" py, both
+group "Compiled" go, both
+```
+
+`std/venn.fitd` wraps this as `venn_two` and `venn_three`, which take each region's items as one `;`-separated string.
 
 ### Page and font settings
 
@@ -287,6 +300,7 @@ A path beginning with `std/` names a module of the bundled library instead of a 
 | `std/tree.fitd` | Syntax trees, decision trees, org charts: `tree_cat`, `tree_word`, `tree_q`, `tree_leaf`, `tree_unit`, `tree_kids` |
 | `std/time.fitd` | Timelines: `time_event`, `time_mile`, `time_chain` |
 | `std/seq.fitd` | UML sequence diagrams for `layout lanes`: `seq_actor`, `seq_msg`, `seq_reply` (dashed) |
+| `std/venn.fitd` | Venn diagrams for `layout venn`: `venn_two`, `venn_three`, `venn_items`, `venn_set`, set styles `venn_a`..`venn_c` |
 | `std/model.fitd` | Research models: `model_iv`, `model_dv`, `model_med`, `model_mod`, `model_ctl`, `model_hyp`, `model_key()` |
 
 [examples/gallery](../examples/gallery/) has one diagram per common academic figure type, each built on these modules.

@@ -2036,3 +2036,64 @@ fn lane_rejects_itself_and_nested_heads() {
         assert!(!ok && log.contains("E0007") && log.contains(want), "{log}");
     }
 }
+
+#[test]
+fn venn_items_land_in_their_regions() {
+    let svg = build_svg(
+        "venn-regions",
+        "layout venn\npage 1:1\nnode a \"Qa\"\nnode b \"Qb\"\nnode c \"Qc\"\nnode ab \"Qab\"\n\
+         node ac \"Qac\"\nnode bc \"Qbc\"\nnode abc \"Qabc\"\nnode none \"Qnone\"\n\
+         group \"A\" a, ab, ac, abc\ngroup \"B\" b, ab, bc, abc\ngroup \"C\" c, ac, bc, abc\n",
+    );
+    let circles: Vec<(f64, f64, f64)> = svg
+        .split("<circle ")
+        .skip(1)
+        .map(|r| {
+            let tag = &r[..r.find('>').unwrap()];
+            let f = |k: &str| -> f64 {
+                let i = tag.find(&format!("{k}=\"")).unwrap() + k.len() + 2;
+                tag[i..i + tag[i..].find('"').unwrap()].parse().unwrap()
+            };
+            (f("cx"), f("cy"), f("r"))
+        })
+        .collect();
+    assert_eq!(circles.len(), 3, "{svg}");
+    for (word, sets) in [
+        ("Qa", "a"),
+        ("Qb", "b"),
+        ("Qc", "c"),
+        ("Qab", "ab"),
+        ("Qac", "ac"),
+        ("Qbc", "bc"),
+        ("Qabc", "abc"),
+        ("Qnone", ""),
+    ] {
+        let (x, y) = text_at(&svg, word);
+        let inside: String = circles
+            .iter()
+            .zip(["a", "b", "c"])
+            .filter(|((cx, cy, r), _)| (x - cx).hypot(y - cy) < *r)
+            .map(|(_, s)| s)
+            .collect();
+        assert_eq!(inside, sets, "{word} at ({x}, {y})");
+    }
+}
+
+#[test]
+fn venn_rejects_a_fourth_set() {
+    let src = tmp("venn-four.fitd");
+    std::fs::write(
+        &src,
+        "layout venn\nnode a\nnode b\nnode c\nnode d\ngroup a\ngroup b\ngroup c\ngroup d\n",
+    )
+    .unwrap();
+    let (ok, log) = fitd(&[
+        src.to_str().unwrap(),
+        "-o",
+        tmp("venn-four.svg").to_str().unwrap(),
+    ]);
+    assert!(
+        !ok && log.contains("E0010") && log.contains("at most three"),
+        "{log}"
+    );
+}

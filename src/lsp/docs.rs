@@ -417,6 +417,11 @@ pub const WORDS: &[(&str, &str, &str)] = &[
     ),
     (
         "layout",
+        "venn",
+        "Venn diagram: each group is a set circle (at most three), and nodes sit in the region of their sets.",
+    ),
+    (
+        "layout",
         "radial",
         "Radial layout for mind maps around `root=ID`.",
     ),

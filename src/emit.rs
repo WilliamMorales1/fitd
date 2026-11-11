@@ -300,6 +300,19 @@ fn stretch_lanes(rels: &[&Relation], out: &mut [Group], dir: Dir) {
     }
 }
 
+/// venn_colors gives each set circle its own color, or the palette's in turn.
+fn venn_colors(g: &Graph, lay: &Layout, th: &Theme) -> Vec<String> {
+    let n = lay.venn.as_ref().map_or(0, |v| v.circles.len());
+    (0..n)
+        .map(|i| {
+            g.sets
+                .get(i)
+                .and_then(|s| s.color.clone())
+                .unwrap_or_else(|| th.palette[i % th.palette.len()].clone())
+        })
+        .collect()
+}
+
 pub fn bounds(g: &Graph, lay: &Layout) -> Rect {
     let mut r = Rect {
         x0: f64::MAX,
@@ -328,6 +341,14 @@ pub fn bounds(g: &Graph, lay: &Layout) -> Rect {
     }
     for f in groups(g, lay) {
         add(f.rect);
+    }
+    if let Some(v) = &lay.venn {
+        for c in &v.circles {
+            add(Rect::centered(c.c, 2.0 * c.r, 2.0 * c.r));
+        }
+        for t in v.titles.iter().flatten() {
+            add(t.rect);
+        }
     }
     r
 }
@@ -564,6 +585,30 @@ pub fn svg(
                 xml(&fonts.regular[0].family),
                 f.color.unwrap_or(&th.label),
                 xml(t)
+            );
+        }
+    }
+    if let Some(v) = &lay.venn {
+        let colors = venn_colors(g, lay, th);
+        for (c, col) in v.circles.iter().zip(&colors) {
+            let (x, y) = tx(c.c);
+            let _ = writeln!(
+                o,
+                r#"<circle cx="{x:.1}" cy="{y:.1}" r="{:.1}" fill="{col}" fill-opacity="{:.2}" stroke="{col}" stroke-width="{:.2}"/>"#,
+                c.r,
+                th.tint,
+                0.12 * b
+            );
+        }
+        for (t, col) in v.titles.iter().zip(&colors) {
+            let Some(t) = t else { continue };
+            let (x, y) = tx((t.at.0, t.at.1 - 0.35 * t.size));
+            let _ = writeln!(
+                o,
+                r#"<text x="{x:.1}" y="{y:.1}" font-size="{:.2}" font-family="{}" font-weight="bold" text-anchor="middle" fill="{col}">{}</text>"#,
+                t.size,
+                xml(&fonts.regular[0].family),
+                xml(&t.text)
             );
         }
     }
@@ -933,6 +978,7 @@ pub fn tikz(
         .filter_map(|e| stroke(g, e))
         .chain(frames.iter().filter_map(|f| f.color))
         .collect();
+    let venn = venn_colors(g, lay, th);
     let used = [&th.background, &th.text, &th.edge, &th.link, &th.label]
         .into_iter()
         .map(String::as_str)
@@ -942,6 +988,7 @@ pub fn tikz(
                 .flat_map(|p| [p.accent.as_str(), p.fill.as_str(), p.text.as_str()]),
         )
         .chain(extra)
+        .chain(venn.iter().map(String::as_str))
         .chain(th.gradient.as_deref())
         .chain(
             g.key
@@ -1009,6 +1056,32 @@ pub fn tikz(
                 r.y1 - (TITLE_BAND / 2.0 + 0.3) * b,
                 tex(t),
                 s = TITLE_SIZE * b
+            );
+        }
+    }
+    if let Some(v) = &lay.venn {
+        for (c, col) in v.circles.iter().zip(&venn) {
+            let _ = writeln!(
+                o,
+                "\\filldraw[fill={k}, fill opacity={:.2}, draw={k}, line width={:.2}bp] ({:.1},{:.1}) circle ({:.1}bp);",
+                th.tint,
+                0.12 * b,
+                c.c.0,
+                c.c.1,
+                c.r,
+                k = cname(col)
+            );
+        }
+        for (t, col) in v.titles.iter().zip(&venn) {
+            let Some(t) = t else { continue };
+            let _ = writeln!(
+                o,
+                "\\node[inner sep=0bp, text={}] at ({:.1},{:.1}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont\\bfseries {}}};",
+                cname(col),
+                t.at.0,
+                t.at.1,
+                tex(&t.text),
+                s = t.size
             );
         }
     }

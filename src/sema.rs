@@ -2,7 +2,7 @@ use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
 use crate::graph::{
     Cell, Constraint, Dash, Dir, Edge, EdgeKind, Graph, Head, KeyEntry, LayoutKind, Length, Node,
-    Place, Relation, Settings, Shape, Side,
+    Place, Relation, Settings, Shape, Side, VennSet,
 };
 use crate::theme::{self, Overrides, Theme};
 use std::collections::HashMap;
@@ -589,25 +589,30 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 let allowed: &[&str] = match kind.text.as_str() {
                     "radial" => {
                         set.layout = Some(LayoutKind::Radial);
-                        set.lanes = false;
+                        (set.lanes, set.venn) = (false, false);
                         &["root"]
                     }
                     "layered" => {
                         set.layout = Some(LayoutKind::Layered(Dir::Down));
-                        set.lanes = false;
+                        (set.lanes, set.venn) = (false, false);
                         &["dir", "bands", "order"]
                     }
                     "lanes" => {
                         set.layout = Some(LayoutKind::Layered(Dir::Down));
-                        set.lanes = true;
+                        (set.lanes, set.venn) = (true, false);
                         &["dir", "order"]
+                    }
+                    "venn" => {
+                        set.layout = Some(LayoutKind::Layered(Dir::Down));
+                        (set.lanes, set.venn) = (false, true);
+                        &[]
                     }
                     _ => {
                         s.diags.push(unknown(
                             "E0009",
                             "layout",
                             kind,
-                            &["radial", "layered", "lanes"],
+                            &["radial", "layered", "lanes", "venn"],
                         ));
                         &[]
                     }
@@ -949,7 +954,13 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
         );
     }
     lifelines(&s.nodes, &mut edges, &mut s.diags);
-    nest_groups(&mut constraints, &grouped, &s.nodes, &mut s.diags);
+    let sets = match set.venn {
+        true => venn_sets(&mut constraints, &mut s.diags),
+        false => {
+            nest_groups(&mut constraints, &grouped, &s.nodes, &mut s.diags);
+            Vec::new()
+        }
+    };
     s.diags.extend(contradictions(&constraints));
     for (v, n) in s.nodes.iter().enumerate().filter(|(_, n)| n.aside) {
         let flows = edges.iter().any(|e| {
@@ -985,9 +996,42 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
         nodes: s.nodes,
         edges,
         constraints,
+        sets,
         settings: set,
     };
     (g, s.diags)
+}
+
+/// venn_sets moves every group into a set circle, where members may overlap freely.
+fn venn_sets(constraints: &mut Vec<Constraint>, diags: &mut Vec<Diag>) -> Vec<VennSet> {
+    let mut sets = Vec::new();
+    constraints.retain(|c| {
+        let Relation::Group {
+            items,
+            title,
+            color,
+            ..
+        } = &c.rel
+        else {
+            return true;
+        };
+        if sets.len() == 3 {
+            diags.push(
+                Diag::error("E0010", "a venn diagram takes at most three sets")
+                    .primary(c.span, "fourth set")
+                    .help("four or more circles cannot show every overlap; split the figure"),
+            );
+        } else {
+            sets.push(VennSet {
+                items: items.clone(),
+                title: title.clone(),
+                color: color.clone(),
+                span: c.span,
+            });
+        }
+        false
+    });
+    sets
 }
 
 fn nest_groups(

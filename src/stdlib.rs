@@ -13,6 +13,7 @@ pub const MODULES: &[(&str, &str)] = &[
     ("time", include_str!("std/time.fitd")),
     ("model", include_str!("std/model.fitd")),
     ("seq", include_str!("std/seq.fitd")),
+    ("venn", include_str!("std/venn.fitd")),
 ];
 
 /// get returns the source of a `std/...` include target.

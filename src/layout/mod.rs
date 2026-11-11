@@ -183,6 +183,8 @@ pub struct Layout {
     pub rot: f64,
     pub tradeoff: Vec<(f64, f64)>,
     pub stats: Stats,
+    /// Set for `layout venn`: the circles the nodes sit in.
+    pub venn: Option<crate::venn::Venn>,
 }
 
 impl Layout {
@@ -302,6 +304,10 @@ fn attempt(
     let kind = g.settings.layout.unwrap_or(LayoutKind::Radial);
     let n = g.nodes.len();
     let boxes = measure_all(g, t, fonts, cfg, b);
+    let venn = g
+        .settings
+        .venn
+        .then(|| crate::venn::shape(g, fonts, &boxes, cfg.page(), b));
     let rots = match (kind, users) {
         (_, Users::All(prev) | Users::Routes(prev) | Users::Shrunk(prev)) => vec![prev.rot],
         (LayoutKind::Radial, Users::Hard(_) | Users::Wanted) => match cfg.anchor {
@@ -316,13 +322,13 @@ fn attempt(
     let routing = matches!(users, Users::Routes(_));
     let stop: Vec<AtomicBool> = rots.iter().map(|_| AtomicBool::new(false)).collect();
     let (built, runs): (Vec<_>, Vec<(Outcome, u64, csp::Stats)>) = std::thread::scope(|s| {
-        let (stop, boxes) = (&stop, &boxes);
+        let (stop, boxes, venn) = (&stop, &boxes, venn.as_ref());
         let handles: Vec<_> = rots
             .iter()
             .enumerate()
             .map(|(i, &rot)| {
                 s.spawn(move || {
-                    let built = build(g, t, fonts, cfg, b, users, kind, boxes, rot);
+                    let built = build(g, t, fonts, cfg, b, users, kind, boxes, rot, venn);
                     let run = if optimizing || routing {
                         csp::optimize(&built.0, cfg.opt_budget, &stop[i])
                     } else {
@@ -423,6 +429,7 @@ fn attempt(
         rot: rots[win],
         tradeoff: Vec::new(),
         stats: *stats,
+        venn,
     })
 }
 

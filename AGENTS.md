@@ -81,7 +81,8 @@ Each row lists the figure type, the surveys (by number above) that name it, and 
 | Fishbone / Ishikawa | 1 | yes, as a tree into the effect | core | `23-fishbone` |
 | Swimlane activity | 6 | yes | core (lanes) | `24-swimlane` |
 | UML sequence | 5, 6 | yes, no activation bars or self-messages | `std/seq` | `25-sequence` |
-| Venn / Euler | 3, 4, 5 | **no** | planned | |
+| Venn | 3, 4, 5 | yes, up to three sets | `std/venn` | `26-venn`, `27-venn-three` |
+| Euler | 3, 4, 5 | **no** | planned | |
 | Algorithm / pseudocode | 3, 4 | **no** | planned | |
 | UML use case | 6 | partial: no actor glyph | planned | |
 | Dependency arcs (NLP) | 4 | **no** | planned, low priority | |
@@ -132,17 +133,13 @@ Edges and edge styles take `head=` and `tail=` (`arrow|triangle|diamond|odiamond
 - `sequence_messages_keep_source_order`, `swimlanes_keep_declaration_order`, and `lane_rejects_itself_and_nested_heads` check it.
 - Left out: activation bars, self-messages, and lane-relative `group` frames inside a sequence.
 
-### 5. Overlapping regions: Venn and Euler diagrams
+### 5. Overlapping regions: Venn diagrams (done)
 
-Venn diagrams appear in surveys 3, 4, and 5. Groups cannot overlap today (E0010, src/sema.rs:902).
+`layout venn` (src/venn.rs) turns every group into a set circle, so groups may overlap, and E0010 now only rejects a fourth set. `venn::shape` places one, two, or three circles by closed form, tries four center spreads, and keeps the one with the most room in the most crowded region. Titles sit outside the circles and count as obstacles. `venn::plan` offers each node grid spots inside exactly its sets' circles and outside the rest, nearest the region's middle first. The geometry is stored on `Layout`, so SVG and TikZ draw the circles and `check` gives E0108 for a node outside its region. Nodes default to `shape=none`.
 
-- Change: add `venn A, B [, C]` blocks.
-  - Each set is a circle placed by a closed form: two or three circles at fixed offsets.
-  - Node membership (`a in A, B`) assigns a node to a region.
-  - The solver only places region members inside their region cell, with the cells precomputed as polygons.
-  - Four or more sets are out of scope (unreadable).
-- `std/venn.fitd` is then thin: styles for the region fills.
-- Done when a gallery Venn of 2 and 3 sets places items in the right regions and passes `check`.
+- `std/venn` gives `venn_two` and `venn_three`, which take each region's items as one string. Gallery 26 and 27 use them.
+- `venn_items_land_in_their_regions` and `venn_rejects_a_fourth_set` check it.
+- Left out: Euler diagrams (disjoint or nested sets drawn apart or inside) and area-proportional circles.
 
 ### 6. Preformatted bodies: algorithm and pseudocode blocks
 

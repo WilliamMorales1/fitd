@@ -1,0 +1,6 @@
+# Venn diagram of three sets, every overlap labelled (skills, feature comparisons).
+include "std/venn.fitd"
+layout venn
+page 1:1
+font 9pt..28pt
+use venn_three("Statistics", "Programming", "Domain", "inference", "systems", "fieldwork", "data science", "research", "tooling", "applied ML")
