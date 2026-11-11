@@ -1,0 +1,44 @@
+# Research models: constructs and the hypotheses between them. Pair with `layout layered dir=right`.
+style model_iv color=#0072B2 shape=box
+style model_dv color=#009E73 shape=box
+style model_med color=#56B4E9 shape=box
+style model_mod color=#E69F00 shape=box
+style model_ctl color=#888888 shape=box
+
+# model_iv(id, name): an independent variable.
+def model_iv(id, name)
+node ${id} "${name}" .model_iv
+end
+
+# model_dv(id, name): a dependent variable.
+def model_dv(id, name)
+node ${id} "${name}" .model_dv
+end
+
+# model_med(id, name): a mediator.
+def model_med(id, name)
+node ${id} "${name}" .model_med
+end
+
+# model_mod(id, name): a moderator; point it at the path it changes with model_hyp.
+def model_mod(id, name)
+node ${id} "${name}" .model_mod
+end
+
+# model_ctl(id, name): a control variable.
+def model_ctl(id, name)
+node ${id} "${name}" .model_ctl
+end
+
+# model_hyp(a, b, n, sign): hypothesis Hn that a affects b; sign is "+", "-", or "".
+def model_hyp(a, b, n, sign)
+${a} -> ${b} "H${n}${sign}"
+end
+
+# model_key(): a legend for the variable roles.
+def model_key()
+key "independent" color=#0072B2
+key "mediator" color=#56B4E9
+key "moderator" color=#E69F00
+key "dependent" color=#009E73
+end

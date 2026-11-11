@@ -1,0 +1,14 @@
+# Decision tree (ML papers, clinical guidelines).
+include "std/tree.fitd"
+layout layered
+page 4:3
+font 9pt..28pt
+use tree_q("out", "Outlook?")
+use tree_q("hum", "Humidity?")
+use tree_leaf("y1", "Play")
+use tree_leaf("n1", "Stay in")
+use tree_leaf("y2", "Play")
+out -> hum "sunny"
+out -> y2 "overcast"
+hum -> n1 "high"
+hum -> y1 "normal"

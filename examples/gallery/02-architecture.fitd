@@ -1,0 +1,17 @@
+# Architecture / block diagram (Nickerson: 212 of 983, the largest genre; DocFigure block diagram).
+include "std/arch.fitd"
+layout layered dir=right
+page 16:9
+font 9pt..28pt
+use arch_client("web", "Web app")
+use arch_service("api", "API")
+use arch_service("work", "Worker")
+use arch_queue("q", "Jobs")
+use arch_store("db", "Postgres")
+use arch_ext("pay", "Stripe")
+web -> api -> q -> work
+api -> db
+work -> db
+work -> pay
+group "Cloud" api, q, work, db .arch_zone
+use arch_key()

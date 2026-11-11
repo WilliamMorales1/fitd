@@ -1,0 +1,15 @@
+# UML state machine (Reggio et al.: state machine among the core UML diagrams).
+include "std/uml.fitd"
+layout layered dir=right
+page 3:1
+font 9pt..28pt
+use uml_start("s0")
+use uml_state("idle", "Idle", "")
+use uml_state("run", "Running", "do: tick")
+use uml_state("done", "Done", "")
+use uml_final("s1")
+s0 -> idle
+idle -> run "start"
+run -> done "finish"
+done -> s1
+run ..> idle "pause"

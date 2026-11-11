@@ -1371,6 +1371,28 @@ fn committed_docs_match_a_fresh_build() {
 }
 
 #[test]
+fn gallery_and_every_std_module_compile_cleanly() {
+    for src in glob("examples/gallery/*.fitd") {
+        let fresh = tmp(&src.replace('/', "-").replace(".fitd", ".svg"));
+        let (ok, log) = fitd(&[&src, "-o", fresh.to_str().unwrap()]);
+        assert!(ok && !log.contains("warning["), "{src}\n{log}");
+    }
+    for path in glob("src/std/*.fitd") {
+        let module = path.trim_start_matches("src/");
+        let name = module.replace('/', "-");
+        let input = tmp(&name);
+        std::fs::write(
+            &input,
+            format!("include \"{module}\"\nnode a\nnode b\na -> b\n"),
+        )
+        .unwrap();
+        let out = tmp(&name.replace(".fitd", ".svg"));
+        let (ok, log) = fitd(&[input.to_str().unwrap(), "-o", out.to_str().unwrap()]);
+        assert!(ok && !log.contains("warning["), "{module}\n{log}");
+    }
+}
+
+#[test]
 fn several_inputs_make_one_pdf() {
     let pdf = tmp("book.pdf");
     let (ok, log) = fitd(&[

@@ -1,0 +1,6 @@
+# 2x2 matrix such as SWOT (business, strategy).
+include "std/grid.fitd"
+page 1:1
+font 9pt..28pt
+node swot "SWOT" .grid
+use grid_quad("Strengths", "Weaknesses", "Opportunities", "Threats")

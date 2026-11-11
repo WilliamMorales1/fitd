@@ -1,0 +1,13 @@
+# UML class diagram (Reggio et al.: most used UML diagram; Nickerson: most common UML type).
+include "std/uml.fitd"
+layout layered
+page 4:3
+font 9pt..28pt
+use uml_iface("shape", "Shape", "area(): float")
+use uml_class("circle", "Circle", "r: float")
+use uml_class("rect", "Rect", "w: float; h: float")
+use uml_class("canvas", "Canvas", "draw()")
+use uml_is("circle", "shape")
+use uml_is("rect", "shape")
+use uml_has("canvas", "shape", "0..*")
+use uml_key()

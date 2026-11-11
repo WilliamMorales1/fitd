@@ -1,0 +1,11 @@
+# Neural-network architecture (ACL-Fig: neural networks, architecture diagram).
+include "std/nn.fitd"
+layout layered
+page 3:4
+font 9pt..28pt
+use nn_input("x", "Tokens", "B x L")
+use nn_layer("emb", "Embedding", "d 512", 1)
+use nn_layer("enc", "Encoder", "d 512", 6)
+use nn_step("pool", "Mean pool")
+use nn_out("y", "Classes", "B x 4")
+x -> emb -> enc -> pool -> y

@@ -1,0 +1,13 @@
+# Commutative diagram (mathematics). Layered draws the square as a diamond.
+layout layered
+page 1:1
+font 9pt..28pt
+style obj shape=none
+node a "A" .obj
+node b "B" .obj
+node c "C" .obj
+node d "D" .obj
+a -> b "f"
+a -> c "g"
+b -> d "h"
+c -> d "k"

@@ -1,0 +1,9 @@
+# Results table (DocFigure, ACL-Fig: tables).
+include "std/grid.fitd"
+page 4:3
+font 9pt..28pt
+node t "Accuracy on GLUE" .grid
+use grid_title_row("Model; MNLI; SST-2")
+use grid_row("BERT; 84.6; 93.5")
+use grid_row("RoBERTa; 87.6; 94.8")
+use grid_row("Ours; 88.1; 95.0")

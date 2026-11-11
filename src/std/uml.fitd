@@ -1,0 +1,65 @@
+# UML class and state diagrams. Relations are told apart by colour; uml_key() names them.
+# Member and action lists split on `;`: "id: int; name: str; save()".
+style uml_class color=#0072B2 shape=box
+style uml_iface color=#56B4E9 shape=box
+style uml_state color=#009E73 shape=box
+style uml_mark color=#222222 fill=#222222 text=#FFFFFF shape=circle
+style uml_is color=#D55E00
+style uml_has color=#0072B2
+style uml_uses color=#888888
+
+# uml_class(id, name, members): a class box listing its members.
+def uml_class(id, name, members)
+node ${id} "${name}" .uml_class
+use uml_lines(members)
+end
+
+# uml_iface(id, name, members): an interface, titled with its stereotype.
+def uml_iface(id, name, members)
+node ${id} "«interface» ${name}" .uml_iface
+use uml_lines(members)
+end
+
+# uml_state(id, name, actions): a state listing its entry, do, and exit actions.
+def uml_state(id, name, actions)
+node ${id} "${name}" .uml_state
+use uml_lines(actions)
+end
+
+# uml_start(id): the initial pseudostate.
+def uml_start(id)
+node ${id} "start" .uml_mark
+end
+
+# uml_final(id): the final state.
+def uml_final(id)
+node ${id} "end" .uml_mark
+end
+
+# uml_is(a, b): a inherits from or implements b.
+def uml_is(a, b)
+${a} -> ${b} .uml_is
+end
+
+# uml_has(a, b, mult): an association with its multiplicity, such as "1..*".
+def uml_has(a, b, mult)
+${a} -- ${b} "${mult}" .uml_has
+end
+
+# uml_uses(a, b): a depends on b.
+def uml_uses(a, b)
+${a} ..> ${b} .uml_uses
+end
+
+# uml_key(): a legend for the three relation colours.
+def uml_key()
+key "inherits" line=solid color=#D55E00
+key "association" line=solid color=#0072B2
+key "depends on" line=dashed color=#888888
+end
+
+def uml_lines(items)
+for i in 1..count(items, ";")
+| ${part(items, ";", i)}
+end
+end

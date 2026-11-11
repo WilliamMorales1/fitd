@@ -1,0 +1,13 @@
+# Data-flow diagram (Nickerson: flow, 80 of 983).
+include "std/arch.fitd"
+layout layered dir=right
+page 3:1
+font 9pt..28pt
+use arch_ext("sensor", "Sensors")
+use arch_service("clean", "Clean")
+use arch_service("feat", "Featurize")
+use arch_store("lake", "Data lake")
+use arch_service("train", "Train")
+use arch_client("dash", "Dashboard")
+sensor -> clean "raw" -> lake -> feat -> train
+train -> dash "metrics"

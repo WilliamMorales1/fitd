@@ -1,0 +1,10 @@
+# Stage cycle (Nickerson: research or method stages drawn as cycles). A back link closes the loop.
+layout layered dir=right
+page 2:1
+font 9pt..28pt
+node p "Plan"
+node d "Do"
+node c "Check"
+node a "Act"
+p -> d -> c -> a
+a ..> p "repeat"

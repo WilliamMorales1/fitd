@@ -1,0 +1,12 @@
+# Entity-relationship diagram (Nickerson: ERD, static structure).
+include "std/er.fitd"
+layout layered dir=right
+page 3:1
+font 9pt..28pt
+use er_entity("cust", "Customer", "PK id; name")
+use er_entity("ord", "Order", "PK id; FK customer; date")
+use er_weak("line", "Line item", "FK order; qty")
+use er_entity("prod", "Product", "PK sku; price")
+use er_rel("cust", "ord", "1:N")
+use er_rel("ord", "line", "1:N")
+use er_rel("line", "prod", "N:1")

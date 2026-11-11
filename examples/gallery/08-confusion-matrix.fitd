@@ -1,0 +1,9 @@
+# Confusion matrix / heat map (DocFigure: confusion matrix, heat map; ACL-Fig: confusion matrix).
+include "std/grid.fitd"
+page 1:1
+font 9pt..28pt
+node cm "Predicted vs true" .grid
+use grid_head("cat; dog; fox")
+use grid_heat("cat", "90 6 4")
+use grid_heat("dog", "8 85 7")
+use grid_heat("fox", "3 12 85")

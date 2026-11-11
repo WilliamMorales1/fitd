@@ -1,0 +1,12 @@
+# Tree / hierarchy, here an org chart (DocFigure tree diagram; ACL-Fig trees).
+include "std/tree.fitd"
+layout layered
+page 16:9
+font 9pt..28pt
+use tree_unit("ceo", "Ada", "CEO")
+use tree_unit("cto", "Lin", "CTO")
+use tree_unit("cfo", "Sam", "CFO")
+use tree_unit("web", "Web team", "6 people")
+use tree_unit("ml", "ML team", "4 people")
+use tree_kids("ceo", "cto; cfo")
+use tree_kids("cto", "web; ml")

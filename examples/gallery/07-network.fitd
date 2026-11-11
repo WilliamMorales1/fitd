@@ -1,0 +1,13 @@
+# Network graph (Lohse et al.: networks; ACL-Fig: graph). Radial layout, no library needed.
+page 1:1
+font 9pt..28pt
+node a "Alice"
+node b "Bob"
+node c "Cara"
+node d "Dev"
+node e "Eli"
+node f "Fay"
+a -- b, c, d
+b -- e
+c -- f
+d .. e

@@ -1,0 +1,39 @@
+# Trees: syntax trees, decision trees, and org charts. Pair with `layout layered`.
+style tree_cat color=#444444 shape=none
+style tree_word color=#0072B2 text=#0072B2 shape=none
+style tree_q color=#E69F00 shape=box
+style tree_leaf color=#009E73 shape=box
+style tree_unit color=#0072B2 shape=box
+
+# tree_cat(id, label): an inner syntax-tree node such as S, NP, or VP.
+def tree_cat(id, label)
+node ${id} "${label}" .tree_cat
+end
+
+# tree_word(id, word): a leaf word of a syntax tree.
+def tree_word(id, word)
+node ${id} "${word}" .tree_word
+end
+
+# tree_q(id, question): a decision-tree test; label its edges with the answers.
+def tree_q(id, question)
+node ${id} "${question}" .tree_q
+end
+
+# tree_leaf(id, outcome): a decision-tree outcome.
+def tree_leaf(id, outcome)
+node ${id} "${outcome}" .tree_leaf
+end
+
+# tree_unit(id, name, role): an org-chart box naming a person or team and its role.
+def tree_unit(id, name, role)
+node ${id} "${name}" .tree_unit
+| ${role}
+end
+
+# tree_kids(parent, kids): edges from parent to each of the `;`-separated kids, in order.
+def tree_kids(parent, kids)
+for i in 1..count(kids, ";")
+${parent} -> ${part(kids, ";", i)}
+end
+end
