@@ -7,7 +7,7 @@ theme palette="#6D4C41 #2E7D32 #EF6C00 #1565C0 #AD1457"
 style method shape=box
 style key color=#3E2723 fill=#3E2723 text=#FFE0B2
 
-node coffee "Coffee" .key
+node coffee "Coffee"  : key
 | seed of the Coffea cherry
 
 node farm "Growing"
@@ -35,11 +35,11 @@ node dark "Dark roast"
 
 node brew "Brewing"
 | extraction: 18-22% of the dose
-node espresso "Espresso" .method
+node espresso "Espresso"  : method
 | 9 bar, 25-30 s
-node filter "Pour-over" .method
+node filter "Pour-over"  : method
 | paper filter, 3-4 min
-node press "French press" .method
+node press "French press"  : method
 | full immersion, metal mesh
 
 node taste "Tasting"

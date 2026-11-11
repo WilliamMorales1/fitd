@@ -7,7 +7,7 @@ style lock color=#BC4C00
 node why "Why"
 | the solver is global: one new node can move every
 | other one and change the font
-node read "Read the lock" .lock
+node read "Read the lock"  : lock
 | font, page, and every node center
 | plain text, diffs well, can be committed
 node try "Try locked spots first"
@@ -19,7 +19,7 @@ node charge "Charge every move"
 node fonts "Polish two fonts"
 | the locked font, while it still fits,
 | and the new largest; better merit wins
-node write "Write the lock" .lock
+node write "Write the lock"  : lock
 node result "Effect"
 | adding one leaf keeps the font and every spot;
 | deleting a large branch lets the font grow

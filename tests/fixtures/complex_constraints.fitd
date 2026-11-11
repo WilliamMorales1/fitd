@@ -6,9 +6,9 @@ page a4
 style highlight color=#FFD700
 
 node a "Start"
-node b "Step 1" .highlight
-node c "Step 2" .highlight
-node d "Step 3" .highlight
+node b "Step 1"  : highlight
+node c "Step 2"  : highlight
+node d "Step 3"  : highlight
 node e "End"
 
 a -> b -> c -> d -> e

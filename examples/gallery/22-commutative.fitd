@@ -3,10 +3,10 @@ layout layered
 page 1:1
 font 9pt..28pt
 style obj shape=none
-node a "A" .obj row=1 col=1
-node b "B" .obj row=1 col=2
-node c "C" .obj row=2 col=1
-node d "D" .obj row=2 col=2
+node a "A"  : obj row=1 col=1
+node b "B"  : obj row=1 col=2
+node c "C"  : obj row=2 col=1
+node d "D"  : obj row=2 col=2
 a -> b "f"
 a -> c "g"
 b -> d "h"

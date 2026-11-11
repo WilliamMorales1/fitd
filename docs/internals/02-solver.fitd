@@ -8,20 +8,20 @@ style good color=#1A7F37
 
 node font "Next font"
 | binary search between the floor and the ceiling
-node csp "Probe" .probe
+node csp "Probe"  : probe
 | forward checking, backjumping, spatial index
-node fits "Fits?" .probe
-node bnb "Branch and bound" .probe
+node fits "Fits?"  : probe
+node bnb "Branch and bound"  : probe
 | fewest unmet prefer weight
 node trade "Trade-off"
 | top font, 5% and 10% smaller, polished in parallel
 | kept above 16pt per meter of page diagonal
 node polish "Polish each"
 | annealing: crossings, nearness, spread
-node best "Best merit" .good
+node best "Best merit"  : good
 | readability plus font
-node none "Nothing fits" .fail
-node core "QuickXplain" .fail
+node none "Nothing fits"  : fail
+node core "QuickXplain"  : fail
 | minimal set of requires: E0110
 
 font -> csp -> fits -> bnb "range closed"

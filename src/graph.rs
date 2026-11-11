@@ -17,6 +17,51 @@ pub struct Cell {
     pub gap: bool,
     pub span: usize,
     pub label: Option<String>,
+    /// Set by an `~ image "PATH"` row, which holds this one cell.
+    pub image: Option<std::sync::Arc<Image>>,
+}
+
+/// Image is a PNG or JPEG drawn in a node, sized by its pixel aspect ratio.
+#[derive(Debug, Default)]
+pub struct Image {
+    pub path: String,
+    pub width_em: f64,
+    pub span: Span,
+    pub mime: &'static str,
+    pub data: Vec<u8>,
+    pub px: (u32, u32),
+}
+
+impl Image {
+    /// decode reads the pixel size from a PNG or JPEG header and records the bytes.
+    pub fn decode(&mut self, data: Vec<u8>) -> Result<(), &'static str> {
+        let be16 = |b: &[u8]| u16::from_be_bytes([b[0], b[1]]) as u32;
+        let be32 = |b: &[u8]| u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
+        let (mime, px) = if data.len() >= 24 && data.starts_with(b"\x89PNG\r\n\x1a\n") {
+            ("image/png", (be32(&data[16..]), be32(&data[20..])))
+        } else if data.starts_with(&[0xFF, 0xD8]) {
+            let mut i = 2;
+            let mut px = None;
+            while i + 9 < data.len() && data[i] == 0xFF {
+                let m = data[i + 1];
+                let len = be16(&data[i + 2..]) as usize;
+                // SOF markers carry the frame size; C4, C8, and CC are other tables.
+                if (0xC0..=0xCF).contains(&m) && !matches!(m, 0xC4 | 0xC8 | 0xCC) {
+                    px = Some((be16(&data[i + 7..]), be16(&data[i + 5..])));
+                    break;
+                }
+                i += 2 + len;
+            }
+            ("image/jpeg", px.ok_or("JPEG has no frame header")?)
+        } else {
+            return Err("not a PNG or JPEG file");
+        };
+        if px.0 == 0 || px.1 == 0 {
+            return Err("image has no pixels");
+        }
+        (self.mime, self.px, self.data) = (mime, px, data);
+        Ok(())
+    }
 }
 
 pub struct Node {
@@ -261,4 +306,25 @@ pub struct Graph {
     pub constraints: Vec<Constraint>,
     pub sets: Vec<VennSet>,
     pub settings: Settings,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Image;
+
+    #[test]
+    fn decode_reads_png_and_jpeg_sizes() {
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+        png.extend([0, 0, 1, 64, 0, 0, 0, 200]);
+        let mut im = Image::default();
+        im.decode(png).unwrap();
+        assert_eq!((im.mime, im.px), ("image/png", (320, 200)));
+        // SOI, an APP0 segment, then SOF0 with height 30 and width 40.
+        let jpg = vec![
+            0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0, 0xFF, 0xC0, 0, 11, 8, 0, 30, 0, 40, 1, 0, 0, 0,
+        ];
+        im.decode(jpg).unwrap();
+        assert_eq!((im.mime, im.px), ("image/jpeg", (40, 30)));
+        assert!(im.decode(b"GIF89a".to_vec()).is_err());
+    }
 }

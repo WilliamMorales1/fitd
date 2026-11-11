@@ -95,7 +95,7 @@ fn module_doc(target: &str) -> Option<String> {
         if let Some(r) = l.strip_prefix("def ") {
             defs.push(format!("`{}`", r.trim()));
         } else if let Some(r) = l.strip_prefix("style ") {
-            styles.push(format!("`.{}`", r.split_whitespace().next().unwrap_or("")));
+            styles.push(format!("`: {}`", r.split_whitespace().next().unwrap_or("")));
         }
     }
     let mut s = format!("**{target}**\n\n{}", head.join(" "));
@@ -930,6 +930,26 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                     }
                     v
                 })
+                .collect(),
+        );
+    }
+    if head.trim_end().ends_with(':') {
+        let mut names = idx.style_order.clone();
+        for (module, _) in crate::stdlib::MODULES {
+            let prefix = format!("{module}_");
+            names.extend(
+                idx.style_order
+                    .iter()
+                    .filter_map(|name| name.strip_prefix(&prefix))
+                    .map(|name| format!("{module}.{name}")),
+            );
+        }
+        names.sort();
+        names.dedup();
+        return Value::Array(
+            names
+                .iter()
+                .map(|name| item(name, 7, "class", "Reusable style class."))
                 .collect(),
         );
     }

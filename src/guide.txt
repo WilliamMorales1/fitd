@@ -1,15 +1,16 @@
 fitd: .fitd text -> SVG/PNG/PDF/TikZ at the largest font that fits.
 
 Build:  fitd FILE.fitd -o out.svg|.png|.pdf [--tikz out.tex] [--short]
-Book:   fitd A.fitd B.fitd -o out.pdf  (page each)
+Book:   fitd A.fitd B.fitd -o out.pdf
 Stdin:  fitd - -o out.svg <<'EOF' ... EOF
 Exit 0: written; errors on stderr.
 
-Syntax: one statement per line, # comment. Only nodes and edges are needed.
-  node ID "Title" .style row=1 col=2 # ID: letters digits _ inner -; no title: ID
+Syntax: one statement per line, # comment.
+  node ID "Title" : style row=1 col=2 # ID: letters digits _ inner -; no title: ID
   | body line                   # under node; lead spaces indent; **bold**
   ~ # %60 . _ LBL "two words"   # figure row: # solid %NN shade . outline _ gap, else label
                                 #   LBL*3 spans 3 columns; rows grid up: strips, heatmaps
+  ~ image "plot.png" width=10em # PNG or JPEG
   a, b -> c, d "label" -> e     # flow edge (-- undirected); hops chain
   a ..> b "label"               # cross link, dashed (.. undirected)
   title "Text"
@@ -20,9 +21,9 @@ Syntax: one statement per line, # comment. Only nodes and edges are needed.
   page a0..a4|WxHmm|16:9 portrait|landscape margin=1cm # 16:9 tightest
   font 8pt..30pt wrap=16em
   theme paper|light|dark|mono
-  style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle|diamond|none stack=N (copies)
+  style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle|diamond|none stack=N copies
         wrap=24em place=aside (layered: strip after flow, ..> to flow)
-  group "Title" a, b, c .style color=#hex times=N  # framed; times=N: dashed, titled `Nx`
+  group "Title" a, b, c : style color=#hex times=N  # framed; times=N: dashed, titled `Nx`
   require REL                   # must hold, else E0110
   prefer REL weight=2           # soft; W0205 if unmet
   include "a.fitd"|"user/L"     # beside file; user/: L.f()
@@ -34,11 +35,11 @@ REL:
   a at top-left|top|top-right|left|center|right|bottom-left|bottom|bottom-right
   align row(a, b) | column(a, b) | top(..) | bottom(..) | left(..) | right(..)
 Units: pt mm cm in em. Edge: color=#hex line=solid|dashed|dotted
-  head=|tail=arrow|triangle|diamond|odiamond|crow|none, or .style
+  head=|tail=arrow|triangle|diamond|odiamond|crow|none, or : style
 
 Concept map:
   title "Photosynthesis"
-  node sun "Light" .in
+  node sun "Light" : in
   | photons absorbed by chlorophyll
   node leaf "Leaf"
   node sugar "Glucose"

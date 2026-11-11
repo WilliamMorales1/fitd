@@ -7,9 +7,9 @@ node effect "Late release"
 node people "People"
 node process "Process"
 node tools "Tools"
-node p1 "on leave" .cause
-node p2 "no reviews" .cause
-node t1 "flaky CI" .cause
+node p1 "on leave"  : cause
+node p2 "no reviews"  : cause
+node t1 "flaky CI"  : cause
 p1 -> people
 p2 -> process
 t1 -> tools

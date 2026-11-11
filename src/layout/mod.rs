@@ -106,6 +106,7 @@ pub struct CellBox {
     pub h: f64,
     pub shade: f64,
     pub label: Option<TextLine>,
+    pub image: Option<std::sync::Arc<crate::graph::Image>>,
 }
 
 pub struct Boxed {

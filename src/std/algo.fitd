@@ -4,7 +4,7 @@ style algo_block color=#0072B2 shape=box wrap=40em
 
 # algo.block(id, title, lines): a titled pseudocode block whose lines keep their indent.
 def block(id, title, lines)
-node ${id} "${title}" .algo_block
+node ${id} "${title}"  : algo_block
 for i in 1..count(lines, ";")
 | ${part(lines, ";", i)}
 end

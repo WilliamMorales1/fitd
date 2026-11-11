@@ -6,15 +6,15 @@ style src color=#0969DA
 style shared color=#BC4C00
 style page color=#1A7F37
 
-node map "map.fitd" .src
+node map "map.fitd"  : src
 | the original, too big for one page
 | fitd split map.fitd [-o DIR], default map-pages/
-node shared "map-shared.fitd" .shared
+node shared "map-shared.fitd"  : shared
 | layout, page, font, theme, styles
-node over "map.fitd (overview)" .page
+node over "map.fitd (overview)"  : page
 | root plus one stub per branch
 for b in a, b, c
-  node p${b} "map-${b}.fitd" .page
+  node p${b} "map-${b} : fitd"  : page
   | branch ${b}, rooted at its top node
   map -> p${b} -> shared
 end

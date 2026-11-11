@@ -13,5 +13,5 @@ web -> api -> q -> work
 api -> db
 work -> db
 work -> pay
-group "Cloud" api, q, work, db .arch_zone
+group "Cloud" api, q, work, db  : arch_zone
 arch.key()

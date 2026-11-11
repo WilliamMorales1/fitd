@@ -52,6 +52,18 @@ impl Parser<'_> {
         })
     }
 
+    fn class_name(&mut self) -> PResult<Name> {
+        let mut name = self.name("a class name")?;
+        if *self.peek() == Tok::Dot {
+            self.bump();
+            let part = self.name("a class name after `.`")?;
+            name.text.push('.');
+            name.text.push_str(&part.text);
+            name.span = name.span.to(part.span);
+        }
+        Ok(name)
+    }
+
     fn keyword_is(&self, k: usize, kw: &str) -> bool {
         *self.peek_at(k) == Tok::Ident && self.text(self.toks[self.pos + k].span) == kw
     }
@@ -171,11 +183,11 @@ impl Parser<'_> {
     fn looks(&mut self) -> PResult<(Vec<Name>, Vec<Attr>)> {
         let (mut classes, mut attrs) = (Vec::new(), Vec::new());
         while !self.at_end() {
-            if *self.peek() == Tok::Dot {
+            if *self.peek() == Tok::Colon {
                 self.bump();
-                classes.push(self.name("a style name after `.`")?);
+                classes.push(self.class_name()?);
             } else {
-                let key = self.name("`.style` or `key=value`")?;
+                let key = self.name("`: NAME` or `key=value`")?;
                 self.expect(Tok::Eq)?;
                 attrs.push(Attr {
                     key,
@@ -423,7 +435,7 @@ mod tests {
 
     #[test]
     fn parses_every_statement() {
-        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\" .hub color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\ngroup \"G\" b, c color=#123\na -> c \"x\" .hub color=#f00\n";
+        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\"  : hub color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\ngroup \"G\" b, c color=#123\na -> c \"x\"  : hub color=#f00\n";
         let (stmts, errs) = parse(src);
         assert!(
             errs.is_empty(),
@@ -475,7 +487,7 @@ mod tests {
 
     #[test]
     fn parses_arrow_chains() {
-        let (stmts, errs) = parse("a -> b, c \"x\" -- d .hub color=#f00\n");
+        let (stmts, errs) = parse("a -> b, c \"x\" -- d  : hub color=#f00\n");
         assert!(errs.is_empty());
         assert_eq!(stmts.len(), 3);
         assert!(

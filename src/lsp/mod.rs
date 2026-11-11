@@ -601,7 +601,7 @@ mod tests {
 
     #[test]
     fn definitions_and_completions_follow_names() {
-        let text = "style hot color=#C62828\nnode a .hot\nnode b\na -> b\nrequire a left-of \n";
+        let text = "style hot color=#C62828\nnode a  : hot\nnode b\na -> b\nrequire a left-of \n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str, k: usize| position(text, text.match_indices(s).nth(k).unwrap().0);
@@ -652,7 +652,7 @@ mod tests {
         std::fs::create_dir_all(dir.join("parts")).unwrap();
         std::fs::write(
             dir.join("parts/more.fitd"),
-            "style hot color=#EF5350\nnode far \"Far\" .hot\nfar -> ghost\n",
+            "style hot color=#EF5350\nnode far \"Far\"  : hot\nfar -> ghost\n",
         )
         .unwrap();
         let main = dir.join("main.fitd");
@@ -734,7 +734,7 @@ mod tests {
 
     #[test]
     fn modern_requests_answer() {
-        let text = "style hot color=#C62828\n# Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nnode a \"A\" .hot\nnode b\na -> b\nuse pair(c, d)\n";
+        let text = "style hot color=#C62828\n# Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nnode a \"A\"  : hot\nnode b\na -> b\nuse pair(c, d)\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str| position(text, text.rfind(s).unwrap());
@@ -785,6 +785,18 @@ mod tests {
         assert!(
             names.contains(&"pair") && names.contains(&"a") && names.contains(&"hot"),
             "{names:?}"
+        );
+    }
+
+    #[test]
+    fn module_classes_answer_by_qualified_name() {
+        let text = "style nn_block color=#CC79A7\nnode a : nn.block\n";
+        let none = |_: &str| None;
+        let d = doc("file:///x.fitd", "/x.fitd", text, &none);
+        let at = position(text, text.find("nn.block").unwrap() + 3);
+        assert_eq!(
+            features::definition(&d, &at)["range"]["start"],
+            json!({ "line": 0, "character": 6 })
         );
     }
 

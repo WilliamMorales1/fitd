@@ -269,7 +269,14 @@ impl Builder<'_, '_, '_> {
 
     fn classes(&mut self, cs: &[crate::ast::Name]) {
         for c in cs {
-            self.occ(Kind::Style, c, false);
+            if let Some(loc) = self.loc(c.span, &c.text) {
+                self.out.occs.push(Occ {
+                    kind: Kind::Style,
+                    name: c.text.replace('.', "_"),
+                    decl: false,
+                    loc,
+                });
+            }
         }
     }
 

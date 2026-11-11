@@ -462,6 +462,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
     diags.extend(parse_diags);
     let (mut g, sema_diags) = sema::analyze(&stmts);
     diags.extend(sema_diags);
+    diags.extend(load_images(&mut g, &input));
     diags.retain(|d| !include::unused_shared_style(&src, d));
     diags.sort_by_key(Diag::pos);
     show(&diags);
@@ -1131,6 +1132,33 @@ fn ratio_finish(
             scores.iter().position(|sc| sc.as_ref() == Some(best))
         });
     dims(pick.map_or(sizes[5], |k| sizes[k]))
+}
+
+/// load_images reads each `~ image` file, relative to the input file's folder.
+fn load_images(g: &mut graph::Graph, input: &str) -> Vec<Diag> {
+    let base = match input {
+        "<stdin>" => std::path::Path::new(""),
+        _ => std::path::Path::new(input).parent().unwrap_or(std::path::Path::new("")),
+    };
+    let mut diags = Vec::new();
+    for c in g.nodes.iter_mut().flat_map(|n| n.figure.iter_mut().flatten()) {
+        let Some(im) = c.image.as_mut().and_then(std::sync::Arc::get_mut) else {
+            continue;
+        };
+        let file = base.join(&im.path);
+        let err = match std::fs::read(&file) {
+            Ok(data) => im.decode(data).err().map(String::from),
+            Err(e) => Some(format!("cannot read `{}`: {e}", file.display())),
+        };
+        if let Some(e) = err {
+            diags.push(
+                Diag::error("E0014", e)
+                    .primary(im.span, "image not loaded")
+                    .help("paths are relative to the main file; use a PNG or JPEG"),
+            );
+        }
+    }
+    diags
 }
 
 fn write(path: &str, bytes: &[u8]) -> Result<(), String> {

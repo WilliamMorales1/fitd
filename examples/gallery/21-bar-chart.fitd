@@ -2,7 +2,7 @@
 include "grid"
 page 4:3
 font 9pt..28pt
-node votes "Votes per option" .grid
+node votes "Votes per option"  : grid
 grid.bar("A", 7)
 grid.bar("B", 4)
 grid.bar("C", 9)

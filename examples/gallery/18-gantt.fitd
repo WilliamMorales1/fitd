@@ -2,7 +2,7 @@
 include "grid"
 page 16:9
 font 9pt..28pt
-node plan "Thesis plan (months)" .grid
+node plan "Thesis plan (months)"  : grid
 grid.scale(1, 8)
 grid.task("Survey", 1, 2)
 grid.task("Build", 2, 4)

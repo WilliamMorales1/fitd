@@ -8,19 +8,19 @@ style kind color=#CF222E
 
 node rel "REL"
 
-node leftof "a left-of b gap=1em" .ord
+node leftof "a left-of b gap=1em"  : ord
 | a.right + gap <= b.left
 | right-of swaps
-node above "a above b gap=1em" .ord
+node above "a above b gap=1em"  : ord
 | a.bottom >= b.top + gap
 | below swaps
-node near "a near b within=4em" .ord
+node near "a near b within=4em"  : ord
 | the space between the boxes is at most within
-node at "a at top-left|top|...|bottom-right|center" .ord
+node at "a at top-left|top|...|bottom-right|center"  : ord
 | a's center lies in that third of the page
-node align "align top|bottom|left|right(a, b, ...)" .al
+node align "align top|bottom|left|right(a, b, ...)"  : al
 | that edge is shared, within the grid tolerance
-node rowcol "align row(...) / column(...)" .al
+node rowcol "align row(...) / column(...)"  : al
 | centers share y / x
 node chain "Chains"
 | a left-of b left-of c means a left-of b and b left-of c
@@ -28,10 +28,10 @@ node chain "Chains"
 | attributes apply to every step
 | each step is its own constraint, so diagnostics point at the failing one
 
-node req "require" .kind
+node req "require"  : kind
 | hard; satisfiable means on the strategy's grid of candidate positions,
 | so a set may fail on the grid although a hand-placed layout meets it
-node pref "prefer weight=N" .kind
+node pref "prefer weight=N"  : kind
 | soft; unmet total weight minimized after the font is fixed: W0205
 
 rel -> leftof, above, near, at, align, rowcol, chain, req, pref

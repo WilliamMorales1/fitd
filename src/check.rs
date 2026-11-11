@@ -15,7 +15,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0002",
-        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes|venn`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `key \"Label\" [.style] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
+        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes|venn`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [: NAME] [k=v]`, `| body`, `A -> B, C [\"label\"] [: NAME] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `key \"Label\" [: NAME] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
     ),
     (
         "E0003",
@@ -23,7 +23,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0004",
-        "A node uses `.name` but no `style name` is declared.",
+        "A node uses `: name` but no `style name` is declared.",
     ),
     (
         "E0005",
@@ -60,6 +60,10 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     (
         "E0013",
         "Macro expansion ran past its step budget (default 100000, set with `--expand-budget`). Each directive run and each line written costs one step. Usually a recursive template with no base case or a huge `for` range; templates can run forever, so the budget is what guarantees a build stops.",
+    ),
+    (
+        "E0014",
+        "An `~ image \"PATH\"` row names a file that cannot be read or is not a PNG or JPEG. Paths are relative to the main file, not to an included one.",
     ),
     (
         "E0101",

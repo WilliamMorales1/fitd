@@ -1,7 +1,7 @@
 use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
 use crate::graph::{
-    Cell, Constraint, Dash, Dir, Edge, EdgeKind, Graph, Head, KeyEntry, LayoutKind, Length, Node,
+    Cell, Constraint, Dash, Dir, Edge, EdgeKind, Graph, Head, Image, KeyEntry, LayoutKind, Length, Node,
     Place, Relation, Settings, Shape, Side, VennSet,
 };
 use crate::theme::{self, Overrides, Theme};
@@ -330,7 +330,13 @@ type Styles = HashMap<String, (Span, Vec<Attr>, bool)>;
 
 fn apply_styles(s: &mut Sema, styles: &mut Styles, classes: &[Name], l: &mut Look) {
     for c in classes {
-        match styles.get_mut(&c.text) {
+        let module_style = c.text.replace('.', "_");
+        let name = if styles.contains_key(&c.text) {
+            &c.text
+        } else {
+            &module_style
+        };
+        match styles.get_mut(name) {
             Some(st) => {
                 st.2 = true;
                 look(&st.1, l, &mut Vec::new());
@@ -392,6 +398,29 @@ fn span(it: &mut std::iter::Peekable<std::str::Chars>) -> usize {
         }
         _ => 1,
     }
+}
+
+/// image_row reads `image "PATH" width=Nem`; None means the row is ordinary cells.
+fn image_row(line: &str) -> Option<Result<(String, f64), String>> {
+    let rest = line.trim().strip_prefix("image")?.trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let Some((path, tail)) = rest.split_once('"') else {
+        return Some(Err("unclosed image path".into()));
+    };
+    let mut width = 10.0;
+    for word in tail.split_whitespace() {
+        let w = match word.strip_prefix("width=").map(|v| length(v, None)) {
+            Some(Ok(Length::Em(w))) if w > 0.0 => w,
+            Some(Ok(_)) => return Some(Err("image `width=` takes a positive em length".into())),
+            Some(Err(e)) => return Some(Err(e)),
+            None => return Some(Err(format!("unknown image attribute `{word}`"))),
+        };
+        width = w;
+    }
+    if path.is_empty() {
+        return Some(Err("image path is empty".into()));
+    }
+    Some(Ok((path.to_string(), width)))
 }
 
 /// cells splits one `~` figure row into cells: `#` solid, `%NN` shaded, `.` outlined, `_` gap.
@@ -468,6 +497,7 @@ fn cells(line: &str) -> Vec<Cell> {
             gap,
             span: cols.clamp(1, 64),
             label,
+            image: None,
         });
     }
     out
@@ -518,6 +548,27 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 s.decl.push(st.span);
             }
             StmtKind::Cells(text) => match last_node {
+                Some(v) if image_row(text).is_some() => match image_row(text).unwrap() {
+                    Ok((path, width_em)) => {
+                        let image = Image {
+                            path,
+                            width_em,
+                            span: st.span,
+                            ..Image::default()
+                        };
+                        s.nodes[v].figure.push(vec![Cell {
+                            shade: 0.0,
+                            gap: false,
+                            span: 1,
+                            label: None,
+                            image: Some(std::sync::Arc::new(image)),
+                        }]);
+                    }
+                    Err(e) => s.diags.push(
+                        Diag::error("E0006", e)
+                            .primary(st.span, "expected `~ image \"plot.png\" width=10em`"),
+                    ),
+                },
                 Some(v) => {
                     let row = cells(text);
                     if row.is_empty() {
@@ -1429,6 +1480,17 @@ mod tests {
     }
 
     #[test]
+    fn image_rows_hold_one_image_cell() {
+        let (g, d) = run("node a\n~ image \"p.png\" width=6em\n~ # .\n");
+        assert!(d.is_empty());
+        let im = g.nodes[0].figure[0][0].image.as_ref().unwrap();
+        assert_eq!((im.path.as_str(), im.width_em), ("p.png", 6.0));
+        assert!(g.nodes[0].figure[1][0].image.is_none());
+        assert_eq!(codes("node a\n~ image \"p.png\" width=2cm\n"), ["E0006"]);
+        assert_eq!(codes("node a\n~ image \"p.png\" size=2em\n"), ["E0006"]);
+    }
+
+    #[test]
     fn grid_cells_lower_to_alignment_and_order() {
         let (g, d) = run("node a row=1 col=1\nnode b row=1 col=2\nnode c row=2 col=1\nnode d row=2 col=2\n");
         assert!(d.is_empty());
@@ -1460,7 +1522,7 @@ mod tests {
     #[test]
     fn resolves_forward_references_and_styles() {
         let (g, d) = run(
-            "a -> b\nstyle hub shape=circle color=#123456\nnode a .hub\n| line\nnode b color=#abcdef shape=diamond\n",
+            "a -> b\nstyle hub shape=circle color=#123456\nnode a  : hub\n| line\nnode b color=#abcdef shape=diamond\n",
         );
         assert!(d.is_empty());
         assert_eq!(g.edges.len(), 1);
@@ -1471,9 +1533,18 @@ mod tests {
     }
 
     #[test]
+    fn module_qualified_classes_map_to_prefixed_styles() {
+        let (g, d) = run(
+            "style nn_block color=#CC79A7\nnode a : nn.block\n",
+        );
+        assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        assert_eq!(g.nodes[0].color.as_deref(), Some("#CC79A7"));
+    }
+
+    #[test]
     fn themes_and_node_colors() {
         let (g, d) = run(
-            "theme dark background=#000 palette=\"#f00, #0f0\"\nfont 7pt family=\"DejaVu Sans\"\nstyle s fill=#fff\nnode a .s text=#123\n",
+            "theme dark background=#000 palette=\"#f00, #0f0\"\nfont 7pt family=\"DejaVu Sans\"\nstyle s fill=#fff\nnode a  : s text=#123\n",
         );
         assert!(
             d.is_empty(),
@@ -1503,7 +1574,7 @@ mod tests {
     #[test]
     fn edge_colors_and_groups() {
         let (g, d) = run(
-            "style hot color=#f00 shape=circle\nnode a\nnode b\nnode c\na -> b .hot\na -> c color=#00f\ngroup \"G\" b, c color=#0f0\n",
+            "style hot color=#f00 shape=circle\nnode a\nnode b\nnode c\na -> b  : hot\na -> c color=#00f\ngroup \"G\" b, c color=#0f0\n",
         );
         assert!(
             d.is_empty(),
@@ -1519,7 +1590,7 @@ mod tests {
         );
         assert_eq!(codes("node a\nnode b\na -> b width=2pt\n"), vec!["E0005"]);
         let (g, d) = run(
-            "style is head=triangle\nnode a\nnode b\na -> b .is\na -- b tail=diamond line=dotted\n",
+            "style is head=triangle\nnode a\nnode b\na -> b  : is\na -- b tail=diamond line=dotted\n",
         );
         assert!(d.is_empty());
         assert_eq!(
@@ -1554,7 +1625,7 @@ mod tests {
     #[test]
     fn keys_collect_entries() {
         let (g, d) =
-            run("node a\nstyle s color=#f00\nkey \"X\" .s line=dashed\nkey \"Y\" shape=circle\n");
+            run("node a\nstyle s color=#f00\nkey \"X\"  : s line=dashed\nkey \"Y\" shape=circle\n");
         assert!(d.is_empty());
         assert_eq!(g.key.len(), 2);
         assert_eq!(g.key[0].line, Some(Dash::Dashed));
@@ -1584,7 +1655,7 @@ mod tests {
             codes("node a\npage 594x420mm portrait margin=1cm\n"),
             Vec::<&str>::new()
         );
-        assert_eq!(codes("node a .nope\nstyle x\n"), vec!["E0004", "W0203"]);
+        assert_eq!(codes("node a  : nope\nstyle x\n"), vec!["E0004", "W0203"]);
     }
 
     #[test]

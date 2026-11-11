@@ -6,12 +6,12 @@ style fast color=#0969DA
 style slow color=#8250DF
 
 node save "Save"
-node draft "Draft build" .fast
+node draft "Draft build"  : fast
 | at once, coarse font search
 node wait "1.5 s quiet"
-node full "Full build" .slow
+node full "Full build"  : slow
 | trade-off and full polish
-node out "Output replaced" .slow
+node out "Output replaced"  : slow
 | atomically, never half a file
 
 save -> draft -> wait -> full -> out

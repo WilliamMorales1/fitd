@@ -54,11 +54,12 @@ RelationChain   = Name, Name, Name, { Name, Name } ;
 Alignment       = "align", Name, "(", NameList, ")" ;
 Position        = Name, "at", Name ;
 
-Class           = ".", Name ;
+Class           = ":", QualName ;
 Attribute       = Name, "=", Value ;
 Value           = Atom, [ "..", Atom ] ;
 Atom            = Name | Number | Color | String ;
 Name            = Identifier ;
+QualName        = [ Identifier, "." ], Identifier ;
 
 Identifier      = IdentifierCharacter, { IdentifierCharacter
                 | "-", IdentifierCharacter } ;
@@ -94,14 +95,14 @@ Whitespace separates tokens. Spaces and tabs may appear between tokens. Whitespa
 
 ### Node declarations and body lines
 
-`node ID ["title"]` declares a node. When title is omitted, identifier is used as title. Classes and attributes may follow declaration in any order. A class reference begins with `.` and names a previously declared style.
+`node ID ["title"]` declares a node. When title is omitted, identifier is used as title. Style references and attributes may follow declaration in any order. A style reference uses `: NAME` and names a previously declared style. Repeat `:` to apply multiple styles. Module classes use qualified names such as `nn.block`, mapping to module-prefixed style `nn_block`.
 
 A body line begins with `|` in first non-whitespace position. It appends text to most recently declared node. Multiple body lines may follow one declaration. A body line without preceding node is invalid.
 
 Spaces after the one following `|` indent the line in box and frameless nodes, as in pseudocode; wrapped continuation lines keep that indent. In any node text, `**` toggles bold, so `**if** x **then**` sets the keywords in bold.
 
 ```fitd
-node leaf "Leaf" .plant shape=box color=#2E7D32
+node leaf "Leaf" : plant shape=box color=#2E7D32
 | converts light into stored energy
 ```
 
@@ -135,6 +136,13 @@ node mask "Causal mask"
 node bar "Attention weights"
 ~ %90 %55 %20 %5
 ~ #"d_model = 64"*4
+```
+
+An image row, `~ image "PATH" width=Nem`, puts a PNG or JPEG in the figure instead of cells. It is drawn the full figure width, centered, and its height follows the picture's pixel aspect ratio. `width=` takes an em length and defaults to `10em`, so the picture scales with the body font like everything else. The path is relative to the main file, even inside an included file; a file that cannot be read or is not a PNG or JPEG is error E0014. SVG output embeds the bytes as a data URI, PDF and PNG draw them, and TikZ writes `\includegraphics{PATH}`. This is how a plot from a plotting library goes inside a diagram.
+
+```fitd
+node eval "Validation"
+~ image "loss.png" width=9em
 ```
 
 ### Stacked nodes
@@ -176,20 +184,20 @@ An edge statement begins with one or more source node identifiers, separated by 
 Each target in a hop becomes a source for next hop. Thus `a -> b, c -> d` creates edges from `a` to `b` and `c`, then from both `b` and `c` to `d`. A source list fans in: `a, b -> c` creates `a -> c` and `b -> c`, each with the hop's label.
 
 ```fitd
-a -> b, c "produces" -- d .important color=#1565C0
+a -> b, c "produces" -- d : important color=#1565C0
 ```
 
 Edges and edge styles take `color`, `head`, `tail`, and `line`. `head` marks the target end and `tail` the source end, each one of `arrow`, `triangle` (hollow), `diamond`, `odiamond` (hollow diamond), `crow` (crow's foot), or `none`. A directed edge defaults to `head=arrow`, an undirected one to none; `tail` defaults to none. `line=solid|dashed|dotted` sets the dash pattern; `..>` and `..` default to dashed. Marks sit inside the arrow clearance, so they never change the layout.
 
 ```fitd
 style is head=triangle
-circle -> shape .is
+circle -> shape : is
 canvas -- shape tail=diamond line=dotted
 ```
 
 ### Groups
 
-`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn`. A `.class` after the members sets the frame color from that style, so a group, its nodes, and its `key` entry can share one style.
+`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn`. A `: NAME` after the members sets the frame color from that style, so a group, its nodes, and its `key` entry can share one style.
 
 `times=N` (2 to 99) marks the framed subgraph as repeated N times: the frame is drawn dashed and `Nx` is prefixed to its title, which is the conventional notation for a repeated stack of layers. A value outside the range, or a non-numeric one, produces E0006.
 
@@ -199,7 +207,7 @@ group "Layers" attn, ff times=2 color=#3949AB
 
 ### Keys
 
-`key "LABEL" [.class] [attributes]` adds one legend entry. Entries are drawn in centered rows along the bottom of the page, wrapping when a row is full; the solver lays out the diagram in the space above. Swatches take `color`, `fill`, and `shape` from classes and attributes, as nodes do. `line=solid|dashed|dotted` draws a line swatch for edges instead of a node swatch, and `head=` adds a mark at its right end. A key whose classes are used only by groups draws an open frame swatch. `page ... keysize=20pt` sets the swatch and text size (default 0.85 of the chosen body font); line thickness scales with it. In split output, keys repeat on every page.
+`key "LABEL" [: NAME] [attributes]` adds one legend entry. Entries are drawn in centered rows along the bottom of the page, wrapping when a row is full; the solver lays out the diagram in the space above. Swatches take `color`, `fill`, and `shape` from classes and attributes, as nodes do. `line=solid|dashed|dotted` draws a line swatch for edges instead of a node swatch, and `head=` adds a mark at its right end. A key whose classes are used only by groups draws an open frame swatch. `page ... keysize=20pt` sets the swatch and text size (default 0.85 of the chosen body font); line thickness scales with it. In split output, keys repeat on every page.
 
 ```fitd
 key "Investment" line=solid color=#4FC3E0
@@ -217,15 +225,15 @@ layout lanes order=source
 style pt shape=none
 node c "Client"
 node s "Server"
-node c1 "" .pt lane=c
-node s1 "" .pt lane=s
+node c1 "" : pt lane=c
+node s1 "" : pt lane=s
 c1 -> s1 "GET /orders"
 require align row(c1, s1)
 ```
 
 The `seq` module wraps this as `seq.actor`, `seq.msg`, and `seq.reply`.
 
-`layout venn` draws a Venn diagram. It takes no attributes. Each group is a set circle, drawn in its `.class` color or the next palette color with its title outside the circle. Groups may share nodes in any way, and every node sits in the region of exactly the sets that list it; a node in no group sits outside all circles. Nodes default to `shape=none`. Two sets sit side by side and three sit in a triangle, with the overlap sized for the most crowded region. A fourth set gives E0010:
+`layout venn` draws a Venn diagram. It takes no attributes. Each group is a set circle, drawn in its `: NAME` color or the next palette color with its title outside the circle. Groups may share nodes in any way, and every node sits in the region of exactly the sets that list it; a node in no group sits outside all circles. Nodes default to `shape=none`. Two sets sit side by side and three sit in a triangle, with the overlap sized for the most crowded region. A fourth set gives E0010:
 
 ```fitd
 layout venn
@@ -265,7 +273,7 @@ On nodes, edges, and groups, `color`, `fill`, and `text` specify border, fill, a
 ```fitd
 theme light background=#FFFFFF text=#24292F
 style plant shape=box color=#2E7D32
-node leaf "Leaf" .plant
+node leaf "Leaf" : plant
 ```
 
 ### Constraints
@@ -300,11 +308,11 @@ b, c -> d
 
 `include "PATH"` inserts source file before macro expansion and parsing. Path is resolved relative to including file. Include cycles and missing files produce diagnostics.
 
-A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name(args)` on a line of its own; `use` is not needed. Styles are global and keep the module prefix (`.nn_layer`).
+A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name(args)` on a line of its own; `use` is not needed. Styles are global and keep the module prefix; use `: nn.layer` for style `nn_layer`.
 
 | Module | Contents |
 | --- | --- |
-| `nn` | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus the `nn_*` styles |
+| `nn` | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus classes such as `: nn.block` and `: nn.data` |
 | `flow` | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow.key()` |
 | `palette` | Okabe-Ito color-blind-safe classes `c1`..`c8` |
 | `grid` | Figure-row grids: `grid.head`, `grid.row`, `grid.title_row` (tables), `grid.heat`, `grid.shade` (heat maps, confusion matrices), `grid.bar` (unit bar charts), `grid.task`, `grid.scale` (Gantt), `grid.layers` (layer stacks), `grid.quad` (2x2 matrices) |
@@ -324,11 +332,12 @@ A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bu
 include "nn"
 nn.input("x", "Tokens", "B x L")
 nn.layer("e", "Encoder", "d 64", 2)
+node block "Block" : nn.block
 nn.mask("m", "Causal mask", 4, 1)
 x -> e -> m
 ```
 
-`include "user/LIB"` reads `LIB.fitd` from the including file's directory and treats it as a library: its templates are called as `LIB.name(args)`, the same way as bundled modules, and inside the library they can be called unqualified with `use name(args)`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix (`.LIB_box`), since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
+`include "user/LIB"` reads `LIB.fitd` from the including file's directory and treats it as a library: its templates are called as `LIB.name(args)`, the same way as bundled modules, and inside the library they can be called unqualified with `use name(args)`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and use `: LIB.box` for style `LIB_box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
 
 ```fitd
 include "user/runbook"

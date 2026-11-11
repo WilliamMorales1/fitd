@@ -9,19 +9,19 @@ style stage color=#42A5F5
 style check color=#EF5350
 style io color=#26A69A shape=circle
 
-node src "Source .fitd" .io
+node src "Source  : fitd"  : io
 | one statement per line
-node lex "Lexer" .stage
+node lex "Lexer"  : stage
 | tokens with byte spans
 | newlines delimit statements
-node parse "Parser" .stage
+node parse "Parser"  : stage
 | recursive descent
 | skips a bad line, keeps going
-node sema "Semantic analysis" .stage
+node sema "Semantic analysis"  : stage
 | names, styles, units
 | ordering cycles (E0008)
 | two passes allow forward references
-node plan "Strategy" .stage
+node plan "Strategy"  : stage
 | radial or layered candidates
 | real font metrics determine box sizes
 node csp "CSP search"
@@ -33,22 +33,22 @@ node bnb "Branch and bound"
 node core "QuickXplain"
 | minimal unsat core (E0110)
 | isolates a conflicting subset of `require`s
-node checker "Checker" .check
+node checker "Checker"  : check
 | recomputes every constraint
 | overlap, crossings, clipping, and overflow
 node emit "Emitter"
 | absolute positions; no downstream reflow
-node measure "Text measurement" .stage
+node measure "Text measurement"  : stage
 | font files are shared by layout and rendering
 | wrapping changes node geometry
-node quality "Layout polish" .stage
+node quality "Layout polish"  : stage
 | annealing reduces crossings and edge clutter
 | never violates a hard constraint
-node diagnostics "Diagnostics" .check
+node diagnostics "Diagnostics"  : check
 | source spans point to the failing statement
 | explain CODE prints the long form
-node output "SVG, PNG, TikZ" .io
-node failure "Failure paths" .check
+node output "SVG, PNG, TikZ"  : io
+node failure "Failure paths"  : check
 | parse errors are reported and skipped
 | unsatisfiable requirements stop output
 
@@ -57,7 +57,7 @@ plan -> csp -> bnb, core
 quality -> csp
 bnb -> checker -> diagnostics -> emit -> output
 core ..> sema "points back at source"
-failure ..> diagnostics "reported" .check
+failure ..> diagnostics "reported"  : check
 
 group "Front end" lex, parse, sema
 group "Solver" csp, bnb, core color=#AB47BC

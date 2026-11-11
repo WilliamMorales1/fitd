@@ -56,6 +56,33 @@ fn ratio_pages_fold_long_chains_into_bands() {
 }
 
 #[test]
+fn image_rows_embed_pictures_and_report_missing_files() {
+    let out = tmp("image.svg");
+    let tex = tmp("image.tex");
+    let (ok, log) = fitd(&[
+        "examples/gallery/29-image.fitd",
+        "-o",
+        out.to_str().unwrap(),
+        "--tikz",
+        tex.to_str().unwrap(),
+    ]);
+    assert!(ok, "{log}");
+    let svg = std::fs::read_to_string(&out).unwrap();
+    assert!(svg.contains("href=\"data:image/png;base64,iVBORw0KGgo"), "no embedded PNG");
+    let tex = std::fs::read_to_string(&tex).unwrap();
+    assert!(tex.contains("\\includegraphics[width="), "no includegraphics");
+    for e in ["png", "pdf"] {
+        let out = tmp(&format!("image.{e}"));
+        let (ok, log) = fitd(&["examples/gallery/29-image.fitd", "-o", out.to_str().unwrap()]);
+        assert!(ok, "{log}");
+    }
+    let src = tmp("missing.fitd");
+    std::fs::write(&src, "node a\n~ image \"nope.png\"\n").unwrap();
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", tmp("missing.svg").to_str().unwrap()]);
+    assert!(!ok && log.contains("E0014"), "{log}");
+}
+
+#[test]
 fn builds_example_with_zero_errors() {
     let svg = tmp("group_theory.svg");
     let tex = tmp("group_theory.tex");
@@ -228,7 +255,7 @@ fn layered_example_meets_required_constraints() {
 #[test]
 fn groups_frame_members_and_edges_take_colors() {
     let src = tmp("group.fitd");
-    std::fs::write(&src, "layout layered\npage a4\nstyle hot color=#C62828\nnode a\nnode b\nnode c\nnode d\na -> b .hot\nb -> c, d\nc ..> a color=#2E7D32\ngroup \"Pair\" c, d color=#1565C0\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\nstyle hot color=#C62828\nnode a\nnode b\nnode c\nnode d\na -> b  : hot\nb -> c, d\nc ..> a color=#2E7D32\ngroup \"Pair\" c, d color=#1565C0\n").unwrap();
     let (svg, tex) = (tmp("group.svg"), tmp("group.tex"));
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
@@ -252,7 +279,7 @@ fn groups_frame_members_and_edges_take_colors() {
     );
     assert!(std::fs::read_to_string(&tex).unwrap().contains("Pair"));
     // A class gives the frame its color, so a group and its key entry share one style.
-    std::fs::write(&src, "layout layered\npage a4\nstyle d1 color=#E69F00\nnode a\nnode b\na -> b\ngroup \"D1\" a, b .d1\nkey \"design\" .d1\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\nstyle d1 color=#E69F00\nnode a\nnode b\na -> b\ngroup \"D1\" a, b  : d1\nkey \"design\"  : d1\n").unwrap();
     let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
     assert!(ok && log.contains(" 0 errors, 0 warnings"), "{log}");
     let s = std::fs::read_to_string(&svg).unwrap();
@@ -1656,7 +1683,7 @@ fn library_modules_are_included_by_name() {
     let f = tmp("usestd.fitd");
     std::fs::write(
         &f,
-        "include \"nn\"\nnn.input(\"x\", \"Tokens\", \"B x L\")\nnn.layer(\"e\", \"Encoder\", \"d 64\", 2)\nnn.mask(\"m\", \"Causal\", 4, 1)\nx -> e -> m\n",
+        "include \"nn\"\nnn.input(\"x\", \"Tokens\", \"B x L\")\nnn.layer(\"e\", \"Encoder\", \"d 64\", 2)\nnn.mask(\"m\", \"Causal\", 4, 1)\nnode b \"Block\" : nn.block\nx -> e -> m\n",
     )
     .unwrap();
     let o = tmp("usestd.svg");

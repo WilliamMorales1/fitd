@@ -7,7 +7,7 @@ style solver color=#8250DF
 style back color=#1A7F37
 
 def stage(i, name, file, kind)
-  node s${i} "${name}" .${kind}
+  node s${i} "${name}" : ${kind}
   | ${file}
   if i > 1
     s${i - 1} -> s${i}

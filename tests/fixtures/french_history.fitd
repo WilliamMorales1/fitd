@@ -29,39 +29,39 @@ node strasbourg "Serments de Strasbourg (842)"
 node dialectes "Ancien français"
 | oïl, oc, franco-provençal
 | cas sujet et cas régime
-node francien "Île-de-France (XIIe s.)" .selection
+node francien "Île-de-France (XIIe s.)"  : selection
 | roi, Cour, démographie, littérature
 | le francien gagne en prestige
 
 node relatin "Relatinisation"
 | doublets : chose / cause, frêle / fragile
 | orthographe étymologique (temps)
-node villers "Villers-Cotterêts (1539)" .elaboration
+node villers "Villers-Cotterêts (1539)"  : elaboration
 | français, langue de l'administration
 | et de la justice, à la place du latin
-node palsgrave "Palsgrave, Estienne" .codification
+node palsgrave "Palsgrave, Estienne"  : codification
 | 1530 : grammaire pour étrangers
 | 1539 : premier dictionnaire
-node dubellay "Du Bellay (1549)" .elaboration
+node dubellay "Du Bellay (1549)"  : elaboration
 | Défense et illustration de la langue
 | enrichir : emprunts, néologismes
 node italien "Emprunts à l'italien"
 | guerres d'Italie, Catherine de Médicis
 | balcon, soldat, banque, sonnet
 
-node malherbe "Malherbe" .codification
+node malherbe "Malherbe"  : codification
 | clarté, pureté, précision
 | contre archaïsmes et emprunts
-node academie "Académie française (1635)" .codification
+node academie "Académie française (1635)"  : codification
 | Richelieu ; prescriptive
 | premier dictionnaire en 1694
-node vaugelas "Vaugelas (1647)" .codification
+node vaugelas "Vaugelas (1647)"  : codification
 | le bon usage : la plus saine
 | partie de la Cour et des auteurs
-node revolution "Révolution (1789)" .diffusion
+node revolution "Révolution (1789)"  : diffusion
 | une nation, une langue
 | abbé Grégoire : anéantir les patois
-node ferry "Lois Ferry" .diffusion
+node ferry "Lois Ferry"  : diffusion
 | école gratuite, obligatoire, laïque
 | uniquement en français standard
 node francophonie "Francophonie"

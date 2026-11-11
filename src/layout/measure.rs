@@ -298,13 +298,23 @@ pub fn measure(
     }
 }
 
+fn pic(r: &[Cell]) -> Option<&crate::graph::Image> {
+    r.first().and_then(|c| c.image.as_deref())
+}
+
 /// figure lays out a node's `~` rows as a grid, returning cells plus the grid's size.
 fn figure(fonts: &Fonts, rows: &[Vec<Cell>], bs: f64) -> (Vec<CellBox>, f64, f64) {
     if rows.is_empty() {
         return (Vec::new(), 0.0, 0.0);
     }
     let (side, gap, ls) = (1.35 * bs, 0.16 * bs, 0.82 * bs);
-    let cols = rows
+    let image_size = |im: &crate::graph::Image| {
+        let w = im.width_em * bs;
+        let (px, py) = (im.px.0.max(1) as f64, im.px.1.max(1) as f64);
+        (w, w * py / px)
+    };
+    let grid: Vec<&Vec<Cell>> = rows.iter().filter(|r| pic(r).is_none()).collect();
+    let cols = grid
         .iter()
         .map(|r| r.iter().map(|c| c.span).sum::<usize>())
         .max()
@@ -315,7 +325,7 @@ fn figure(fonts: &Fonts, rows: &[Vec<Cell>], bs: f64) -> (Vec<CellBox>, f64, f64
             .map_or(0.0, |t| fonts.width(t, ls, false) + 0.7 * bs)
     };
     let mut cw = vec![side; cols];
-    for row in rows {
+    for &row in &grid {
         let mut j = 0;
         for c in row {
             if c.span == 1 && j < cols {
@@ -325,7 +335,7 @@ fn figure(fonts: &Fonts, rows: &[Vec<Cell>], bs: f64) -> (Vec<CellBox>, f64, f64
         }
     }
     // A spanning label that still does not fit widens only the last column it covers.
-    for row in rows {
+    for &row in &grid {
         let mut j = 0;
         for c in row {
             if c.span > 1 && j + c.span <= cols {
@@ -338,10 +348,33 @@ fn figure(fonts: &Fonts, rows: &[Vec<Cell>], bs: f64) -> (Vec<CellBox>, f64, f64
         }
     }
     let rh = side.max(line_height(ls) + 0.3 * bs);
+    let grid_w = match cols {
+        0 => 0.0,
+        _ => cw.iter().sum::<f64>() + gap * (cols - 1) as f64,
+    };
+    let fw = rows
+        .iter()
+        .filter_map(|r| pic(r))
+        .map(|im| image_size(im).0)
+        .fold(grid_w, f64::max);
     let mut cells = Vec::new();
     let mut y = 0.0;
     for row in rows {
-        let (mut x, mut j) = (0.0, 0);
+        if let Some(im) = pic(row) {
+            let (w, h) = image_size(im);
+            cells.push(CellBox {
+                x: (fw - w) / 2.0,
+                y,
+                w,
+                h,
+                shade: 0.0,
+                label: None,
+                image: row[0].image.clone(),
+            });
+            y += h + gap;
+            continue;
+        }
+        let (mut x, mut j) = ((fw - grid_w) / 2.0, 0);
         for c in row {
             let end = (j + c.span).min(cols);
             let w =
@@ -366,6 +399,7 @@ fn figure(fonts: &Fonts, rows: &[Vec<Cell>], bs: f64) -> (Vec<CellBox>, f64, f64
                     h: rh,
                     shade: c.shade,
                     label,
+                    image: None,
                 });
             }
             x += w + gap;
@@ -373,7 +407,6 @@ fn figure(fonts: &Fonts, rows: &[Vec<Cell>], bs: f64) -> (Vec<CellBox>, f64, f64
         }
         y += rh + gap;
     }
-    let fw = cw.iter().sum::<f64>() + gap * (cols - 1) as f64;
     (cells, fw, y - gap)
 }
 

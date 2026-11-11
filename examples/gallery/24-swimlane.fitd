@@ -2,13 +2,13 @@
 include "flow"
 layout lanes
 page 4:3
-node order "Place order" .io
-node pay "Take payment" .step
-node stock "In stock?" .decide
-node ship "Pack and ship" .step
-node refund "Refund" .step
-node receipt "Send receipt" .step
-node done "Receive parcel" .done
+node order "Place order"  : io
+node pay "Take payment"  : step
+node stock "In stock?"  : decide
+node ship "Pack and ship"  : step
+node refund "Refund"  : step
+node receipt "Send receipt"  : step
+node done "Receive parcel"  : done
 order -> pay
 pay -> stock
 stock -> ship "yes"

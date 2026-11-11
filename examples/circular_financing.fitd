@@ -9,23 +9,23 @@ style hub color=#222222 fill=#FFFFFF
 style party color=#888888 fill=#EEEEEE
 style small color=#888888 fill=#F6F6F6
 
-node jv "Beignet JV (Hyperion)" .hub
+node jv "Beignet JV (Hyperion)"  : hub
 | $27B development cost
 | Blue Owl 80%, Meta 20%
-node meta "Meta (Laidley LLC)" .hub
+node meta "Meta (Laidley LLC)"  : hub
 | ~$50B+ total pledge
-node owl "Blue Owl Capital" .party
-node spv "Bond SPV" .party
+node owl "Blue Owl Capital"  : party
+node spv "Bond SPV"  : party
 | $27.3B senior-secured notes
-node inv "PIMCO, BlackRock" .party
+node inv "PIMCO, BlackRock"  : party
 | anchor note buyers
-node entergy "Entergy Louisiana" .party
+node entergy "Entergy Louisiana"  : party
 | 10 gas plants, 7+ GW
-node rate "Entergy ratepayers" .party
+node rate "Entergy ratepayers"  : party
 | disputed risk
-node state "State of Louisiana, LED" .party
-node parish "Richland Parish" .party
-node ins "Insurers" .small
+node state "State of Louisiana, LED"  : party
+node parish "Richland Parish"  : party
+node ins "Insurers"  : small
 | coverage only to ~$4B
 
 owl -> jv "~$23B equity (Blue Owl share)" color=#4FC3E0

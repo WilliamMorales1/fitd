@@ -10,30 +10,30 @@ style nn_op color=#CC79A7 shape=circle
 
 # nn.input(id, name, dims): a data block labelled with its shape.
 def input(id, name, dims)
-node ${id} "${name}" .nn_data
+node ${id} "${name}"  : nn_data
 ~ #"${dims}"*4
 end
 
 # nn.layer(id, name, dims, times): one block drawn as `times` stacked copies.
 def layer(id, name, dims, times)
-node ${id} "${name}" .nn_block stack=${times}
+node ${id} "${name}"  : nn_block stack=${times}
 ~ #"${dims}"*4
 end
 
 # nn.step(id, name): an operator with no parameters (pool, concat, softmax).
 def step(id, name)
-node ${id} "${name}" .nn_step
+node ${id} "${name}"  : nn_step
 end
 
 # nn.out(id, name, dims): the model output.
 def out(id, name, dims)
-node ${id} "${name}" .nn_result
+node ${id} "${name}"  : nn_result
 ~ #"${dims}"*4
 end
 
 # nn.mask(id, name, n, causal): an n x n attention mask; causal=1 hides the future.
 def mask(id, name, n, causal)
-node ${id} "${name}" .nn_block
+node ${id} "${name}"  : nn_block
 use mask_rows(n, causal)
 end
 
@@ -61,10 +61,10 @@ end
 
 # nn.note(id, text): a frameless margin annotation, as used for axis and lane labels.
 def note(id, text)
-node ${id} "${text}" .nn_note
+node ${id} "${text}"  : nn_note
 end
 
 # nn.add(id): the small circled `+` that marks a residual or merge point.
 def add(id)
-node ${id} "+" .nn_op shape=circle
+node ${id} "+"  : nn_op shape=circle
 end

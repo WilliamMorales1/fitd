@@ -90,7 +90,7 @@ Node, edge, and group attributes include `color`, `fill`, and `text` where suppo
 - Go to definition, find references, and document highlight for nodes, styles, and templates, across includes. Definition on an `include` path opens the file; bundled `std/` modules open as read-only copies.
 - Rename for nodes, styles, and templates, across included files. Names defined in the bundled library are not renamed.
 - Document symbols: styles, nodes, keys, groups, and templates.
-- Completion by context: statement keywords (as snippets when the editor supports them), node ids, `.style` classes, attribute keys per statement, attribute values after `=`, constraint relations and placements, layout kinds, theme presets, page sizes, template calls after `use`, and `include` paths (bundled modules and nearby `.fitd` files).
+- Completion by context: statement keywords (as snippets when the editor supports them), node ids, `: NAME` classes, attribute keys per statement, attribute values after `=`, constraint relations and placements, layout kinds, theme presets, page sizes, template calls after `use`, and `include` paths (bundled modules and nearby `.fitd` files).
 - Signature help and parameter-name inlay hints for `use NAME(...)` calls.
 - Code actions: apply a "did you mean" suggestion, declare an unknown node or style, remove an unused style.
 - Folding for `def`, `for`, and `if` blocks, nodes with body lines, and comment runs.

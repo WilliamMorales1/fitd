@@ -7,48 +7,48 @@ style radial color=#2E7D32
 style down color=#1565C0
 style right color=#6A1B9A
 
-node ex "examples/*.fitd"
+node ex "examples/* : fitd"
 | each builds alone with no flags; each has its own page size
 | every one: -> and ..> edges, edge labels, node bodies, style
 | fonts: all give a range, debugging fixes one size
 
-node radial "Radial maps" .radial
-node down "Layered, dir=down" .down
-node right "Layered, dir=right" .right
+node radial "Radial maps"  : radial
+node down "Layered, dir=down"  : down
+node right "Layered, dir=right"  : right
 ex -> radial, down, right
 
-node coffee "coffee.fitd" .radial
+node coffee "coffee.fitd"  : radial
 | theme palette=, fill=, text=, landscape page
 | undirected -- and .., group in radial layout
 | left-of, align row, at, prefer ... weight=
-node group_theory "group_theory.fitd" .radial
+node group_theory "group_theory.fitd"  : radial
 | no layout or theme: radial is the default
 | root statement, \n in titles, math markup
 radial -> coffee, group_theory
 
-node compiler "compiler.fitd" .down
+node compiler "compiler.fitd"  : down
 | theme dark with color overrides, shape=circle
-| edge .style, group, near ... within=
+| edge  : style, group, near ... within=
 | align row, left-of gap=, prefer ... weight=
-node debugging "debugging.fitd" .down
+node debugging "debugging.fitd"  : down
 | theme mono, one fixed font size, bands=1
 | shape=box and circle, \n in titles
 | right-of, below, align top
-node fib_calls "fib_calls.fitd" .down
+node fib_calls "fib_calls.fitd"  : down
 | macros: recursive def and use, if, $${expr} in names
 down -> compiler, debugging, fib_calls
 
-node release_pipeline "release_pipeline.fitd" .right
+node release_pipeline "release_pipeline.fitd"  : right
 | bands=2, include of shared styles, arrow chains
 | theme color overrides, group, edge color=
 | chained left-of, align column, near ... within=
-node neural_net "neural_net.fitd" .right
+node neural_net "neural_net.fitd"  : right
 | macros: for over a range, names(...)
 | group of generated nodes; W0206 by design
-node semester "semester.fitd" .right
+node semester "semester.fitd"  : right
 | macros: for over a list with an index
 | if / else if / else, bands=3
-node fitd_language "fitd_language.fitd" .right
+node fitd_language "fitd_language.fitd"  : right
 | fitd described in fitd: one of each kind of statement
 | settings, include, edge forms, nested groups
 | require and prefer, near, at, align

@@ -212,7 +212,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                     .map_or(String::new(), |t| format!(" {}", quoted(t)));
                 for (p, part) in parts(items) {
                     let ids: Vec<&str> = part.iter().map(|n| n.text.as_str()).collect();
-                    let looks: String = classes.iter().map(|c| format!(" .{}", c.text)).collect();
+                    let looks: String = classes.iter().map(|c| format!(" : {}", c.text)).collect();
                     let line = format!("group{title} {}{looks}{}", ids.join(", "), attrs_of(attrs));
                     let set: BTreeSet<String> = ids.iter().map(|i| i.to_string()).collect();
                     let sets = framed.entry(p).or_default();
@@ -329,7 +329,7 @@ mod tests {
 
     #[test]
     fn branches_get_pages_and_stubs_name_them() {
-        let text = "title \"Map\"\nlayout radial root=r\nstyle s color=#1565C0\nnode r \"Root\"\nnode a \"A\" .s\n| about a\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\na1 ..> b1\nrequire a1 left-of a\nrequire a1 near b1\n";
+        let text = "title \"Map\"\nlayout radial root=r\nstyle s color=#1565C0\nnode r \"Root\"\nnode a \"A\"  : s\n| about a\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\na1 ..> b1\nrequire a1 left-of a\nrequire a1 near b1\n";
         let out = split("m.fitd", text, "m").unwrap();
         let names: Vec<&str> = out.files.iter().map(|f| f.0.as_str()).collect();
         assert_eq!(names, ["m-shared.fitd", "m.fitd", "m-a.fitd", "m-b.fitd"]);
@@ -342,7 +342,7 @@ mod tests {
         let overview = get("m.fitd");
         assert!(
             overview.contains("title \"Map\"\nroot r\n")
-                && overview.contains("node a \"A\" .s\n| see page m-a\n")
+                && overview.contains("node a \"A\"  : s\n| see page m-a\n")
                 && overview.contains("r -> a, b"),
             "{overview}"
         );

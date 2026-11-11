@@ -9,49 +9,49 @@ style process color=#2E7D32
 style atmosphere color=#6A1B9A
 style impact color=#C62828
 
-node water "Water" .reservoir
+node water "Water"  : reservoir
 | solid, liquid, and vapor
 | mass is conserved as state changes
-node ocean "Ocean" .reservoir
+node ocean "Ocean"  : reservoir
 | largest active reservoir
 | stores heat and dissolved salts
-node ice "Ice and snow" .reservoir
+node ice "Ice and snow"  : reservoir
 | glaciers, ice caps, and seasonal snow
 | high albedo reflects solar radiation
-node ground "Groundwater" .reservoir
+node ground "Groundwater"  : reservoir
 | water stored in pores and fractures
 | residence time can be centuries
-node atmosphere "Atmospheric vapor" .atmosphere
+node atmosphere "Atmospheric vapor"  : atmosphere
 | small reservoir with rapid turnover
 | transports water between regions
-node evaporation "Evaporation" .process
+node evaporation "Evaporation"  : process
 | liquid -> vapor using solar energy
 | latent heat leaves the surface
-node condensation "Condensation" .atmosphere
+node condensation "Condensation"  : atmosphere
 | vapor -> cloud droplets
 | requires cooling or saturation
-node precipitation "Precipitation" .atmosphere
+node precipitation "Precipitation"  : atmosphere
 | rain, snow, sleet, or hail
 | gravity returns water to the surface
-node runoff "Runoff" .process
+node runoff "Runoff"  : process
 | water flows over land to rivers
 | depends on slope, soil, and vegetation
-node infiltration "Infiltration" .process
+node infiltration "Infiltration"  : process
 | water enters soil and aquifers
 | permeability controls the rate
-node transpiration "Transpiration" .process
+node transpiration "Transpiration"  : process
 | plants release water vapor
 | stomata couple carbon and water exchange
-node storage "Surface storage" .reservoir
+node storage "Surface storage"  : reservoir
 | lakes, wetlands, and soil moisture
 | buffers floods and droughts
-node human "Human withdrawals" .impact
+node human "Human withdrawals"  : impact
 | irrigation and pumping move water
 | use can exceed natural recharge
-node balance "Water balance" .process
+node balance "Water balance"  : process
 | input - output = change in storage
 | basin budgets expose unsustainable use
-node climate "Climate feedback" .impact fill=#FFEBEE
+node climate "Climate feedback"  : impact fill=#FFEBEE
 | warming changes vapor capacity and ice melt
 | circulation shifts precipitation patterns
 
@@ -69,10 +69,10 @@ precipitation -> infiltration
 runoff -> ocean
 infiltration -> ground
 runoff -> storage -> evaporation
-human ..> ground "pumping" .impact
-human ..> storage "withdrawal" .impact
-climate ..> evaporation "warming" .impact
-climate ..> ice "melting" .impact
+human ..> ground "pumping"  : impact
+human ..> storage "withdrawal"  : impact
+climate ..> evaporation "warming"  : impact
+climate ..> ice "melting"  : impact
 ocean ..> balance "reservoir"
 ground ..> balance "reservoir"
 

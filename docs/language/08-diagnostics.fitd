@@ -11,9 +11,9 @@ node diag "Diagnostics"
 | fitd explain CODE prints the long form
 | --short prints one line each
 
-node front "E00xx: front end" .front
-node lay "E01xx: layout" .layout
-node warn "W02xx: warnings" .warn
+node front "E00xx: front end"  : front
+node lay "E01xx: layout"  : layout
+node warn "W02xx: warnings"  : warn
 | never block output
 diag -> front, lay, warn
 
@@ -36,6 +36,7 @@ use code("front", "E0010", "two groups share some nodes without one holding the 
 use code("front", "E0011", "include cycle or unreadable file")
 use code("front", "E0012", "macro error: unknown variable or template, argument count, type, division by zero, nesting too deep")
 use code("front", "E0013", "macro expansion ran past --expand-budget steps")
+use code("front", "E0014", "image row names a missing file or one not PNG or JPEG")
 
 use code("lay", "E0101", "checker: overlap")
 use code("lay", "E0102", "checker: edge through node")
