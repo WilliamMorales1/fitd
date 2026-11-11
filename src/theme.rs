@@ -3,6 +3,8 @@ pub const PRESETS: &[&str] = &["light", "dark", "mono"];
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
     pub background: String,
+    /// End color of a diagonal page gradient that starts at `background`.
+    pub gradient: Option<String>,
     pub text: String,
     pub edge: String,
     pub link: String,
@@ -15,6 +17,7 @@ pub struct Theme {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Overrides {
     pub background: Option<String>,
+    pub gradient: Option<String>,
     pub text: Option<String>,
     pub edge: Option<String>,
     pub link: Option<String>,
@@ -25,6 +28,7 @@ pub struct Overrides {
 
 pub const KEYS: &[&str] = &[
     "background",
+    "gradient",
     "text",
     "edge",
     "link",
@@ -83,6 +87,7 @@ impl Theme {
         };
         Some(Theme {
             background: bg.into(),
+            gradient: None,
             text: text.into(),
             edge: edge.into(),
             link: link.into(),
@@ -100,6 +105,9 @@ impl Theme {
             }
         };
         set(&mut self.background, &o.background);
+        if o.gradient.is_some() {
+            self.gradient = o.gradient.clone();
+        }
         set(&mut self.text, &o.text);
         set(&mut self.edge, &o.edge);
         set(&mut self.link, &o.link);
@@ -112,19 +120,33 @@ impl Theme {
     }
 }
 
+/// Accepts `#RGB`, `#RGBA`, `#RRGGBB` and `#RRGGBBAA`.
 pub fn is_color(s: &str) -> bool {
-    s.strip_prefix('#')
-        .is_some_and(|h| (h.len() == 3 || h.len() == 6) && h.chars().all(|c| c.is_ascii_hexdigit()))
+    s.strip_prefix('#').is_some_and(|h| {
+        matches!(h.len(), 3 | 4 | 6 | 8) && h.chars().all(|c| c.is_ascii_hexdigit())
+    })
 }
 
+/// Opaque `RRGGBB` part of a color, alpha dropped.
 pub fn rgb(c: &str) -> String {
     let h = c.trim_start_matches('#');
-    let h = if h.len() == 3 {
-        h.chars().flat_map(|c| [c, c]).collect()
+    let h = if h.len() <= 4 {
+        h.chars().take(3).flat_map(|c| [c, c]).collect()
     } else {
-        h.to_string()
+        h[..6].to_string()
     };
     h.to_uppercase()
+}
+
+/// Opacity in `0..=1` from the alpha digits of `#RGBA` or `#RRGGBBAA`; `1` otherwise.
+pub fn alpha(c: &str) -> f64 {
+    let h = c.trim_start_matches('#');
+    let a = match h.len() {
+        4 => h[3..].chars().flat_map(|c| [c, c]).collect::<String>(),
+        8 => h[6..].to_string(),
+        _ => return 1.0,
+    };
+    u8::from_str_radix(&a, 16).map_or(1.0, |v| f64::from(v) / 255.0)
 }
 
 fn luminance(c: &str) -> f64 {
@@ -177,10 +199,31 @@ mod tests {
     }
 
     #[test]
+    fn gradient_override() {
+        let o = Overrides {
+            gradient: Some("#123456".into()),
+            ..Default::default()
+        };
+        let t = Theme::preset("dark").unwrap().with(&o);
+        assert_eq!(t.gradient.as_deref(), Some("#123456"));
+        assert_eq!(Theme::preset("dark").unwrap().gradient, None);
+    }
+
+    #[test]
     fn contrast_text() {
         assert_eq!(on("#0969DA"), "#FFFFFF");
         assert_eq!(on("#FFB74D"), "#111111");
         assert_eq!(rgb("#abc"), "AABBCC");
         assert!(!is_color("#12345") && !is_color("red"));
+    }
+
+    #[test]
+    fn rgba_alpha() {
+        assert!(is_color("#8B2E8B80") && is_color("#F008"));
+        assert_eq!(rgb("#8B2E8B80"), "8B2E8B");
+        assert_eq!(rgb("#F008"), "FF0000");
+        assert_eq!(alpha("#8B2E8B00"), 0.0);
+        assert_eq!(alpha("#fff"), 1.0);
+        assert!((alpha("#F008") - 0.533).abs() < 0.01);
     }
 }

@@ -4,16 +4,33 @@ use crate::diag::Span;
 pub enum Shape {
     Circle,
     Rect,
+    /// Text with no frame, for margin annotations and lane labels.
+    Plain,
+}
+
+/// Cell is one square of a node figure row: shaded, outlined, or an invisible gap.
+#[derive(Clone, Debug)]
+pub struct Cell {
+    pub shade: f64,
+    pub gap: bool,
+    pub span: usize,
+    pub label: Option<String>,
 }
 
 pub struct Node {
     pub id: String,
     pub title: String,
     pub body: Vec<String>,
+    pub figure: Vec<Vec<Cell>>,
     pub color: Option<String>,
     pub fill: Option<String>,
     pub text: Option<String>,
     pub shape: Option<Shape>,
+    pub stack: Option<u8>,
+    /// Overrides the page-wide `font wrap=` for this node.
+    pub wrap_em: Option<f64>,
+    /// Set by `place=aside`: in a layered layout, sits in a strip after the flow.
+    pub aside: bool,
     pub span: Span,
 }
 
@@ -97,6 +114,7 @@ pub enum Relation {
         title: Option<String>,
         color: Option<String>,
         title_em: f64,
+        dashed: bool,
         inner: Vec<Relation>,
     },
 }
@@ -168,6 +186,7 @@ pub struct Settings {
     pub page_fixed: bool,
     pub bands: Option<usize>,
     pub margin: Option<f64>,
+    pub key_size: Option<f64>,
     pub font: Option<(f64, f64)>,
     pub font_span: Option<Span>,
     pub wrap_em: Option<f64>,
@@ -176,7 +195,16 @@ pub struct Settings {
     pub theme_over: crate::theme::Overrides,
 }
 
+pub struct KeyEntry {
+    pub label: String,
+    pub color: Option<String>,
+    pub fill: Option<String>,
+    pub shape: Option<Shape>,
+    pub line: Option<bool>,
+}
+
 pub struct Graph {
+    pub key: Vec<KeyEntry>,
     pub title: Option<String>,
     pub root: Option<usize>,
     pub nodes: Vec<Node>,

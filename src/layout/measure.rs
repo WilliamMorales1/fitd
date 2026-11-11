@@ -1,4 +1,5 @@
 use super::*;
+use crate::graph::Cell;
 
 pub fn label_size(fonts: &Fonts, text: &str, body: f64) -> (f64, f64) {
     (
@@ -84,7 +85,10 @@ pub fn measure(fonts: &Fonts, g: &Graph, v: usize, role: Role, b: f64, cfg: &Con
         Role::Leaf => (1.2 * b, b, cfg.wrap_em * b, Shape::Rect, 0.5 * b),
     };
     let node = &g.nodes[v];
+    let wrap_w = node.wrap_em.map_or(wrap_w, |em| em * b);
     let shape = node.shape.unwrap_or(shape);
+    // A frameless node has no border to clear, so it keeps only enough padding to breathe.
+    let pad = if shape == Shape::Plain { 0.15 * b } else { pad };
     let mut raw: Vec<(String, f64, bool)> = Vec::new();
     for part in node.title.split('\n') {
         for l in wrap(fonts, part, ts, true, wrap_w) {
@@ -117,44 +121,159 @@ pub fn measure(fonts: &Fonts, g: &Graph, v: usize, role: Role, b: f64, cfg: &Con
         top += line_height(size);
     }
     let text_h = top;
-    match shape {
-        Shape::Rect => {
-            let w = lines.iter().map(|l| l.width).fold(0.0, f64::max) + 2.0 * pad;
+    let (mut cells, fw, fh) = figure(fonts, &node.figure, bs);
+    let fig_gap = if fh > 0.0 && text_h > 0.0 {
+        0.3 * b
+    } else {
+        0.0
+    };
+    let content_w = lines.iter().map(|l| l.width).fold(fw, f64::max);
+    let content_h = text_h + fig_gap + fh;
+    let (w, h, dx, dy) = match shape {
+        Shape::Rect | Shape::Plain => {
             for l in &mut lines {
                 l.x = pad;
                 l.baseline += pad;
             }
-            Boxed {
-                shape,
-                role,
-                w,
-                h: text_h + 2.0 * pad,
-                pad,
-                lines,
-            }
+            (
+                content_w + 2.0 * pad,
+                content_h + 2.0 * pad,
+                pad + (content_w - fw) / 2.0,
+                pad + text_h + fig_gap,
+            )
         }
         Shape::Circle => {
             let mut r: f64 = 0.0;
             for l in &lines {
-                let top_y = l.baseline - 0.96 * l.size - text_h / 2.0;
+                let top_y = l.baseline - 0.96 * l.size - content_h / 2.0;
                 let far = top_y.abs().max((top_y + line_height(l.size)).abs());
                 r = r.max((l.width / 2.0).hypot(far));
+            }
+            if fh > 0.0 {
+                let y0 = text_h + fig_gap - content_h / 2.0;
+                r = r.max((fw / 2.0).hypot(y0.abs().max((y0 + fh).abs())));
             }
             let r = r + pad;
             for l in &mut lines {
                 l.x = r - l.width / 2.0;
-                l.baseline += r - text_h / 2.0;
+                l.baseline += r - content_h / 2.0;
             }
-            Boxed {
-                shape,
-                role,
-                w: 2.0 * r,
-                h: 2.0 * r,
-                pad,
-                lines,
-            }
+            (
+                2.0 * r,
+                2.0 * r,
+                r - fw / 2.0,
+                r - content_h / 2.0 + text_h + fig_gap,
+            )
+        }
+    };
+    // Stacked copies sit up and to the right, so the box grows and its content slides down.
+    let stack = node.stack.unwrap_or(1).max(1);
+    let shift = if stack > 1 {
+        0.42 * b * (stack - 1) as f64
+    } else {
+        0.0
+    };
+    for l in &mut lines {
+        l.baseline += shift;
+    }
+    for c in &mut cells {
+        c.x += dx;
+        c.y += dy + shift;
+        if let Some(l) = &mut c.label {
+            l.x += dx;
+            l.baseline += dy + shift;
         }
     }
+    Boxed {
+        shape,
+        role,
+        w: w + shift,
+        h: h + shift,
+        pad,
+        stack,
+        shift,
+        lines,
+        cells,
+    }
+}
+
+/// figure lays out a node's `~` rows as a grid, returning cells plus the grid's size.
+fn figure(fonts: &Fonts, rows: &[Vec<Cell>], bs: f64) -> (Vec<CellBox>, f64, f64) {
+    if rows.is_empty() {
+        return (Vec::new(), 0.0, 0.0);
+    }
+    let (side, gap, ls) = (1.35 * bs, 0.16 * bs, 0.82 * bs);
+    let cols = rows
+        .iter()
+        .map(|r| r.iter().map(|c| c.span).sum::<usize>())
+        .max()
+        .unwrap_or(0);
+    let need = |c: &Cell| {
+        c.label
+            .as_ref()
+            .map_or(0.0, |t| fonts.width(t, ls, false) + 0.7 * bs)
+    };
+    let mut cw = vec![side; cols];
+    for row in rows {
+        let mut j = 0;
+        for c in row {
+            if c.span == 1 && j < cols {
+                cw[j] = cw[j].max(need(c));
+            }
+            j += c.span;
+        }
+    }
+    // A spanning label that still does not fit widens only the last column it covers.
+    for row in rows {
+        let mut j = 0;
+        for c in row {
+            if c.span > 1 && j + c.span <= cols {
+                let have = cw[j..j + c.span].iter().sum::<f64>() + gap * (c.span - 1) as f64;
+                if need(c) > have {
+                    cw[j + c.span - 1] += need(c) - have;
+                }
+            }
+            j += c.span;
+        }
+    }
+    let rh = side.max(line_height(ls) + 0.3 * bs);
+    let mut cells = Vec::new();
+    let mut y = 0.0;
+    for row in rows {
+        let (mut x, mut j) = (0.0, 0);
+        for c in row {
+            let end = (j + c.span).min(cols);
+            let w =
+                cw[j.min(cols)..end].iter().sum::<f64>() + gap * end.saturating_sub(j + 1) as f64;
+            if !c.gap {
+                let label = c.label.as_ref().map(|t| {
+                    let runs = fonts.runs(t, false);
+                    let width = fonts.runs_width(&runs, ls, false);
+                    TextLine {
+                        runs,
+                        size: ls,
+                        bold: false,
+                        width,
+                        x: x + (w - width) / 2.0,
+                        baseline: y + rh / 2.0 + 0.34 * ls,
+                    }
+                });
+                cells.push(CellBox {
+                    x,
+                    y,
+                    w,
+                    h: rh,
+                    shade: c.shade,
+                    label,
+                });
+            }
+            x += w + gap;
+            j = end;
+        }
+        y += rh + gap;
+    }
+    let fw = cw.iter().sum::<f64>() + gap * (cols - 1) as f64;
+    (cells, fw, y - gap)
 }
 
 pub(super) fn measure_all(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f64) -> Vec<Boxed> {

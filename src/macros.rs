@@ -434,11 +434,12 @@ fn is_kw_line(t: &str) -> Option<(&str, &str)> {
 
 fn classify(line: &str) -> Result<Line, String> {
     let t = line.trim();
-    if t.starts_with('#') || t.starts_with('|') && !t.contains("${") {
+    let verbatim = t.starts_with('|') || t.starts_with('~');
+    if t.starts_with('#') || verbatim && !t.contains("${") {
         return Ok(Line::Item(Kind::Plain));
     }
     let Some((w, rest)) = is_kw_line(t) else {
-        let cut = if t.starts_with('|') {
+        let cut = if verbatim {
             line.len()
         } else {
             comment_start(line)

@@ -152,9 +152,10 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         Dir::Down => (boxes[v].h, boxes[v].w),
         Dir::Right => (boxes[v].w, boxes[v].h),
     };
+    // The key takes the bottom of the page, so the cross axis is not centered on 0.
     let to_xy = |m: f64, c: f64| match dir {
-        Dir::Down => (c, page.y1 - m),
-        Dir::Right => (page.x0 + m, -c),
+        Dir::Down => (c + (page.x0 + page.x1) / 2.0, page.y1 - m),
+        Dir::Right => (page.x0 + m, (page.y0 + page.y1) / 2.0 - c),
     };
 
     let rep = merged(g, dir);
@@ -187,9 +188,33 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         .filter(|&i| flat[i])
         .map(|i| tree[i])
         .collect();
-    let rows = order(n, &layer, &dag);
-
     let sep = (0.6 * b).max(3.0);
+    let member = |v: usize| {
+        g.constraints
+            .iter()
+            .any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)))
+    };
+    let flows: Vec<bool> = {
+        let mut f = vec![false; n];
+        for &(a, c) in &tree {
+            (f[rep[a]], f[rep[c]]) = (true, true);
+        }
+        f
+    };
+    let detached: Vec<bool> = (0..n)
+        .map(|v| g.nodes[v].aside && !flows[rep[v]] && !member(v) && flows.iter().any(|&f| f))
+        .collect();
+    let strip = strip_rows(&detached, &size, main_len, sep);
+    let strip_len = strip
+        .iter()
+        .map(|r| r.iter().map(|&v| size(v).1).fold(0.0, f64::max))
+        .map(|w| w + 2.0 * b)
+        .sum::<f64>();
+    let cross_len = cross_len - strip_len;
+    let mut rows = order(n, &layer, &dag);
+    for r in &mut rows {
+        r.retain(|&v| !detached[v]);
+    }
     let thick: Vec<f64> = rows
         .iter()
         .map(|r| r.iter().map(|&v| size(v).0).fold(0.0, f64::max))
@@ -300,7 +325,7 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
                 let x = i as f64 * step;
                 cands[v].push(Cand {
                     cost: (x - ideal).abs(),
-                    at: to_xy(center[l], x),
+                    at: to_xy(center[l], x - strip_len / 2.0),
                     r: 0.0,
                 });
             }
@@ -309,7 +334,58 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         }
     }
 
+    let mut c = (cross_len - strip_len) / 2.0 + 2.0 * b;
+    for r in &strip {
+        let thick = r.iter().map(|&v| size(v).1).fold(0.0, f64::max);
+        let total = r.iter().map(|&v| size(v).0).sum::<f64>();
+        let space = ((main_len - total) / r.len() as f64).clamp(0.0, 4.0 * b);
+        let mut m = lead + (main_len - total - space * (r.len() - 1) as f64) / 2.0;
+        for &v in r.iter().filter(|_| feasible) {
+            let (len, w) = size(v);
+            // Sit under the flow nodes it links to; otherwise keep the strip order.
+            let linked: Vec<f64> = g
+                .edges
+                .iter()
+                .filter_map(|e| match (e.a == v, e.b == v) {
+                    (true, false) if !detached[e.b] => Some(center[layer[e.b]]),
+                    (false, true) if !detached[e.a] => Some(center[layer[e.a]]),
+                    _ => None,
+                })
+                .collect();
+            let even = m + len / 2.0;
+            let ideal = if linked.is_empty() {
+                even
+            } else {
+                linked.iter().sum::<f64>() / linked.len() as f64
+            };
+            m += len + space;
+            let (i0, i1) = (
+                ((lead + len / 2.0) / step).ceil() as i64,
+                ((lead + main_len - len / 2.0) / step).floor() as i64,
+            );
+            let at = c + w / 2.0;
+            for i in i0..=i1 {
+                let x = i as f64 * step;
+                cands[v].push(Cand {
+                    cost: (x - ideal).abs() + 0.25 * (x - even).abs(),
+                    at: to_xy(x, at),
+                    r: 0.0,
+                });
+            }
+            cands[v].retain(|c| Rect::centered(c.at, boxes[v].w, boxes[v].h).within(&page));
+            cands[v].sort_by(|a, b| a.cost.total_cmp(&b.cost));
+        }
+        c += thick + 2.0 * b;
+    }
+
     let mut cons = Vec::new();
+    for r in &strip {
+        for (i, &u) in r.iter().enumerate() {
+            for &v in &r[i + 1..] {
+                cons.push((vec![u, v], Kind::Apart(sep), 0));
+            }
+        }
+    }
     for row in &rows {
         for (i, &u) in row.iter().enumerate() {
             for &v in &row[i + 1..] {
@@ -360,14 +436,10 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Link) {
         edges.push(Drawn::new(e.a, e.b, EdgeStyle::Link, 0.1, e.label.clone()));
     }
-    let member = |v: usize| {
-        g.constraints
-            .iter()
-            .any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)))
-    };
     let (mut order, rest): (Vec<usize>, Vec<usize>) =
         rows.concat().into_iter().partition(|&v| member(v));
     order.extend(rest);
+    order.extend(strip.concat());
     let crowded = (!feasible).then(|| {
         (
             rows.len(),
@@ -385,6 +457,31 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         tol: 0.5 * step,
         crowded,
     }
+}
+
+/// strip_rows packs detached nodes, in source order, into rows no longer than `main_len`.
+fn strip_rows(
+    detached: &[bool],
+    size: impl Fn(usize) -> (f64, f64),
+    main_len: f64,
+    sep: f64,
+) -> Vec<Vec<usize>> {
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    let mut used = 0.0;
+    for v in (0..detached.len()).filter(|&v| detached[v]) {
+        let len = size(v).0;
+        match rows.last_mut() {
+            Some(r) if used + sep + len <= main_len => {
+                r.push(v);
+                used += sep + len;
+            }
+            _ => {
+                rows.push(vec![v]);
+                used = len;
+            }
+        }
+    }
+    rows
 }
 
 #[cfg(test)]

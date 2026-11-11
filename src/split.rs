@@ -124,12 +124,13 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             StmtKind::Page { .. }
             | StmtKind::Font { .. }
             | StmtKind::Theme { .. }
-            | StmtKind::Style { .. } => {
+            | StmtKind::Style { .. }
+            | StmtKind::Key { .. } => {
                 shared += &own;
                 shared.push('\n');
                 continue;
             }
-            StmtKind::Body(_) => {
+            StmtKind::Body(_) | StmtKind::Cells(_) => {
                 for &p in last.iter().filter(|&&p| p != OVERVIEW || last.len() == 1) {
                     body[slot(p)].push(own.clone());
                 }
@@ -203,6 +204,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             StmtKind::Group {
                 title,
                 items,
+                classes,
                 attrs,
             } => {
                 let title = title
@@ -210,7 +212,8 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                     .map_or(String::new(), |t| format!(" {}", quoted(t)));
                 for (p, part) in parts(items) {
                     let ids: Vec<&str> = part.iter().map(|n| n.text.as_str()).collect();
-                    let line = format!("group{title} {}{}", ids.join(", "), attrs_of(attrs));
+                    let looks: String = classes.iter().map(|c| format!(" .{}", c.text)).collect();
+                    let line = format!("group{title} {}{looks}{}", ids.join(", "), attrs_of(attrs));
                     let set: BTreeSet<String> = ids.iter().map(|i| i.to_string()).collect();
                     let sets = framed.entry(p).or_default();
                     if sets.contains(&set) {

@@ -7,7 +7,7 @@ pub(super) const SPOTS: [f64; 9] = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.1
 pub(super) fn inside_box(c: P, shape: Shape, w: f64, h: f64, p: P) -> bool {
     match shape {
         Shape::Circle => (p.0 - c.0).hypot(p.1 - c.1) <= w / 2.0,
-        Shape::Rect => Rect::centered(c, w, h).contains(p),
+        Shape::Rect | Shape::Plain => Rect::centered(c, w, h).contains(p),
     }
 }
 

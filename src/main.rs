@@ -10,6 +10,10 @@ mod geom;
 mod graph;
 mod import;
 mod include;
+mod key;
+
+/// KEY_RATIO is the key text size relative to the body font when `keysize` is not set.
+const KEY_RATIO: f64 = 0.85;
 mod layered;
 mod layout;
 mod lex;
@@ -21,6 +25,7 @@ mod quality;
 mod radial;
 mod sema;
 mod split;
+mod stdlib;
 mod theme;
 mod tree;
 
@@ -41,7 +46,8 @@ const USAGE: &str = "usage:
   fitd lsp              language server on stdin/stdout
   fitd import <file.dot|file.mmd|file.d2> [-o out.fitd]   translate Graphviz, Mermaid, or D2
   fitd split <input.fitd> [-o DIR]   an overview page plus one page per top-level branch
-  fitd guide            the whole language on one page, with examples";
+  fitd guide            the whole language on one page, with examples
+  fitd std [NAME]       list the bundled library, or print one module";
 
 const GUIDE: &str = include_str!("guide.txt");
 type PdfPage = (String, metrics::Fonts, (f64, f64));
@@ -117,6 +123,24 @@ fn run(args: &[String]) -> FitdResult<ExitCode> {
         }
         Some("guide") => {
             print!("{GUIDE}");
+            Ok(ExitCode::SUCCESS)
+        }
+        Some("std") => {
+            match args.get(1) {
+                Some(name) => print!(
+                    "{}",
+                    stdlib::get(&format!("std/{name}")).ok_or(format!(
+                        "no library module {name}; the library has: {}",
+                        stdlib::names().join(", ")
+                    ))?
+                ),
+                None => {
+                    for (name, text) in stdlib::MODULES {
+                        let what = text.lines().next().unwrap_or("").trim_start_matches("# ");
+                        println!("std/{name}.fitd  {what}");
+                    }
+                }
+            }
             Ok(ExitCode::SUCCESS)
         }
         Some("-h" | "--help" | "help") => {
@@ -447,6 +471,8 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         g.settings.bands = bands;
     }
     let set = &g.settings;
+    // Without `keysize`, the key follows the body font, which is known only after a solve.
+    let key_auto = g.settings.key_size.is_none();
     let (mut page_w, mut page_h) = match &page_spec {
         Some(p) => page(p, false)?,
         None => set.page.unwrap_or(page("a1", false)?),
@@ -492,6 +518,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         first_cap: budget / if draft { 20 } else { 4 },
         legible: legible(page_w, page_h, min_font.unwrap_or(font.0)),
         draft,
+        key_h: 0.0,
         anchor: anchor.map(|a| &*Box::leak(Box::new(a))),
     };
 
@@ -518,7 +545,30 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         ))?
         .with(&set.theme_over);
     layout::measure_groups(&mut g, &fonts);
+    let plan_key = |size: f64| {
+        key::KeyPlan::new(
+            &g.key,
+            &fonts,
+            cfg.page_w - 2.0 * cfg.margin,
+            cfg.margin,
+            size,
+        )
+    };
+    let mut key = plan_key(g.settings.key_size.unwrap_or(KEY_RATIO * cfg.min_font));
+    cfg.key_h = key.as_ref().map_or(0.0, key::KeyPlan::height);
     let mut lay = match layout::solve(&g, &t, &fonts, &cfg) {
+        Ok(lay) if key_auto && key.is_some() && lay.body > 1.02 * cfg.min_font => {
+            let wider = plan_key(KEY_RATIO * lay.body);
+            let mut c2 = cfg;
+            c2.key_h = wider.as_ref().map_or(0.0, key::KeyPlan::height);
+            match layout::solve(&g, &t, &fonts, &c2) {
+                Ok(l2) => {
+                    (key, cfg) = (wider, c2);
+                    l2
+                }
+                Err(_) => lay,
+            }
+        }
         Ok(lay) => lay,
         Err(Failure::NoRoom { crowded, cut_off }) => {
             eprintln!(
@@ -691,6 +741,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
                 &lay,
                 Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h),
                 &th,
+                key.as_ref(),
             ),
             fonts,
             (cfg.page_w, cfg.page_h),
@@ -705,8 +756,9 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
             &t,
             &fonts,
             &lay,
-            emit::bounds(&g, &lay).inflate(cfg.margin),
+            emit::png_view(&g, &lay, key.as_ref(), cfg.margin),
             &th,
+            key.as_ref(),
         );
         emit::png(&svg, &fonts, scale)?
     } else if out.to_ascii_lowercase().ends_with(".pdf") {
@@ -720,6 +772,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
                     &lay,
                     Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h),
                     &th,
+                    key.as_ref(),
                 ),
                 &fonts,
                 0.0,
@@ -734,6 +787,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
             &lay,
             Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h),
             &th,
+            key.as_ref(),
         )
         .into_bytes()
     };
@@ -742,7 +796,17 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
     if let Some(p) = tikz_out {
         write(
             &p,
-            emit::tikz(&g, &t, &fonts, &lay, cfg.page_w, cfg.page_h, &th).as_bytes(),
+            emit::tikz(
+                &g,
+                &t,
+                &fonts,
+                &lay,
+                cfg.page_w,
+                cfg.page_h,
+                &th,
+                key.as_ref(),
+            )
+            .as_bytes(),
         )?;
         eprintln!("wrote {p}");
     }

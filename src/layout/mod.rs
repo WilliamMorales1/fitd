@@ -63,16 +63,22 @@ pub struct Config {
     pub first_cap: u64,
     pub legible: f64,
     pub draft: bool,
+    pub key_h: f64,
     pub anchor: Option<&'static Anchor>,
 }
 
 impl Config {
     pub fn page(&self) -> Rect {
-        Rect::centered(
-            (0.0, 0.0),
+        let (w, h) = (
             self.page_w - 2.0 * self.margin,
             self.page_h - 2.0 * self.margin,
-        )
+        );
+        Rect {
+            x0: -w / 2.0,
+            y0: -h / 2.0 + self.key_h,
+            x1: w / 2.0,
+            y1: h / 2.0,
+        }
     }
 }
 
@@ -92,13 +98,27 @@ pub struct TextLine {
     pub baseline: f64,
 }
 
+/// CellBox is one placed figure cell, positioned relative to the node box's top-left corner.
+pub struct CellBox {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub shade: f64,
+    pub label: Option<TextLine>,
+}
+
 pub struct Boxed {
     pub shape: Shape,
     pub role: Role,
     pub w: f64,
     pub h: f64,
     pub pad: f64,
+    /// Extra copies drawn behind the box, offset by `shift`, for a repeated block.
+    pub stack: u8,
+    pub shift: f64,
     pub lines: Vec<TextLine>,
+    pub cells: Vec<CellBox>,
 }
 
 #[derive(Default, Clone, Copy)]

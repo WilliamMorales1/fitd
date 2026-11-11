@@ -52,7 +52,7 @@ For multiple input files and PDF output, fitd writes one page per input. `--grid
 
 ## Themes and fonts
 
-Theme presets are `dark`, `light`, and `mono`. Source-level overrides use `theme` attributes. Supported theme keys are `background`, `text`, `edge`, `link`, `label`, `root`, and `palette`.
+Theme presets are `dark`, `light`, and `mono`. Source-level overrides use `theme` attributes. Supported theme keys are `background`, `gradient`, `text`, `edge`, `link`, `label`, `root`, and `palette`.
 
 Node, edge, and group attributes include `color`, `fill`, and `text` where supported. `family` selects font family in source; `--font-family` overrides it. A requested family must be available through fontconfig. Without embedded fonts, fontconfig is required for font discovery.
 

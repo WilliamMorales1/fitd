@@ -1,5 +1,6 @@
 use crate::geom::{P, Rect};
-use crate::graph::{Graph, LayoutKind, Relation};
+use crate::graph::{Graph, KeyEntry, LayoutKind, Relation};
+use crate::key::KeyPlan;
 use crate::layout::{
     Drawn, EdgeStyle, FRAME_PAD, Layout, Role, Shape, TITLE_BAND, TextLine, frame,
 };
@@ -50,6 +51,7 @@ fn paints(g: &Graph, t: &Tree, lay: &Layout, th: &Theme) -> Vec<Paint> {
                 }
                 (Shape::Circle, _, None) => (acc[v].clone(), 1.0, theme::on(&acc[v]).to_string()),
                 (Shape::Rect, _, None) => (acc[v].clone(), th.tint, th.text.clone()),
+                (Shape::Plain, _, None) => (th.background.clone(), 0.0, th.text.clone()),
             };
             let accent = if lay.boxes[v].role == Role::Root && n.color.is_none() {
                 th.text.clone()
@@ -113,6 +115,7 @@ struct Group<'a> {
     rect: Rect,
     title: Option<&'a str>,
     color: Option<&'a str>,
+    dashed: bool,
 }
 
 fn groups<'a>(g: &'a Graph, lay: &Layout) -> Vec<Group<'a>> {
@@ -125,13 +128,20 @@ fn groups<'a>(g: &'a Graph, lay: &Layout) -> Vec<Group<'a>> {
     rels.sort_by_key(|r| std::cmp::Reverse(r.depth()));
     rels.into_iter()
         .map(|r| {
-            let Relation::Group { title, color, .. } = r else {
+            let Relation::Group {
+                title,
+                color,
+                dashed,
+                ..
+            } = r
+            else {
                 unreachable!()
             };
             Group {
                 rect: frame(r, &|v| lay.rect(v), lay.body),
                 title: title.as_deref(),
                 color: color.as_deref(),
+                dashed: *dashed,
             }
         })
         .collect()
@@ -200,7 +210,91 @@ fn svg_line(out: &mut String, fonts: &Fonts, l: &TextLine, x: f64, y: f64, fill:
     out.push_str("</text>\n");
 }
 
-pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Theme) -> String {
+/// View for bitmap output: layout bounds plus margin, grown to hold the key below.
+pub fn png_view(g: &Graph, lay: &Layout, key: Option<&KeyPlan>, margin: f64) -> Rect {
+    let mut v = bounds(g, lay).inflate(margin);
+    if let Some(k) = key {
+        v.y0 -= k.height();
+        let w = k.width() + 2.0 * margin;
+        let c = (v.x0 + v.x1) / 2.0;
+        v.x0 = v.x0.min(c - w / 2.0);
+        v.x1 = v.x1.max(c + w / 2.0);
+    }
+    v
+}
+
+fn key_swatch(e: &KeyEntry, th: &Theme, x: f64, y: f64, s: f64) -> String {
+    let c = e.color.as_deref().unwrap_or(&th.edge);
+    if let Some(dashed) = e.line {
+        let dash = if dashed {
+            format!(r#" stroke-dasharray="{:.2} {:.2}""#, s * 0.3, s * 0.2)
+        } else {
+            String::new()
+        };
+        return format!(
+            r#"<line x1="{x:.2}" y1="{y:.2}" x2="{:.2}" y2="{y:.2}" stroke="{c}" stroke-width="{:.2}"{dash}/>"#,
+            x + s,
+            s / 5.0
+        );
+    }
+    match (e.shape, &e.fill) {
+        (_, Some(f)) if e.shape == Some(Shape::Circle) => format!(
+            r#"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{f}" stroke="{c}" stroke-width="1"/>"#,
+            x + s / 2.0,
+            y,
+            s / 2.0
+        ),
+        (Some(Shape::Circle), None) => format!(
+            r#"<circle cx="{:.2}" cy="{:.2}" r="{:.2}" fill="{c}" stroke="{c}" stroke-width="1"/>"#,
+            x + s / 2.0,
+            y,
+            s / 2.0
+        ),
+        (_, f) => {
+            let (fill, op) = f.as_deref().map_or((c, th.tint), |f| (f, 1.0));
+            format!(
+                r#"<rect x="{x:.2}" y="{:.2}" width="{s:.2}" height="{s:.2}" rx="{:.2}" fill="{fill}" fill-opacity="{op:.2}" stroke="{c}" stroke-width="1"/>"#,
+                y - s / 2.0,
+                s * 0.15
+            )
+        }
+    }
+}
+
+fn svg_key(o: &mut String, g: &Graph, fonts: &Fonts, th: &Theme, k: &KeyPlan, w: f64, h: f64) {
+    let bottom = h - k.pad;
+    let n = k.rows.len() as f64;
+    for (r, row) in k.rows.iter().enumerate() {
+        let cy = bottom - (n - r as f64 - 0.5) * k.row_h;
+        let x0 = (w - row.width) / 2.0;
+        for &(dx, i) in &row.items {
+            let e = &g.key[i];
+            let x = x0 + dx;
+            o.push_str(&key_swatch(e, th, x, cy, k.size));
+            o.push('\n');
+            let _ = writeln!(
+                o,
+                r#"<text x="{:.2}" y="{:.2}" font-size="{}" font-family="{}" fill="{}">{}</text>"#,
+                x + 1.5 * k.size,
+                cy + 0.35 * k.size,
+                k.size,
+                xml(&fonts.regular[0].family),
+                th.text,
+                xml(&e.label)
+            );
+        }
+    }
+}
+
+pub fn svg(
+    g: &Graph,
+    t: &Tree,
+    fonts: &Fonts,
+    lay: &Layout,
+    view: Rect,
+    th: &Theme,
+    key: Option<&KeyPlan>,
+) -> String {
     let paint = paints(g, t, lay, th);
     let b = lay.body;
     let (w, h) = (view.x1 - view.x0, view.y1 - view.y0);
@@ -239,17 +333,31 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
         );
     }
     o.push_str("</defs>\n");
-    let _ = writeln!(
-        o,
-        r#"<rect width="{w}" height="{h}" fill="{}"/>"#,
-        th.background
-    );
+    if let Some(end) = &th.gradient {
+        let _ = writeln!(
+            o,
+            r#"<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{}"/><stop offset="1" stop-color="{end}"/></linearGradient></defs>"#,
+            th.background
+        );
+        let _ = writeln!(o, r#"<rect width="{w}" height="{h}" fill="url(#bg)"/>"#);
+    } else {
+        let _ = writeln!(
+            o,
+            r#"<rect width="{w}" height="{h}" fill="{}"/>"#,
+            th.background
+        );
+    }
     for f in groups(g, lay) {
         let ((x0, y0), (x1, y1)) = (tx((f.rect.x0, f.rect.y1)), tx((f.rect.x1, f.rect.y0)));
         let c = f.color.unwrap_or(&th.edge);
+        let dash = if f.dashed {
+            format!(r#" stroke-dasharray="{:.1} {:.1}""#, 0.7 * b, 0.5 * b)
+        } else {
+            String::new()
+        };
         let _ = writeln!(
             o,
-            r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{c}" fill-opacity="{:.2}" stroke="{c}" stroke-width="{:.2}"/>"#,
+            r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{c}" fill-opacity="{:.2}" stroke="{c}" stroke-width="{:.2}"{dash}/>"#,
             x1 - x0,
             y1 - y0,
             0.5 * b,
@@ -321,12 +429,43 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
         let bx = &lay.boxes[v];
         let (cx, cy) = tx(lay.pos[v]);
         let (left, top) = (cx - bx.w / 2.0, cy - bx.h / 2.0);
+        // A stacked node grows up and to the right: the front copy holds the content.
+        let (bw, bh) = (bx.w - bx.shift, bx.h - bx.shift);
+        let btop = top + bx.shift;
+        let (fcx, fcy) = (left + bw / 2.0, btop + bh / 2.0);
+        for k in (1..bx.stack).rev() {
+            let d = bx.shift / (bx.stack - 1) as f64 * k as f64;
+            let _ = match bx.shape {
+                Shape::Circle => writeln!(
+                    o,
+                    r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#,
+                    fcx + d,
+                    fcy - d,
+                    bw / 2.0,
+                    th.background,
+                    p.accent,
+                    0.08 * b
+                ),
+                Shape::Plain => Ok(()),
+                Shape::Rect => writeln!(
+                    o,
+                    r#"<rect x="{:.1}" y="{:.1}" width="{bw:.1}" height="{bh:.1}" rx="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#,
+                    left + d,
+                    btop - d,
+                    0.35 * b,
+                    th.background,
+                    p.accent,
+                    0.08 * b
+                ),
+            };
+        }
         match (bx.shape, bx.role) {
+            (Shape::Plain, _) => {}
             (Shape::Circle, Role::Root) => {
                 let _ = writeln!(
                     o,
-                    r#"<circle cx="{cx:.1}" cy="{cy:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#,
-                    bx.w / 2.0,
+                    r#"<circle cx="{fcx:.1}" cy="{fcy:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#,
+                    bw / 2.0,
                     p.fill,
                     p.accent,
                     0.12 * b
@@ -335,25 +474,21 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
             (Shape::Circle, _) => {
                 let _ = writeln!(
                     o,
-                    r#"<circle cx="{cx:.1}" cy="{cy:.1}" r="{:.1}" fill="{}"/>"#,
-                    bx.w / 2.0,
+                    r#"<circle cx="{fcx:.1}" cy="{fcy:.1}" r="{:.1}" fill="{}"/>"#,
+                    bw / 2.0,
                     p.fill
                 );
             }
             (Shape::Rect, _) => {
                 let _ = writeln!(
                     o,
-                    r#"<rect x="{left:.1}" y="{top:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{}"/>"#,
-                    bx.w,
-                    bx.h,
+                    r#"<rect x="{left:.1}" y="{btop:.1}" width="{bw:.1}" height="{bh:.1}" rx="{:.1}" fill="{}"/>"#,
                     0.35 * b,
                     th.background
                 );
                 let _ = writeln!(
                     o,
-                    r#"<rect x="{left:.1}" y="{top:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{}" fill-opacity="{}" stroke="{}" stroke-width="{:.2}"/>"#,
-                    bx.w,
-                    bx.h,
+                    r#"<rect x="{left:.1}" y="{btop:.1}" width="{bw:.1}" height="{bh:.1}" rx="{:.1}" fill="{}" fill-opacity="{}" stroke="{}" stroke-width="{:.2}"/>"#,
                     0.35 * b,
                     p.fill,
                     p.opacity,
@@ -362,8 +497,44 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
                 );
             }
         }
+        for c in &bx.cells {
+            if c.shade > 0.0 {
+                let _ = writeln!(
+                    o,
+                    r#"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{}" fill-opacity="{:.2}"/>"#,
+                    left + c.x,
+                    top + c.y,
+                    c.w,
+                    c.h,
+                    0.12 * b,
+                    p.accent,
+                    c.shade
+                );
+            }
+            let _ = writeln!(
+                o,
+                r#"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="none" stroke="{}" stroke-width="{:.2}"/>"#,
+                left + c.x,
+                top + c.y,
+                c.w,
+                c.h,
+                0.12 * b,
+                p.accent,
+                0.07 * b
+            );
+        }
         for l in &bx.lines {
             svg_line(&mut o, fonts, l, left + l.x, top + l.baseline, &p.text);
+        }
+        for c in &bx.cells {
+            let fg = if c.shade >= 0.55 {
+                &th.background
+            } else {
+                &p.text
+            };
+            if let Some(l) = &c.label {
+                svg_line(&mut o, fonts, l, left + l.x, top + l.baseline, fg);
+            }
         }
     }
     for e in &lay.edges {
@@ -387,6 +558,9 @@ pub fn svg(g: &Graph, t: &Tree, fonts: &Fonts, lay: &Layout, view: Rect, th: &Th
             th.label,
             xml(label)
         );
+    }
+    if let Some(k) = key {
+        svg_key(&mut o, g, fonts, th, k, w, h);
     }
     o.push_str("</svg>\n");
     o
@@ -516,6 +690,7 @@ pub fn tikz(
     w: f64,
     h: f64,
     th: &Theme,
+    key: Option<&KeyPlan>,
 ) -> String {
     let paint = paints(g, t, lay, th);
     let b = lay.body;
@@ -576,7 +751,14 @@ pub fn tikz(
                 .iter()
                 .flat_map(|p| [p.accent.as_str(), p.fill.as_str(), p.text.as_str()]),
         )
-        .chain(extra);
+        .chain(extra)
+        .chain(th.gradient.as_deref())
+        .chain(
+            g.key
+                .iter()
+                .flat_map(|e| [e.color.as_deref(), e.fill.as_deref()])
+                .flatten(),
+        );
     for c in used {
         if defined.insert(theme::rgb(c)) {
             let _ = writeln!(
@@ -588,10 +770,23 @@ pub fn tikz(
         }
     }
     o += "\\begin{document}\n\\begin{tikzpicture}[x=1bp,y=1bp]\n";
+    let page_fill = match &th.gradient {
+        Some(end) => format!(
+            "top color={}, bottom color={}",
+            cname(&th.background),
+            cname(end)
+        ),
+        None => cname(&th.background),
+    };
+    let page_cmd = if th.gradient.is_some() {
+        "shade"
+    } else {
+        "fill"
+    };
+    let page_fill = format!("{page_fill}, opacity={:.3}", theme::alpha(&th.background));
     let _ = writeln!(
         o,
-        "\\fill[{}] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
-        cname(&th.background),
+        "\\{page_cmd}[{page_fill}] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
         -w / 2.0,
         -h / 2.0,
         w / 2.0,
@@ -599,9 +794,14 @@ pub fn tikz(
     );
     for f in &frames {
         let (r, c) = (f.rect, cname(f.color.unwrap_or(&th.edge)));
+        let dash = if f.dashed {
+            format!(", dash pattern=on {:.1}bp off {:.1}bp", 0.7 * b, 0.5 * b)
+        } else {
+            String::new()
+        };
         let _ = writeln!(
             o,
-            "\\filldraw[fill={c}, fill opacity={:.2}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
+            "\\filldraw[fill={c}, fill opacity={:.2}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp{dash}] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
             th.tint / 2.0,
             0.08 * b,
             0.5 * b,
@@ -646,47 +846,109 @@ pub fn tikz(
         let bx = &lay.boxes[v];
         let (cx, cy) = lay.pos[v];
         let (c, f) = (cname(&p.accent), cname(&p.fill));
+        let (bw, bh) = (bx.w - bx.shift, bx.h - bx.shift);
+        let (x0, ytop) = (cx - bx.w / 2.0, cy + bx.h / 2.0 - bx.shift);
+        let (fcx, fcy) = (x0 + bw / 2.0, ytop - bh / 2.0);
+        for k in (1..bx.stack).rev() {
+            let d = bx.shift / (bx.stack - 1) as f64 * k as f64;
+            let bg = cname(&th.background);
+            let _ = match bx.shape {
+                Shape::Circle => writeln!(
+                    o,
+                    "\\filldraw[fill={bg}, draw={c}, line width={:.2}bp] ({:.1},{:.1}) circle ({:.1});",
+                    0.08 * b,
+                    fcx + d,
+                    fcy - d,
+                    bw / 2.0
+                ),
+                Shape::Plain => Ok(()),
+                Shape::Rect => writeln!(
+                    o,
+                    "\\filldraw[fill={bg}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
+                    0.08 * b,
+                    0.35 * b,
+                    x0 + d,
+                    ytop - d,
+                    x0 + d + bw,
+                    ytop - d - bh
+                ),
+            };
+        }
         match (bx.shape, bx.role) {
+            (Shape::Plain, _) => {}
             (Shape::Circle, Role::Root) => {
                 let _ = writeln!(
                     o,
-                    "\\filldraw[fill={f}, draw={c}, line width={:.2}bp] ({cx:.1},{cy:.1}) circle ({:.1});",
+                    "\\filldraw[fill={f}, draw={c}, line width={:.2}bp] ({fcx:.1},{fcy:.1}) circle ({:.1});",
                     0.12 * b,
-                    bx.w / 2.0
+                    bw / 2.0
                 );
             }
             (Shape::Circle, _) => {
                 let _ = writeln!(
                     o,
-                    "\\fill[{f}] ({cx:.1},{cy:.1}) circle ({:.1});",
-                    bx.w / 2.0
+                    "\\fill[{f}] ({fcx:.1},{fcy:.1}) circle ({:.1});",
+                    bw / 2.0
                 );
             }
             (Shape::Rect, _) => {
                 let _ = writeln!(
                     o,
-                    "\\filldraw[fill={}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
+                    "\\filldraw[fill={}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({x0:.1},{ytop:.1}) rectangle ({:.1},{:.1});",
                     cname(&th.background),
                     0.1 * b,
                     0.35 * b,
-                    cx - bx.w / 2.0,
-                    cy - bx.h / 2.0,
-                    cx + bx.w / 2.0,
-                    cy + bx.h / 2.0
+                    x0 + bw,
+                    ytop - bh
                 );
                 let _ = writeln!(
                     o,
-                    "\\fill[{f}, opacity={}, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
+                    "\\fill[{f}, opacity={}, rounded corners={:.1}bp] ({x0:.1},{ytop:.1}) rectangle ({:.1},{:.1});",
                     p.opacity,
                     0.35 * b,
-                    cx - bx.w / 2.0,
-                    cy - bx.h / 2.0,
-                    cx + bx.w / 2.0,
-                    cy + bx.h / 2.0
+                    x0 + bw,
+                    ytop - bh
                 );
             }
         }
         let text = cname(&p.text);
+        for c in &bx.cells {
+            let (x, y) = (cx - bx.w / 2.0 + c.x, cy + bx.h / 2.0 - c.y);
+            if c.shade > 0.0 {
+                let _ = writeln!(
+                    o,
+                    "\\fill[{}, opacity={:.2}, rounded corners={:.1}bp] ({x:.1},{y:.1}) rectangle ({:.1},{:.1});",
+                    cname(&p.accent),
+                    c.shade,
+                    0.12 * b,
+                    x + c.w,
+                    y - c.h
+                );
+            }
+            let _ = writeln!(
+                o,
+                "\\draw[{}, line width={:.2}bp, rounded corners={:.1}bp] ({x:.1},{y:.1}) rectangle ({:.1},{:.1});",
+                cname(&p.accent),
+                0.07 * b,
+                0.12 * b,
+                x + c.w,
+                y - c.h
+            );
+            if let Some(l) = &c.label {
+                let fg = cname(if c.shade >= 0.55 {
+                    &th.background
+                } else {
+                    &p.text
+                });
+                tikz_line(
+                    &mut o,
+                    l,
+                    cx - bx.w / 2.0 + l.x,
+                    cy + bx.h / 2.0 - l.baseline,
+                    &fg,
+                );
+            }
+        }
         for l in &bx.lines {
             tikz_line(
                 &mut o,
@@ -712,6 +974,57 @@ pub fn tikz(
             tex(label),
             s = 0.8 * b
         );
+    }
+    if let Some(k) = key {
+        let n = k.rows.len() as f64;
+        for (r, row) in k.rows.iter().enumerate() {
+            let cy = -h / 2.0 + k.pad + (n - r as f64 - 0.5) * k.row_h;
+            let x0 = -row.width / 2.0;
+            for &(dx, i) in &row.items {
+                let e = &g.key[i];
+                let x = x0 + dx;
+                let c = cname(e.color.as_deref().unwrap_or(&th.edge));
+                let (fill, op) = match (&e.fill, e.shape) {
+                    (Some(f), _) => (cname(f), 1.0),
+                    (None, Some(Shape::Circle)) => (c.clone(), 1.0),
+                    (None, _) => (c.clone(), th.tint),
+                };
+                let s = k.size;
+                if let Some(dashed) = e.line {
+                    let dash = if dashed { ", dashed" } else { "" };
+                    let _ = writeln!(
+                        o,
+                        "\\draw[{c}{dash}, line width={:.2}bp] ({x:.2},{cy:.2}) -- ({:.2},{cy:.2});",
+                        s / 5.0,
+                        x + s
+                    );
+                } else if e.shape == Some(Shape::Circle) {
+                    let _ = writeln!(
+                        o,
+                        "\\filldraw[fill={fill}, fill opacity={op:.2}, draw={c}, line width=1bp] ({:.2},{cy:.2}) circle ({:.2}bp);",
+                        x + s / 2.0,
+                        s / 2.0
+                    );
+                } else {
+                    let _ = writeln!(
+                        o,
+                        "\\filldraw[fill={fill}, fill opacity={op:.2}, draw={c}, line width=1bp, rounded corners={:.2}bp] ({x:.2},{:.2}) rectangle ({:.2},{:.2});",
+                        s * 0.15,
+                        cy - s / 2.0,
+                        x + s,
+                        cy + s / 2.0
+                    );
+                }
+                let _ = writeln!(
+                    o,
+                    "\\node[anchor=base west, inner sep=0bp, text={}] at ({:.2},{:.2}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont {}}};",
+                    cname(&th.text),
+                    x + 1.5 * s,
+                    cy - 0.35 * s,
+                    tex(&e.label)
+                );
+            }
+        }
     }
     o += "\\end{tikzpicture}\n\\end{document}\n";
     o

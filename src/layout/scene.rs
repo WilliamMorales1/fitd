@@ -870,6 +870,7 @@ mod tests {
     #[test]
     fn grid_filter_matches_plain_checks() {
         let g = Graph {
+            key: vec![],
             title: None,
             root: None,
             nodes: vec![],

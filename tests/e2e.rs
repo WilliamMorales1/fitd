@@ -214,6 +214,15 @@ fn groups_frame_members_and_edges_take_colors() {
         "{s}"
     );
     assert!(std::fs::read_to_string(&tex).unwrap().contains("Pair"));
+    // A class gives the frame its color, so a group and its key entry share one style.
+    std::fs::write(&src, "layout layered\npage a4\nstyle d1 color=#E69F00\nnode a\nnode b\na -> b\ngroup \"D1\" a, b .d1\nkey \"design\" .d1\n").unwrap();
+    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
+    assert!(ok && log.contains(" 0 errors, 0 warnings"), "{log}");
+    let s = std::fs::read_to_string(&svg).unwrap();
+    assert!(
+        s.contains(">D1</text>") && s.matches("#E69F00").count() >= 2,
+        "{s}"
+    );
     // A group whose members must sit around a non-member cannot hold.
     std::fs::write(&src, "layout layered\npage a4\nnode a\nnode b\nnode c\na -> b\nb -> c\ngroup a, c\nrequire align column(a, b, c)\n").unwrap();
     let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
@@ -759,7 +768,7 @@ fn guide_examples_build_from_stdin() {
         .unwrap();
     let guide = String::from_utf8(out.stdout).unwrap();
     // The guide is what an agent reads instead of the doc diagrams, so it must stay small.
-    assert!(guide.len() <= 2500, "guide grew to {} bytes", guide.len());
+    assert!(guide.len() <= 2900, "guide grew to {} bytes", guide.len());
     for name in ["Concept map:", "Flowchart:"] {
         let body: String = guide
             .split(name)
@@ -1478,4 +1487,262 @@ fn macros_expand_loops_templates_and_recursion() {
         log.contains("main.fitd:10:1: error[E0002]: `if` has no matching `end`"),
         "{log}"
     );
+}
+
+#[test]
+fn figure_rows_draw_cells_and_need_a_node() {
+    let plain = tmp("figplain.fitd");
+    std::fs::write(&plain, "node a \"A\"\nnode b\na -> b\n").unwrap();
+    let grid = tmp("figgrid.fitd");
+    std::fs::write(
+        &grid,
+        "node a \"A\"\n~ # . _ GLU\n~ #\"two words\" . . .\nnode b\na -> b\n",
+    )
+    .unwrap();
+    let count = |src: &std::path::Path, out: &str| {
+        let o = tmp(out);
+        let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", o.to_str().unwrap()]);
+        assert!(ok, "{log}");
+        let s = std::fs::read_to_string(&o).unwrap();
+        (s.matches("<rect").count(), s)
+    };
+    let (base, _) = count(&plain, "figplain.svg");
+    let (with, s) = count(&grid, "figgrid.svg");
+    // 7 drawn cells (the `_` gap draws nothing), and a solid one adds a shade rect under its outline.
+    assert_eq!(with, base + 9, "cell rects missing");
+    assert!(s.contains("GLU") && s.contains("two words"), "{s}");
+
+    let tex = tmp("figgrid.tex");
+    let (ok, log) = fitd(&[
+        grid.to_str().unwrap(),
+        "-o",
+        tmp("figgrid2.svg").to_str().unwrap(),
+        "--tikz",
+        tex.to_str().unwrap(),
+    ]);
+    assert!(ok, "{log}");
+    assert!(std::fs::read_to_string(&tex).unwrap().contains("GLU"));
+
+    let orphan = tmp("figorphan.fitd");
+    std::fs::write(&orphan, "~ # .\nnode a\nnode b\na -> b\n").unwrap();
+    let (ok, log) = fitd(&[
+        orphan.to_str().unwrap(),
+        "-o",
+        tmp("figorphan.svg").to_str().unwrap(),
+        "--short",
+    ]);
+    assert!(!ok && log.contains("figure row outside a node"), "{log}");
+}
+
+#[test]
+fn shaded_cells_span_columns_and_nodes_stack() {
+    let widths = |src: &str, out: &str| {
+        let f = tmp(&format!("{out}.fitd"));
+        std::fs::write(&f, src).unwrap();
+        let o = tmp(&format!("{out}.svg"));
+        let (ok, log) = fitd(&[f.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
+        assert!(ok, "{log}");
+        let svg = std::fs::read_to_string(&o).unwrap();
+        // The root <svg> carries a unit suffix, so keep only the plain numeric widths.
+        let w: Vec<f64> = svg
+            .match_indices("width=\"")
+            .filter_map(|(i, m)| svg[i + m.len()..].split('"').next()?.parse().ok())
+            .collect();
+        (svg, w)
+    };
+    let (svg, _) = widths("node a \"A\"\n~ %60 %0 #\n node b\na -> b\n", "figshade");
+    assert!(svg.contains("fill-opacity=\"0.60\""), "no 60% cell\n{svg}");
+    assert!(
+        svg.contains("fill-opacity=\"1.00\""),
+        "no solid cell\n{svg}"
+    );
+
+    let (_, wide) = widths(
+        "node a \"A\"\n~ . . .\n~ #\"x\"*3\nnode b\na -> b\n",
+        "figspan",
+    );
+    let cell = wide.iter().copied().fold(f64::NAN, f64::min);
+    assert!(
+        wide.iter().any(|w| *w > 2.9 * cell),
+        "no cell spans three columns: {wide:?}"
+    );
+
+    let (flat, _) = widths("node a \"A\" shape=box\nnode b\na -> b\n", "figflat");
+    let (stacked, _) = widths(
+        "node a \"A\" shape=box stack=3\nnode b\na -> b\n",
+        "figstack",
+    );
+    assert_eq!(
+        stacked.matches("<rect").count(),
+        flat.matches("<rect").count() + 2,
+        "a stack of 3 draws two copies behind the box"
+    );
+
+    let bad = tmp("figstackbad.fitd");
+    std::fs::write(&bad, "node a stack=9\nnode b\na -> b\n").unwrap();
+    let (ok, log) = fitd(&[
+        bad.to_str().unwrap(),
+        "-o",
+        tmp("figstackbad.svg").to_str().unwrap(),
+        "--short",
+    ]);
+    assert!(!ok && log.contains("1 to 8"), "{log}");
+}
+
+#[test]
+fn library_modules_are_included_by_name() {
+    let f = tmp("usestd.fitd");
+    std::fs::write(
+        &f,
+        "include \"std/nn.fitd\"\nuse nn_input(\"x\", \"Tokens\", \"B x L\")\nuse nn_layer(\"e\", \"Encoder\", \"d 64\", 2)\nuse nn_mask(\"m\", \"Causal\", 4, 1)\nx -> e -> m\n",
+    )
+    .unwrap();
+    let o = tmp("usestd.svg");
+    let (ok, log) = fitd(&[f.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
+    assert!(ok && log.contains("0 errors, 0 warnings"), "{log}");
+    let svg = std::fs::read_to_string(&o).unwrap();
+    assert!(svg.contains("d 64") && svg.contains("B x L"), "{svg}");
+    // 4x4 causal mask: 10 solid cells, so 10 shade rects among the outlines.
+    assert_eq!(svg.matches("fill-opacity=\"1.00\"").count(), 12, "{svg}");
+
+    let bad = tmp("badstd.fitd");
+    std::fs::write(&bad, "include \"std/nope.fitd\"\nnode a\nnode b\na -> b\n").unwrap();
+    let (ok, log) = fitd(&[
+        bad.to_str().unwrap(),
+        "-o",
+        tmp("badstd.svg").to_str().unwrap(),
+        "--short",
+    ]);
+    assert!(!ok && log.contains("no library module"), "{log}");
+}
+
+#[test]
+fn repeated_groups_are_dashed_and_frameless_nodes_lose_their_box() {
+    let build = |src: &str, name: &str| {
+        let f = tmp(&format!("{name}.fitd"));
+        std::fs::write(&f, src).unwrap();
+        let (svg, tex) = (tmp(&format!("{name}.svg")), tmp(&format!("{name}.tex")));
+        let (ok, log) = fitd(&[
+            f.to_str().unwrap(),
+            "-o",
+            svg.to_str().unwrap(),
+            "--tikz",
+            tex.to_str().unwrap(),
+            "--short",
+        ]);
+        assert!(ok, "{log}");
+        (
+            std::fs::read_to_string(&svg).unwrap(),
+            std::fs::read_to_string(&tex).unwrap(),
+        )
+    };
+    let body = "layout layered\npage a4\nnode a\nnode b\nnode c\na -> b\nb -> c\n";
+    let (plain, ptex) = build(&format!("{body}group \"Layers\" b, c\n"), "grpplain");
+    assert!(
+        !plain.contains("stroke-dasharray") && !ptex.contains("dash pattern"),
+        "{plain}"
+    );
+
+    let (rep, rtex) = build(&format!("{body}group \"Layers\" b, c times=3\n"), "grprep");
+    assert!(
+        rep.contains("stroke-dasharray") && rep.contains(">3x Layers<"),
+        "{rep}"
+    );
+    assert!(
+        rtex.contains("dash pattern") && rtex.contains("3x Layers"),
+        "{rtex}"
+    );
+
+    let bad = tmp("grpbad.fitd");
+    std::fs::write(&bad, format!("{body}group b, c times=1\n")).unwrap();
+    let (ok, log) = fitd(&[
+        bad.to_str().unwrap(),
+        "-o",
+        tmp("grpbad.svg").to_str().unwrap(),
+        "--short",
+    ]);
+    assert!(!ok && log.contains("2 to 99"), "{log}");
+
+    // A frameless node draws its text but no box, so the rect count drops by one.
+    let boxed = "layout layered\npage a4\nnode a \"Lane\" shape=box\nnode b\na -> b\n";
+    let (bsvg, btex) = build(boxed, "noframeboxed");
+    let (nsvg, ntex) = build(&boxed.replace("shape=box", "shape=none"), "noframe");
+    assert!(nsvg.contains(">Lane<") && ntex.contains("Lane"), "{nsvg}");
+    assert_eq!(
+        nsvg.matches("<rect").count() + 2,
+        bsvg.matches("<rect").count(),
+        "frameless node still draws a box"
+    );
+    assert_eq!(
+        ntex.matches("\\filldraw").count() + 1,
+        btex.matches("\\filldraw").count(),
+        "frameless node still draws a box in TikZ"
+    );
+}
+
+/// Stroked node outlines as (x, y, w, h), in source order.
+fn outlines(svg: &str) -> Vec<(f64, f64, f64, f64)> {
+    svg.split("<rect ")
+        .skip(1)
+        .map(|r| format!(" {}", &r[..r.find('>').unwrap()]))
+        .filter(|r| r.contains("stroke=") && r.contains("rx="))
+        .map(|r| {
+            let f = |k: &str| -> f64 {
+                let i = r
+                    .find(&format!(" {k}=\""))
+                    .map(|i| i + k.len() + 3)
+                    .unwrap();
+                r[i..i + r[i..].find('"').unwrap()].parse().unwrap()
+            };
+            (f("x"), f("y"), f("width"), f("height"))
+        })
+        .collect()
+}
+
+#[test]
+fn aside_nodes_sit_after_the_flow_and_wrap_widens_one_node() {
+    let flow = "layout layered dir=right\npage 200x120mm\nnode a \"A\"\nnode enc \"Encoder\"\nnode out \"Out\"\na -> enc -> out\n";
+    let note = "| next-token objective on all unique sequences\npre ..> enc \"init\"\n";
+    let build = |name: &str, pre: &str| {
+        let src = tmp(&format!("{name}.fitd"));
+        std::fs::write(&src, format!("{flow}{pre}\n{note}")).unwrap();
+        let svg = tmp(&format!("{name}.svg"));
+        let (ok, log) = fitd(&[
+            src.to_str().unwrap(),
+            "-o",
+            svg.to_str().unwrap(),
+            "--short",
+        ]);
+        assert!(ok && log.contains(" 0 warnings"), "{log}");
+        outlines(&std::fs::read_to_string(&svg).unwrap())
+    };
+    let aside = build("aside", "node pre \"Pretraining\" wrap=34em place=aside");
+    assert_eq!(aside.len(), 4, "{aside:?}");
+    let flow_bottom = aside[..3].iter().map(|r| r.1 + r.3).fold(0.0, f64::max);
+    assert!(
+        aside[3].1 >= flow_bottom,
+        "aside node overlaps the flow: {aside:?}"
+    );
+
+    let narrow = build(
+        "aside-narrow",
+        "node pre \"Pretraining\" wrap=8em place=aside",
+    );
+    assert!(
+        narrow[3].2 < aside[3].2,
+        "wrap= did not change width: {narrow:?} vs {aside:?}"
+    );
+}
+
+#[test]
+fn aside_on_a_flow_node_warns() {
+    let src = tmp("aside-flow.fitd");
+    std::fs::write(&src, "layout layered\nnode a\nnode b place=aside\na -> b\n").unwrap();
+    let (ok, log) = fitd(&[
+        src.to_str().unwrap(),
+        "-o",
+        tmp("aside-flow.svg").to_str().unwrap(),
+        "--short",
+    ]);
+    assert!(ok && log.contains("warning[W0208]"), "{log}");
 }

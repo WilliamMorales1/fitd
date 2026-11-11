@@ -225,9 +225,16 @@ impl Parser<'_> {
     }
 
     fn stmt1(&mut self) -> PResult<StmtKind> {
-        if let Tok::Body(s) = self.peek().clone() {
-            self.bump();
-            return Ok(StmtKind::Body(s));
+        match self.peek().clone() {
+            Tok::Body(s) => {
+                self.bump();
+                return Ok(StmtKind::Body(s));
+            }
+            Tok::Cells(s) => {
+                self.bump();
+                return Ok(StmtKind::Cells(s));
+            }
+            _ => {}
         }
         let kw = self.name("a statement")?;
         Ok(match kw.text.as_str() {
@@ -288,6 +295,21 @@ impl Parser<'_> {
                     attrs,
                 }
             }
+            "key" => {
+                let label = match self.peek().clone() {
+                    Tok::Str(s) => {
+                        self.bump();
+                        s
+                    }
+                    _ => return Err(self.unexpected("a quoted key label")),
+                };
+                let (classes, attrs) = self.looks()?;
+                StmtKind::Key {
+                    label,
+                    classes,
+                    attrs,
+                }
+            }
             "group" => {
                 let title = match self.peek().clone() {
                     Tok::Str(s) => {
@@ -296,10 +318,13 @@ impl Parser<'_> {
                     }
                     _ => None,
                 };
+                let items = self.targets()?;
+                let (classes, attrs) = self.looks()?;
                 StmtKind::Group {
                     title,
-                    items: self.targets()?,
-                    attrs: self.attrs()?,
+                    items,
+                    classes,
+                    attrs,
                 }
             }
             "include" => match self.peek().clone() {
@@ -317,7 +342,7 @@ impl Parser<'_> {
             _ => {
                 let d = Diag::error("E0002", format!("unknown statement `{}`", kw.text))
                     .primary(kw.span, "not a statement");
-                return Err(d.help("statements: title, root, layout, page, font, theme, style, node, `|` body, `a -> b`, `a ..> b`, group, require, prefer, include"));
+                return Err(d.help("statements: title, root, layout, page, font, theme, style, node, `|` body, `a -> b`, `a ..> b`, group, key, require, prefer, include"));
             }
         })
     }
@@ -385,7 +410,7 @@ mod tests {
         );
         assert_eq!(stmts.len(), 16);
         assert!(
-            matches!(&stmts[14].kind, StmtKind::Group { title: Some(_), items, attrs } if items.len() == 2 && attrs.len() == 1)
+            matches!(&stmts[14].kind, StmtKind::Group { title: Some(_), items, attrs, .. } if items.len() == 2 && attrs.len() == 1)
         );
         assert!(
             matches!(&stmts[15].kind, StmtKind::Edge { classes, attrs, .. } if classes.len() == 1 && attrs.len() == 1)

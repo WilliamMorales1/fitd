@@ -1,8 +1,8 @@
 use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
 use crate::graph::{
-    Constraint, Dir, Edge, EdgeKind, Graph, LayoutKind, Length, Node, Place, Relation, Settings,
-    Shape, Side,
+    Cell, Constraint, Dir, Edge, EdgeKind, Graph, KeyEntry, LayoutKind, Length, Node, Place,
+    Relation, Settings, Shape, Side,
 };
 use crate::theme::{self, Overrides, Theme};
 use std::collections::HashMap;
@@ -176,6 +176,9 @@ struct Look {
     fill: Option<String>,
     text: Option<String>,
     shape: Option<Shape>,
+    stack: Option<u8>,
+    wrap_em: Option<f64>,
+    aside: Option<bool>,
 }
 
 fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
@@ -186,14 +189,45 @@ fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
             ("text", v) => l.text = color(v, diags).or(l.text.take()),
             ("shape", Value::Name(n)) if n.text == "circle" => l.shape = Some(Shape::Circle),
             ("shape", Value::Name(n)) if n.text == "box" => l.shape = Some(Shape::Rect),
+            ("shape", Value::Name(n)) if n.text == "none" => l.shape = Some(Shape::Plain),
             ("shape", Value::Name(n)) => {
-                diags.push(unknown("E0009", "shape", n, &["circle", "box"]))
+                diags.push(unknown("E0009", "shape", n, &["circle", "box", "none"]))
             }
             ("shape", v) => diags.push(
                 Diag::error("E0006", "expected `circle` or `box`")
                     .primary(v.span(), "wrong type or unit"),
             ),
-            _ => diags.push(bad_attr(a, &["color", "fill", "text", "shape"])),
+            ("stack", Value::Num(t, _)) if t.parse::<u8>().is_ok_and(|k| (1..=8).contains(&k)) => {
+                l.stack = t.parse().ok()
+            }
+            ("stack", v) => diags.push(
+                Diag::error("E0006", "expected a whole number of copies, 1 to 8")
+                    .primary(v.span(), "wrong type or unit"),
+            ),
+            ("wrap", Value::Num(t, _)) => match length(t, None) {
+                Ok(Length::Em(x)) if x > 0.0 => l.wrap_em = Some(x),
+                _ => diags.push(
+                    Diag::error("E0006", "wrap width is in em, such as `24em`")
+                        .primary(a.value.span(), "wrong type or unit"),
+                ),
+            },
+            ("place", Value::Name(n)) if n.text == "aside" => l.aside = Some(true),
+            ("place", Value::Name(n)) if n.text == "flow" => l.aside = Some(false),
+            ("place", Value::Name(n)) => {
+                diags.push(unknown("E0009", "place", n, &["flow", "aside"]))
+            }
+            ("place", v) => diags.push(
+                Diag::error("E0006", "expected `flow` or `aside`")
+                    .primary(v.span(), "wrong type or unit"),
+            ),
+            ("wrap", v) => diags.push(
+                Diag::error("E0006", "wrap width is in em, such as `24em`")
+                    .primary(v.span(), "wrong type or unit"),
+            ),
+            _ => diags.push(bad_attr(
+                a,
+                &["color", "fill", "text", "shape", "stack", "wrap", "place"],
+            )),
         }
     }
 }
@@ -246,6 +280,105 @@ fn place(s: &str) -> Option<Place> {
         .map(|i| Place((i % 3) as u8, (i / 3) as u8))
 }
 
+/// span reads a `*N` column-span suffix, leaving the iterator untouched when there is none.
+fn span(it: &mut std::iter::Peekable<std::str::Chars>) -> usize {
+    if it.peek() != Some(&'*') {
+        return 1;
+    }
+    let mut look = it.clone();
+    look.next();
+    let mut n = String::new();
+    while look.peek().is_some_and(char::is_ascii_digit) {
+        n.push(look.next().unwrap());
+    }
+    match n.parse() {
+        Ok(k) if k >= 1 => {
+            *it = look;
+            k
+        }
+        _ => 1,
+    }
+}
+
+/// cells splits one `~` figure row into cells: `#` solid, `%NN` shaded, `.` outlined, `_` gap.
+fn cells(line: &str) -> Vec<Cell> {
+    let mut out = Vec::new();
+    let mut it = line.chars().peekable();
+    while let Some(&c) = it.peek() {
+        if c.is_whitespace() {
+            it.next();
+            continue;
+        }
+        let mut shade = 0.0;
+        if c == '#' {
+            it.next();
+            shade = 1.0;
+        } else if c == '%' {
+            let mut look = it.clone();
+            look.next();
+            let mut n = String::new();
+            while look.peek().is_some_and(char::is_ascii_digit) {
+                n.push(look.next().unwrap());
+            }
+            if let Ok(v) = n.parse::<f64>() {
+                shade = (v / 100.0).clamp(0.0, 1.0);
+                it = look;
+            }
+        }
+        let mut gap = false;
+        let mut cols = 1;
+        let label = match it.peek().copied() {
+            None => None,
+            Some(c) if c.is_whitespace() => None,
+            Some('"') => {
+                it.next();
+                let mut s = String::new();
+                for c in it.by_ref() {
+                    if c == '"' {
+                        break;
+                    }
+                    s.push(c);
+                }
+                cols = span(&mut it);
+                Some(s)
+            }
+            Some(_) => {
+                let mut s = String::new();
+                while let Some(&c) = it.peek() {
+                    if c.is_whitespace() {
+                        break;
+                    }
+                    s.push(c);
+                    it.next();
+                }
+                // `*N` is a span only when digits end the word, so a label like `a*t` survives.
+                if let Some(i) = s.rfind('*') {
+                    let tail = &s[i + 1..];
+                    if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) {
+                        cols = tail.parse().unwrap_or(1);
+                        s.truncate(i);
+                    }
+                }
+                match s.as_str() {
+                    "." | "" => None,
+                    "_" if shade == 0.0 => {
+                        gap = true;
+                        None
+                    }
+                    _ => Some(s),
+                }
+            }
+        };
+        out.push(Cell {
+            shade,
+            gap,
+            span: cols.clamp(1, 64),
+            label,
+        });
+    }
+    out
+}
+
 pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     let mut s = Sema {
         diags: Vec::new(),
@@ -277,14 +410,35 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     id: id.text.clone(),
                     title,
                     body: Vec::new(),
+                    figure: Vec::new(),
                     color: None,
                     fill: None,
                     text: None,
                     shape: None,
+                    stack: None,
+                    wrap_em: None,
+                    aside: false,
                     span: id.span,
                 });
                 s.decl.push(st.span);
             }
+            StmtKind::Cells(text) => match last_node {
+                Some(v) => {
+                    let row = cells(text);
+                    if row.is_empty() {
+                        s.diags.push(
+                            Diag::error("E0002", "figure row has no cells")
+                                .primary(st.span, "expected cells like `# . _ GLU`"),
+                        );
+                    } else {
+                        s.nodes[v].figure.push(row);
+                    }
+                }
+                None => s.diags.push(
+                    Diag::error("E0002", "figure row outside a node")
+                        .primary(st.span, "no `node` above this line"),
+                ),
+            },
             StmtKind::Body(text) => match last_node {
                 Some(v) => s.nodes[v].body.push(text.clone()),
                 None => s.diags.push(
@@ -310,6 +464,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     let (mut title, mut root, mut edges, mut constraints) = (None, None, Vec::new(), Vec::new());
     let mut seen_setting: HashMap<&str, Span> = HashMap::new();
     let mut grouped: Vec<(usize, Vec<Span>)> = Vec::new();
+    let mut key_entries = Vec::new();
     for st in stmts {
         let key = match &st.kind {
             StmtKind::Title(_) => "title",
@@ -407,7 +562,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 for a in attrs {
                     match a.key.text.as_str() {
                         "margin" => set.margin = s.abs_len(&a.value).or(set.margin),
-                        _ => s.diags.push(bad_attr(a, &["margin"])),
+                        "keysize" => set.key_size = s.abs_len(&a.value).or(set.key_size),
+                        _ => s.diags.push(bad_attr(a, &["margin", "keysize"])),
                     }
                 }
             }
@@ -463,6 +619,9 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 look(attrs, &mut l, &mut s.diags);
                 let n = &mut s.nodes[v];
                 (n.color, n.fill, n.text, n.shape) = (l.color, l.fill, l.text, l.shape);
+                n.stack = l.stack;
+                n.wrap_em = l.wrap_em;
+                n.aside = l.aside.unwrap_or(false);
             }
             StmtKind::Style { attrs, .. } => {
                 look(attrs, &mut Look::default(), &mut s.diags);
@@ -513,18 +672,76 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     }
                 }
             }
+            StmtKind::Key {
+                label,
+                classes,
+                attrs,
+            } => {
+                let mut l = Look::default();
+                apply_styles(&mut s, &mut styles, classes, &mut l);
+                let mut line = None;
+                let rest: Vec<Attr> = attrs
+                    .iter()
+                    .filter(|a| {
+                        if a.key.text != "line" {
+                            return true;
+                        }
+                        match &a.value {
+                            Value::Name(n) if n.text == "solid" => line = Some(false),
+                            Value::Name(n) if n.text == "dashed" => line = Some(true),
+                            Value::Name(n) => {
+                                s.diags
+                                    .push(unknown("E0009", "line", n, &["solid", "dashed"]))
+                            }
+                            v => s.diags.push(
+                                Diag::error("E0006", "expected `solid` or `dashed`")
+                                    .primary(v.span(), "wrong type or unit"),
+                            ),
+                        }
+                        false
+                    })
+                    .cloned()
+                    .collect();
+                look(&rest, &mut l, &mut s.diags);
+                key_entries.push(KeyEntry {
+                    label: label.clone(),
+                    color: l.color,
+                    fill: l.fill,
+                    shape: l.shape,
+                    line,
+                });
+            }
             StmtKind::Group {
                 title,
                 items,
+                classes,
                 attrs,
             } => {
-                let mut col = None;
+                // Only a class's color applies; a group has no fill, shape, or stack.
+                let mut l = Look::default();
+                apply_styles(&mut s, &mut styles, classes, &mut l);
+                let (mut col, mut times) = (l.color, None);
                 for a in attrs {
-                    match a.key.text.as_str() {
-                        "color" => col = color(&a.value, &mut s.diags).or(col),
-                        _ => s.diags.push(bad_attr(a, &["color"])),
+                    match (a.key.text.as_str(), &a.value) {
+                        ("color", _) => col = color(&a.value, &mut s.diags).or(col),
+                        ("times", Value::Num(t, _))
+                            if t.parse::<u16>().is_ok_and(|k| (2..=99).contains(&k)) =>
+                        {
+                            times = t.parse::<u16>().ok()
+                        }
+                        ("times", v) => s.diags.push(
+                            Diag::error("E0006", "expected a whole number of repeats, 2 to 99")
+                                .primary(v.span(), "wrong type or unit"),
+                        ),
+                        _ => s.diags.push(bad_attr(a, &["color", "times"])),
                     }
                 }
+                // `Nx` in front of the title is how a repeated stack is marked in the literature.
+                let title = match (times, title) {
+                    (Some(k), Some(t)) => Some(format!("{k}x {t}")),
+                    (Some(k), None) => Some(format!("{k}x")),
+                    (None, t) => t.clone(),
+                };
                 let ids: Vec<Option<usize>> = items.iter().map(|n| s.node(n)).collect();
                 let Some(ids) = ids.into_iter().collect::<Option<Vec<_>>>() else {
                     continue;
@@ -545,9 +762,10 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 constraints.push(Constraint {
                     rel: Relation::Group {
                         items: ids,
-                        title: title.clone(),
+                        title,
                         color: col,
                         title_em: 0.0,
+                        dashed: times.is_some(),
                         inner: Vec::new(),
                     },
                     hard: true,
@@ -558,7 +776,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             StmtKind::Constraint { hard, rel, attrs } => {
                 constraints.extend(constraint(&mut s, *hard, rel, attrs, st.span));
             }
-            StmtKind::Body(_) | StmtKind::Include(_) => {}
+            StmtKind::Body(_) | StmtKind::Cells(_) | StmtKind::Include(_) => {}
         }
     }
     let mut unused: Vec<_> = styles.iter().filter(|(_, v)| !v.2).collect();
@@ -571,6 +789,26 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     }
     nest_groups(&mut constraints, &grouped, &s.nodes, &mut s.diags);
     s.diags.extend(contradictions(&constraints));
+    for (v, n) in s.nodes.iter().enumerate().filter(|(_, n)| n.aside) {
+        let flows = edges
+            .iter()
+            .any(|e| e.kind == EdgeKind::Tree && (e.a == v || e.b == v));
+        let grouped = constraints
+            .iter()
+            .any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)));
+        if flows || grouped {
+            let why = if flows {
+                "it is on a `->` edge"
+            } else {
+                "it is in a group"
+            };
+            s.diags.push(
+                Diag::warning("W0208", format!("`place=aside` on `{}` is ignored", n.id))
+                    .primary(n.span, why)
+                    .help("aside is for nodes joined only by `..>` links, such as notes"),
+            );
+        }
+    }
     if s.nodes.is_empty() {
         s.diags.push(
             Diag::error("E0002", "diagram has no nodes")
@@ -578,6 +816,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
         );
     }
     let g = Graph {
+        key: key_entries,
         title,
         root,
         nodes: s.nodes,
@@ -650,6 +889,7 @@ fn theme_overrides(attrs: &[Attr], diags: &mut Vec<Diag>) -> Overrides {
     for a in attrs {
         let slot = match a.key.text.as_str() {
             "background" => &mut o.background,
+            "gradient" => &mut o.gradient,
             "text" => &mut o.text,
             "edge" => &mut o.edge,
             "link" => &mut o.link,
@@ -992,6 +1232,17 @@ mod tests {
         );
         assert_eq!(codes("node a\ngroup a, a\n"), vec!["E0007"]);
         assert_eq!(codes("node a\ngroup a, ghost\n"), vec!["E0001"]);
+    }
+
+    #[test]
+    fn keys_collect_entries() {
+        let (g, d) =
+            run("node a\nstyle s color=#f00\nkey \"X\" .s line=dashed\nkey \"Y\" shape=circle\n");
+        assert!(d.is_empty());
+        assert_eq!(g.key.len(), 2);
+        assert_eq!(g.key[0].line, Some(true));
+        assert_eq!(g.key[1].shape, Some(Shape::Circle));
+        assert_eq!(codes("node a\nkey \"X\" line=wavy\n"), ["E0009"]);
     }
 
     #[test]

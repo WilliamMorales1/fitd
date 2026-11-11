@@ -7,6 +7,7 @@ pub enum Tok {
     Num,
     Color,
     Body(String),
+    Cells(String),
     Arrow,
     DashDash,
     DotArrow,
@@ -33,6 +34,7 @@ pub fn describe(t: &Tok) -> &'static str {
         Tok::Num => "a number",
         Tok::Color => "a color",
         Tok::Body(_) => "a body line",
+        Tok::Cells(_) => "a figure row",
         Tok::Arrow => "`->`",
         Tok::DashDash => "`--`",
         Tok::DotArrow => "`..>`",
@@ -87,7 +89,7 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             while at(i).is_some_and(|c| c != '\n') {
                 i += 1;
             }
-        } else if c == '|' && first {
+        } else if (c == '|' || c == '~') && first {
             i += 1;
             if at(i) == Some(' ') {
                 i += 1;
@@ -96,9 +98,14 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             while at(i).is_some_and(|c| c != '\n') {
                 i += 1;
             }
+            let line = text[off(lo)..off(i)].trim_end().to_string();
             push(
                 &mut toks,
-                Tok::Body(text[off(lo)..off(i)].trim_end().to_string()),
+                if c == '|' {
+                    Tok::Body(line)
+                } else {
+                    Tok::Cells(line)
+                },
                 i,
             );
         } else if c == '"' {

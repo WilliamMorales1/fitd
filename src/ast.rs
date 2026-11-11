@@ -70,6 +70,12 @@ pub enum StmtKind {
         attrs: Vec<Attr>,
     },
     Body(String),
+    Cells(String),
+    Key {
+        label: String,
+        classes: Vec<Name>,
+        attrs: Vec<Attr>,
+    },
     Edge {
         from: Name,
         link: bool,
@@ -82,6 +88,7 @@ pub enum StmtKind {
     Group {
         title: Option<String>,
         items: Vec<Name>,
+        classes: Vec<Name>,
         attrs: Vec<Attr>,
     },
     Constraint {

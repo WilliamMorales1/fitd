@@ -58,9 +58,18 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
             out.text.push('\n');
         }
         let span = Span::new(base + st.span.lo, base + st.span.hi);
+        let lib = crate::stdlib::get(target);
         let dir = Path::new(path).parent().unwrap_or(Path::new(""));
-        let file = dir.join(target);
-        let key = canonical(&file);
+        let file = if lib.is_some() {
+            PathBuf::from(target)
+        } else {
+            dir.join(target)
+        };
+        let key = if lib.is_some() {
+            file.clone()
+        } else {
+            canonical(&file)
+        };
         if let Some(k) = stack.iter().position(|p| *p == key) {
             let chain: Vec<String> = stack[k..]
                 .iter()
@@ -71,6 +80,25 @@ fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>) {
                 .primary(span, "this include closes a cycle");
             out.diags
                 .push(d.note(format!("cycle: {}", chain.join(" -> "))));
+        } else if target.starts_with("std/") {
+            match lib {
+                Some(child) => {
+                    stack.push(key);
+                    splice(out, target, child, stack);
+                    stack.pop();
+                    if !out.text.ends_with('\n') {
+                        out.text.push('\n');
+                    }
+                }
+                None => out.diags.push(
+                    Diag::error("E0011", format!("no library module `{target}`"))
+                        .primary(span, "included here")
+                        .note(format!(
+                            "the library has: {}",
+                            crate::stdlib::names().join(", ")
+                        )),
+                ),
+            }
         } else {
             match std::fs::read_to_string(&file) {
                 Ok(child) => {

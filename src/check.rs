@@ -15,7 +15,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0002",
-        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
+        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [.style] [k=v]`, `| body`, `A -> B, C [\"label\"] [.style] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `key \"Label\" [.style] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
     ),
     (
         "E0003",
@@ -120,6 +120,10 @@ pub const EXPLAIN: &[(&str, &str)] = &[
         "Two dashed links cross or run close together. Avoided when possible (cost 1 per pair), but not always avoidable.",
     ),
     (
+        "W0208",
+        "A node has `place=aside` but is on a `->` edge or in a group, so it stays in the flow. Aside nodes sit in a strip after a layered flow and must be joined only by `..>` links.",
+    ),
+    (
         "W0204",
         "A setting (title, root, layout, page, font) appears twice; the last one wins.",
     ),
@@ -155,11 +159,7 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
             vec![],
         );
     }
-    let page = crate::geom::Rect::centered(
-        (0.0, 0.0),
-        cfg.page_w - 2.0 * cfg.margin,
-        cfg.page_h - 2.0 * cfg.margin,
-    );
+    let page = cfg.page();
     for v in 0..n {
         if !lay.rect(v).within(&page) {
             push(
@@ -242,7 +242,7 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
         for l in &b.lines {
             let width = fonts.runs_width(&l.runs, l.size, l.bold);
             let fits = match b.shape {
-                Shape::Rect => {
+                Shape::Rect | Shape::Plain => {
                     l.x + width <= b.w - b.pad + 0.01
                         && l.baseline - 0.96 * l.size >= 0.0
                         && l.baseline - 0.96 * l.size + line_height(l.size) <= b.h + 0.01
