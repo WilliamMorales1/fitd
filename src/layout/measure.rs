@@ -1,5 +1,5 @@
 use super::*;
-use crate::graph::Cell;
+use crate::graph::{Cell, EdgeKind};
 
 pub fn label_size(fonts: &Fonts, text: &str, body: f64) -> (f64, f64) {
     (
@@ -78,7 +78,15 @@ pub fn line_height(size: f64) -> f64 {
     1.22 * size
 }
 
-pub fn measure(fonts: &Fonts, g: &Graph, v: usize, role: Role, b: f64, cfg: &Config) -> Boxed {
+pub fn measure(
+    fonts: &Fonts,
+    g: &Graph,
+    v: usize,
+    role: Role,
+    b: f64,
+    cfg: &Config,
+    beside: bool,
+) -> Boxed {
     let (ts, bs, wrap_w, shape, pad) = match role {
         Role::Root => (1.73 * b, 0.95 * b, 16.0 * b, Shape::Circle, 0.35 * b),
         Role::Hub => (1.44 * b, 0.9 * b, 11.0 * b, Shape::Circle, 0.35 * b),
@@ -127,9 +135,31 @@ pub fn measure(fonts: &Fonts, g: &Graph, v: usize, role: Role, b: f64, cfg: &Con
     } else {
         0.0
     };
-    let content_w = lines.iter().map(|l| l.width).fold(fw, f64::max);
-    let content_h = text_h + fig_gap + fh;
+    let text_w = lines.iter().map(|l| l.width).fold(0.0, f64::max);
+    let beside = beside && fig_gap > 0.0 && shape != Shape::Circle;
+    let content_w = if beside {
+        text_w + 2.0 * fig_gap + fw
+    } else {
+        text_w.max(fw)
+    };
+    let content_h = if beside {
+        text_h.max(fh)
+    } else {
+        text_h + fig_gap + fh
+    };
     let (w, h, dx, dy) = match shape {
+        _ if beside => {
+            for l in &mut lines {
+                l.x = pad;
+                l.baseline += pad;
+            }
+            (
+                content_w + 2.0 * pad,
+                content_h + 2.0 * pad,
+                pad + text_w + 2.0 * fig_gap,
+                pad + (content_h - fh) / 2.0,
+            )
+        }
         Shape::Rect | Shape::Plain => {
             for l in &mut lines {
                 l.x = pad;
@@ -280,11 +310,83 @@ pub(super) fn measure_all(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config, b: f
     let n = g.nodes.len();
     match g.settings.layout.unwrap_or(LayoutKind::Radial) {
         LayoutKind::Radial => (0..n)
-            .map(|v| measure(fonts, g, v, radial::role(t, v), b, cfg))
+            .map(|v| measure(fonts, g, v, radial::role(t, v), b, cfg, false))
             .collect(),
-        LayoutKind::Layered(_) => (0..n)
-            .map(|v| measure(fonts, g, v, Role::Leaf, b, cfg))
-            .collect(),
+        LayoutKind::Layered(dir) => {
+            // A strip node set beside the flow is wider than tall to spare the cross axis.
+            let beside = |v: usize| dir == Dir::Right && in_strip(g, v);
+            let mut boxes: Vec<Boxed> = (0..n)
+                .map(|v| measure(fonts, g, v, Role::Leaf, b, cfg, beside(v)))
+                .collect();
+            even_layers(g, dir, &mut boxes);
+            boxes
+        }
+    }
+}
+
+/// in_strip reports whether an aside node really leaves the flow.
+fn in_strip(g: &Graph, v: usize) -> bool {
+    let node = &g.nodes[v];
+    node.aside
+        && !g.edges.iter().any(|e| {
+            e.kind == EdgeKind::Tree
+                && (e.a == v || e.b == v)
+                && !(g.nodes[e.a].aside && g.nodes[e.b].aside)
+        })
+        && !g
+            .constraints
+            .iter()
+            .any(|c| matches!(&c.rel, Relation::Group { items, .. } if items.contains(&v)))
+}
+
+/// even_layers gives look-alike nodes in one layer the same length along the flow.
+fn even_layers(g: &Graph, dir: Dir, boxes: &mut [Boxed]) {
+    let layer = crate::layered::layering(g, dir).layer;
+    let n = boxes.len();
+    let alike = |u: usize, v: usize| {
+        let (a, c) = (&g.nodes[u], &g.nodes[v]);
+        layer[u] == layer[v]
+            && a.color == c.color
+            && a.fill == c.fill
+            && a.shape == c.shape
+            && a.stack == c.stack
+            && !in_strip(g, u)
+            && !in_strip(g, v)
+    };
+    let along = |bx: &Boxed| if dir == Dir::Right { bx.w } else { bx.h };
+    let target: Vec<f64> = (0..n)
+        .map(|v| {
+            (0..n)
+                .filter(|&u| alike(u, v))
+                .map(|u| along(&boxes[u]))
+                .fold(along(&boxes[v]), f64::max)
+        })
+        .collect();
+    for (bx, t) in boxes.iter_mut().zip(target) {
+        let extra = t - along(bx);
+        if extra <= 0.0 {
+            continue;
+        }
+        // Text stays left and top; only the figure recenters.
+        for c in &mut bx.cells {
+            let l = c.label.as_mut();
+            if dir == Dir::Right {
+                c.x += extra / 2.0;
+                if let Some(l) = l {
+                    l.x += extra / 2.0;
+                }
+            } else {
+                c.y += extra / 2.0;
+                if let Some(l) = l {
+                    l.baseline += extra / 2.0;
+                }
+            }
+        }
+        if dir == Dir::Right {
+            bx.w = t;
+        } else {
+            bx.h = t;
+        }
     }
 }
 
