@@ -214,6 +214,8 @@ pub struct Settings {
     pub page_ratio: Option<(f64, f64)>,
     pub page_fixed: bool,
     pub bands: Option<usize>,
+    /// fold forces the band count; ratio pages set it after comparing band counts.
+    pub fold: Option<usize>,
     /// Set by `layout layered order=source`: siblings keep declaration order.
     pub source_order: bool,
     /// Set by `layout lanes`: groups and lifelines become side-by-side lanes.

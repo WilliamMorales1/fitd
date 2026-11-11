@@ -563,7 +563,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
     if let Some(r) = shape
         && cfg.anchor.is_none()
     {
-        (cfg.page_w, cfg.page_h) = fit_ratio(&g, &t, &fonts, cfg, r);
+        (cfg.page_w, cfg.page_h) = fit_ratio(&mut g, &t, &fonts, cfg, r);
         cfg.legible = legible(cfg.page_w, cfg.page_h, cfg.min_font);
         let (w, h) = (cfg.page_w, cfg.page_h);
         show(&[Diag::info(format!(
@@ -962,18 +962,59 @@ fn trim(x: f64) -> String {
 }
 
 /// fit_ratio finds the smallest page of shape `r` that fits at the font floor and meets as many checks and preferences as an unbounded page.
+type Score = (usize, usize);
+
+/// fit_ratio sizes a `W:H` page for the content; layered flows without `bands=` also try 2 and 3 bands and keep the count that gives the largest font.
 fn fit_ratio(
-    g: &graph::Graph,
+    g: &mut graph::Graph,
     t: &tree::Tree,
     fonts: &metrics::Fonts,
     cfg: Config,
     r: (f64, f64),
 ) -> (f64, f64) {
+    let layered = matches!(g.settings.layout, Some(LayoutKind::Layered(_))) && !g.settings.lanes;
+    let folds: &[Option<usize>] = if layered && g.settings.bands.is_none() {
+        &[None, Some(2), Some(3)]
+    } else {
+        &[None]
+    };
+    let mut best: Option<(Option<usize>, Score, f64)> = None;
+    for &fold in folds {
+        g.settings.fold = fold;
+        // A fold that does not fit on the best page so far cannot win, so it gets one solve there.
+        let Some((goal, s)) = ratio_probe(g, t, fonts, cfg, r, best.map(|b| b.2)) else {
+            if best.is_some() {
+                break;
+            }
+            continue;
+        };
+        // Probes are rough, so another band count must win clearly.
+        if best.is_none_or(|b| goal < b.1 || (goal == b.1 && s < 0.95 * b.2)) {
+            best = Some((fold, goal, s));
+        } else if fold.is_some() {
+            break;
+        }
+    }
+    let Some((fold, goal, s)) = best else {
+        g.settings.fold = None;
+        let (aw, ah) = (r.0 / r.0.max(r.1), r.1 / r.0.max(r.1));
+        return ((aw * 16000.0).round(), (ah * 16000.0).round());
+    };
+    g.settings.fold = fold;
+    ratio_finish(g, t, fonts, cfg, r, goal, s)
+}
+
+fn ratio_solve(
+    g: &graph::Graph,
+    t: &tree::Tree,
+    fonts: &metrics::Fonts,
+    cfg: Config,
+    r: (f64, f64),
+) -> impl Fn(f64, f64, bool) -> Option<(Score, f64)> {
     let (aw, ah) = (r.0 / r.0.max(r.1), r.1 / r.0.max(r.1));
-    let m = cfg.margin;
-    let dims = |s: f64| ((aw * s).round(), (ah * s).round());
+    let dims = move |s: f64| ((aw * s).round(), (ah * s).round());
     let radial = g.settings.layout.unwrap_or(LayoutKind::Radial) == LayoutKind::Radial;
-    let solve = |s: f64, max_font: f64, quick: bool| {
+    move |s: f64, max_font: f64, quick: bool| {
         let (page_w, page_h) = dims(s);
         let mut c = Config {
             page_w,
@@ -1008,16 +1049,30 @@ fn fit_ratio(
                 Some(((n(Level::Error), n(Level::Warning)), top))
             })
             .min_by(|a, b| a.0.cmp(&b.0).then(b.1.total_cmp(&a.1)))
-    };
+    }
+}
+
+/// ratio_probe finds the page scale where the content just fits at the font floor, and the score there.
+fn ratio_probe(
+    g: &graph::Graph,
+    t: &tree::Tree,
+    fonts: &metrics::Fonts,
+    cfg: Config,
+    r: (f64, f64),
+    start: Option<f64>,
+) -> Option<(Score, f64)> {
+    let (aw, ah) = (r.0 / r.0.max(r.1), r.1 / r.0.max(r.1));
+    let m = cfg.margin;
+    let solve = ratio_solve(g, t, fonts, cfg, r);
     // Layouts scale with the font, so the largest font on one page predicts the size at the floor.
     let unbounded = 1000.0 * cfg.min_font;
     // A fixed font (`font 11pt`) can outgrow the first guess, so double until something fits.
-    let mut s = 1000.0;
+    let mut s = start.unwrap_or(1000.0);
     let (goal, mut top) = loop {
         match solve(s, unbounded, true) {
             Some(r) => break r,
-            None if s < 16000.0 => s *= 2.0,
-            None => return dims(s),
+            None if s < 16000.0 && start.is_none() => s *= 2.0,
+            None => return None,
         }
     };
     for _ in 0..3 {
@@ -1035,6 +1090,21 @@ fn fit_ratio(
             }
         }
     }
+    Some((goal, s))
+}
+
+fn ratio_finish(
+    g: &graph::Graph,
+    t: &tree::Tree,
+    fonts: &metrics::Fonts,
+    cfg: Config,
+    r: (f64, f64),
+    goal: Score,
+    s: f64,
+) -> (f64, f64) {
+    let (aw, ah) = (r.0 / r.0.max(r.1), r.1 / r.0.max(r.1));
+    let dims = |s: f64| ((aw * s).round(), (ah * s).round());
+    let solve = &ratio_solve(g, t, fonts, cfg, r);
     // Preferences met depend on search luck, so try a few sizes up and keep the smallest best one.
     let sizes: Vec<f64> = (0..6).map(|k| s * 1.04_f64.powi(k)).collect();
     // The first size usually meets the goal, so it runs alone before the rest fan out.

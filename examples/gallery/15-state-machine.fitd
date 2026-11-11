@@ -1,7 +1,7 @@
 # UML state machine (Reggio et al.: state machine among the core UML diagrams).
 include "uml"
 layout layered dir=right
-page 3:1
+page 16:9
 font 9pt..28pt
 uml.start("s0")
 uml.state("idle", "Idle", "")

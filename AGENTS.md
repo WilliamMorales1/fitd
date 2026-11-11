@@ -135,7 +135,7 @@ Surveys 1, 3, 4, and 6 above classify figure types only. Survey 2 (Viziometrics)
 
 Only open work belongs here: planned changes, known problems, and caveats. Delete a plan once it is done, and move anything it left out into Known gaps. The plans are ordered to avoid redoing work. Each plan gives the change, where it goes, and when it is done.
 
-- The layout and feature plans (6 and 7) come first, smallest first. Each only re-checks its own renders.
+- Image nodes (7) come next. It only re-checks its own renders.
 - Dependency arcs and Sankey (8) are low priority and stay last.
 
 ### Known gaps in finished work
@@ -150,13 +150,6 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
-
-### 6. Ratio-aware folding of long chains
-
-Timelines and state machines on `page 16:9` come out thin, and `bands=N` does not help, so the gallery uses `page 3:1`.
-
-- Change: in `fit_ratio` (src/main.rs), try `bands = 1..=3` for layered layouts and keep the one with the largest font at the requested ratio.
-- Done when `17-timeline` at `page 16:9` uses two bands with a larger font than one band.
 
 ### 7. Image nodes
 
@@ -174,5 +167,5 @@ Mixed figures (a plot inside an architecture diagram) are common in surveys 2 to
 
 The slowest gallery file takes about 0.3 s. Watch these when adding features:
 
-- Ratio pages run up to 4 quick solves plus 1 to 6 full solves. Plan 6 multiplies that by the band count, so it should reuse the quick solve per band.
+- Ratio pages run up to 4 quick solves plus 1 to 6 full solves. Layered flows also probe 2 and 3 forced bands, starting at the best page so far and stopping at the first band count that loses.
 - Large docs pages (35 nodes) still spend most of their time in the CSP search, not polish.

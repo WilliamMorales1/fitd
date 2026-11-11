@@ -1,7 +1,7 @@
 # Timeline (history, project reports).
 include "time"
 layout layered dir=right
-page 3:1
+page 16:9
 font 9pt..28pt
 time.event("t1", "1957", "Sputnik")
 time.mile("t2", "1969", "Moon landing")

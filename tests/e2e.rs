@@ -41,6 +41,21 @@ fn unconnected_grid_nodes_stack_in_layered() {
 }
 
 #[test]
+fn ratio_pages_fold_long_chains_into_bands() {
+    let page = |name: &str, extra: &[&str]| {
+        let out = tmp(name);
+        let mut args = vec!["examples/gallery/17-timeline.fitd", "-o", out.to_str().unwrap()];
+        args.extend(extra);
+        let (ok, log) = fitd(&args);
+        assert!(ok, "{log}");
+        let w = log.split("fits on ").nth(1).unwrap().split('x').next().unwrap();
+        w.parse::<f64>().unwrap()
+    };
+    // A smaller page for the same font floor means a larger font at the requested ratio.
+    assert!(page("fold.svg", &[]) < 0.8 * page("one-band.svg", &["--bands", "1"]));
+}
+
+#[test]
 fn builds_example_with_zero_errors() {
     let svg = tmp("group_theory.svg");
     let tex = tmp("group_theory.tex");

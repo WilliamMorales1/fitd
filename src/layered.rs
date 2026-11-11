@@ -328,7 +328,9 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     };
     let wrap = !fits(1, cfg.legible / b);
     let most = g.settings.bands.unwrap_or(rows.len()).min(rows.len());
-    let k = if wrap {
+    let k = if let Some(f) = g.settings.fold {
+        f.clamp(1, rows.len().max(1))
+    } else if wrap {
         (1..=most).find(|&k| fits(k, 1.0)).unwrap_or(1)
     } else {
         1
