@@ -50,7 +50,9 @@ pub fn frame(rel: &Relation, rect: &dyn Fn(usize) -> Rect, body: f64) -> Rect {
     r
 }
 
-pub const TITLE_BAND: f64 = 1.1;
+pub const TITLE_BAND: f64 = 1.35;
+/// TITLE_SIZE is a group title's font size in body ems; near body size so short tags like `D1` read.
+pub const TITLE_SIZE: f64 = 1.0;
 
 pub fn relation_holds(
     rel: &Relation,

@@ -2,7 +2,7 @@ use crate::geom::{P, Rect};
 use crate::graph::{Graph, KeyEntry, LayoutKind, Relation};
 use crate::key::KeyPlan;
 use crate::layout::{
-    Drawn, EdgeStyle, FRAME_PAD, Layout, Role, Shape, TITLE_BAND, TextLine, frame,
+    Drawn, EdgeStyle, FRAME_PAD, Layout, Role, Shape, TITLE_BAND, TITLE_SIZE, TextLine, frame,
 };
 use crate::metrics::{Fonts, Script};
 use crate::theme::{self, Theme};
@@ -369,7 +369,7 @@ pub fn svg(
             let _ = writeln!(
                 o,
                 r#"<text x="{x:.1}" y="{y:.1}" font-size="{:.2}" font-family="{}" font-weight="bold" fill="{}">{}</text>"#,
-                0.8 * b,
+                TITLE_SIZE * b,
                 xml(&fonts.regular[0].family),
                 f.color.unwrap_or(&th.label),
                 xml(t)
@@ -818,7 +818,7 @@ pub fn tikz(
                 r.x0 + FRAME_PAD * b,
                 r.y1 - (TITLE_BAND / 2.0 + 0.3) * b,
                 tex(t),
-                s = 0.8 * b
+                s = TITLE_SIZE * b
             );
         }
     }

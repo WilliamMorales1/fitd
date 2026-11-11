@@ -27,7 +27,7 @@ use scene::{Scene, build};
 pub use measure::{label_size, line_height};
 pub use path::{curve, label_rect, paths_meet};
 pub use polish::Readable;
-pub use relations::{FRAME_PAD, TITLE_BAND, frame, frame_clear, relation_holds};
+pub use relations::{FRAME_PAD, TITLE_BAND, TITLE_SIZE, frame, frame_clear, relation_holds};
 pub use stable::Anchor;
 
 pub fn measure_groups(g: &mut Graph, fonts: &Fonts) {
@@ -40,7 +40,7 @@ pub fn measure_groups(g: &mut Graph, fonts: &Fonts) {
         } = rel
         {
             if let Some(t) = title {
-                *title_em = label_size(fonts, t, 1.0).0;
+                *title_em = fonts.width(t, TITLE_SIZE, true) + 0.4;
             }
             inner.iter_mut().for_each(|r| measure(r, fonts));
         }
