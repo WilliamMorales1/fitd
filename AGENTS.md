@@ -98,92 +98,28 @@ Data plots belong to plotting libraries (matplotlib, ggplot2, pgfplots, Vega-Lit
 - Word clouds.
 - Circuit schematics, which need typed symbols and orthogonal wiring; CircuiTikZ covers them.
 
-These cover a large share of the figures in surveys 2 to 4. fitd should not grow a plotting engine. A figure that mixes a plot and a diagram should put the plot in as an image once image nodes exist (plan 10).
+These cover a large share of the figures in surveys 2 to 4. fitd should not grow a plotting engine. A figure that mixes a plot and a diagram should put the plot in as an image once image nodes exist (plan 7).
 
 ## Plans
 
-The plans are ordered by how many common figure types each one unlocks for the effort. Each plan gives the change, where it goes, and when it is done.
+Only open work belongs here: planned changes, known problems, and caveats. Delete a plan once it is done, and move anything it left out into Known gaps. The plans are ordered to avoid redoing work. Each plan gives the change, where it goes, and when it is done.
 
-### 1. Ordered siblings (done)
+- Module syntax (1) and user libraries (2) come first. They rewrite every gallery file and doc once, so later plans write new gallery files in the final syntax. Neither changes renders, so `committed_docs_match_a_fresh_build` checks them without looking at images.
+- Default styling (3) comes next. It changes every render and may change the fonts and metrics, so it goes before the layout plans. Layout tuning and done checks (larger font in 6, the square in 5) then run against the final metrics, and the full image review happens once.
+- The layout and feature plans (4 to 7) follow, smallest first. Each only re-checks its own renders.
+- Dependency arcs and Sankey (8) are low priority and stay last.
 
-`layout layered order=source` makes `layered::order` (src/layered.rs) run one downward pass: roots keep declaration order, and each node sorts by its parents' mean position, then by the index of its first incoming edge. `Kind::Before` constraints then hold that row order through the solver and polish. Gallery 04, 05, and 23 use it, and `source_order_keeps_children_in_edge_order` checks the x order of leaves.
+### Known gaps in finished work
 
-- Left out: the per-group `ordered` flag. A group draws a frame, so it is a poor switch for ordering alone. Add one only if a figure needs source order in one part and crossing reduction in another.
+Finished plans are removed from this file; git history has them. These parts were left out:
 
-### 2. Node shapes: diamond (done)
+- Ordered layouts: no per-group `ordered` flag. A group draws a frame, so it is a poor switch for ordering alone. Add one only if a figure needs source order in one part and crossing reduction in another.
+- Edge heads: no Graphviz `arrowhead=`/`style=` import.
+- Sequence diagrams: no activation bars, self-messages, or lane-relative `group` frames inside a sequence.
+- Venn: no Euler diagrams (disjoint or nested sets drawn apart or inside) and no area-proportional circles.
+- Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
 
-`shape=diamond` (`Shape::Diamond`, src/graph.rs) sizes the rhombus by scaling the padded content rect until every line corner fits, so it is at most twice the content box and smaller for ragged text. `inside_box` (src/layout/path.rs) tests the rhombus, so edge clipping, routing, and `check` follow the outline. SVG, PDF, TikZ, and key swatches draw it. `std/flow` uses it for `decide`, `std/er` has `er_relation(id, name, a, b, card)`, and the Mermaid `{}`, Graphviz `diamond`, and D2 `diamond` importers map to it. `diamond_edges_end_on_the_outline` checks the clipping.
-
-### 3. Edge heads and edge styles (done)
-
-Edges and edge styles take `head=` and `tail=` (`arrow|triangle|diamond|odiamond|crow|none`) and `line=solid|dashed|dotted` (`Head`, `Dash`, src/graph.rs). Nodes reject them with E0005. `decor` (src/emit.rs) resolves the marks at the drawn ends, swapping them when the layout draws an edge reversed. SVG uses one `<marker>` per mark and colour, TikZ uses `arrows.meta` tips, and PDF follows the SVG. Key swatches take `head=` too. Marks sit in the arrow clearance, so layout is unchanged.
-
-- `uml_is` is a hollow triangle, `uml_has` a diamond at the whole, `uml_uses` dashed. The relation colours are gone; `uml_key()` shows the heads.
-- `er_rel` and `er_relation` put a crow's foot at every end whose cardinality is not `1`.
-- `edge_heads_and_dashes_reach_svg_and_tikz` checks both outputs.
-- Left out: Graphviz `arrowhead=`/`style=` import.
-
-### 4. Lane layout: swimlanes and UML sequence diagrams (done)
-
-`layout lanes dir=down|right order=source` runs `lanes::plan` (src/lanes.rs) beside `layered::plan`. Each top-level group is a lane, then each loose node, in declaration order. Rows come from `layered::layering`, or with `order=source` from lane heads first and then one row per `align row` set in declaration order. A node alone in its lane and row sits on the lane center, and emit stretches the top-level frames to one extent along the flow.
-
-- `lane=ID` on a node (src/sema.rs `lifelines`) hangs it on ID's lane and adds a dashed, headless edge from the previous node on that lane, which is the lifeline. E0007 rejects a node as its own lane and a head that is itself on a lane.
-- An empty `shape=none` node measures as a point, so messages meet the lifeline.
-- `std/seq` gives `seq_actor`, `seq_msg(step, a, b, text)`, and `seq_reply`; each message is two points and an `align row`.
-- `sequence_messages_keep_source_order`, `swimlanes_keep_declaration_order`, and `lane_rejects_itself_and_nested_heads` check it.
-- Left out: activation bars, self-messages, and lane-relative `group` frames inside a sequence.
-
-### 5. Overlapping regions: Venn diagrams (done)
-
-`layout venn` (src/venn.rs) turns every group into a set circle, so groups may overlap, and E0010 now only rejects a fourth set. `venn::shape` places one, two, or three circles by closed form, tries four center spreads, and keeps the one with the most room in the most crowded region. Titles sit outside the circles and count as obstacles. `venn::plan` offers each node grid spots inside exactly its sets' circles and outside the rest, nearest the region's middle first. The geometry is stored on `Layout`, so SVG and TikZ draw the circles and `check` gives E0108 for a node outside its region. Nodes default to `shape=none`.
-
-- `std/venn` gives `venn_two` and `venn_three`, which take each region's items as one string. Gallery 26 and 27 use them.
-- `venn_items_land_in_their_regions` and `venn_rejects_a_fourth_set` check it.
-- Left out: Euler diagrams (disjoint or nested sets drawn apart or inside) and area-proportional circles.
-
-### 6. Preformatted bodies: algorithm and pseudocode blocks (done)
-
-Body lines keep the spaces after `| `: `measure` (src/layout/measure.rs) indents each body line by `INDENT` (0.6 body sizes) per leading space in box and frameless nodes, and wrapped continuations keep the indent. `**` toggles bold inside node text: `Run` carries its own weight (src/metrics.rs), SVG and PDF pick the font per run, TikZ wraps the run in `\bfseries` or `\mdseries`, and `wrap` closes a span at a line break and reopens it on the next line. Edge labels and titles drawn outside nodes keep `**` literal.
-
-- `part()` now drops only trailing spaces and the one space after the separator, so a `;` field can carry an indent into a body line.
-- `std/algo` gives `algo_block(id, title, lines)`. Gallery 28 draws Dijkstra with three indent levels.
-- `algorithm_lines_keep_indent_and_bold_keywords` and `wrap_reopens_a_bold_span_on_the_next_line` check it.
-- Left out: a monospace font. Algorithm figures in papers are mostly set with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords, so indentation and bold cover them. Add a mono face only for code listings.
-
-### 7. Multi-source edges
-
-`a, b, c -> d` gives E0002. Fishbones and fan-in flows need it.
-
-- Change: in src/parse.rs, accept a comma list before the operator and expand it to one edge per source, keeping the label on each.
-- Done when `23-fishbone` uses one line and an e2e test parses `a, b -> c, d` into 4 edges.
-
-### 8. Grid placement
-
-Commutative squares and 2x2 node matrices need nodes on a grid. `require a above b` combined with `left-of` fails for unconnected nodes (E0110), so `22-commutative` draws a diamond.
-
-- Change: add `at row=R col=C` to node statements (or `align grid(a, b; c, d)`). It lowers to `align row` and `align column` constraints, which the solver already supports, plus an order constraint per row and column.
-- Done when `22-commutative` is a square and `20-swot` can use real nodes with bodies.
-
-### 9. Ratio-aware folding of long chains
-
-Timelines and state machines on `page 16:9` come out thin, and `bands=N` does not help, so the gallery uses `page 3:1`.
-
-- Change: in `fit_ratio` (src/main.rs), try `bands = 1..=3` for layered layouts and keep the one with the largest font at the requested ratio.
-- Done when `17-timeline` at `page 16:9` uses two bands with a larger font than one band.
-
-### 10. Image nodes
-
-Mixed figures (a plot inside an architecture diagram) are common in surveys 2 to 4.
-
-- Change: add `~ image "path.png"` as a figure row. It is sized by aspect ratio and embedded in SVG and PDF, with TikZ using `\includegraphics`.
-- This keeps plots out of scope while letting diagrams contain them.
-
-### 11. Dependency arcs and Sankey widths (low priority)
-
-- Dependency arcs: words on one baseline with arcs above them. This needs a new `layout arcs` that places nodes in source order on one row and draws edges as nested arcs. It is small once plan 1 exists, but the figure type is mostly NLP-specific.
-- Sankey: edge width proportional to a value (`width=N`). The layout is fine, but readable Sankeys need crossing-free ribbons and node heights tied to flow, which is closer to a plotting tool. Revisit after plan 3.
-
-### 12. Module syntax for the standard library
+### 1. Module syntax for the standard library
 
 Stdlib includes and calls read as paths and prefixed names today: `include "std/nn.fitd"` and `use nn_input(...)`.
 
@@ -193,15 +129,15 @@ Stdlib includes and calls read as paths and prefixed names today: `include "std/
   - Keep the old forms working until the gallery, docs, guide, and LSP completions move to the new ones.
 - Done when every gallery file and `docs/language.md` use `include "MOD"` and `MOD.func(...)`, and the old forms still compile.
 
-### 13. User libraries
+### 2. User libraries
 
 Nothing shows that a non-stdlib file can serve as a library.
 
-- Change: accept `include "user/LIB"` for a user library, with calls written `LIB.func(...)` as in plan 12. Decide where `user/` resolves (beside the including file, or a configured library directory) and document it.
+- Change: accept `include "user/LIB"` for a user library, with calls written `LIB.func(...)` as in plan 1. Decide where `user/` resolves (beside the including file, or a configured library directory) and document it.
 - Add e2e tests that write a small library file, include it, and call its templates, plus an example under `examples/` that does the same.
 - Done when the tests pass and the example builds with no errors.
 
-### 14. Default styling from studies of professional diagrams
+### 3. Default styling from studies of professional diagrams
 
 The presets copy GitHub's Primer colors (src/theme.rs: `dark` is `#0D1117` with Primer accents, `light` uses Primer greys), and `dark` is the default. Published figures rarely look like that. The defaults should match how professional diagrams are most often styled.
 
@@ -215,14 +151,42 @@ The presets copy GitHub's Primer colors (src/theme.rs: `dark` is `#0D1117` with 
 - Rebuild every committed render, look at all of them, and update README and docs images.
 - Done when the findings section exists with sources, the default preset follows it, and `cargo test --release` passes on fresh renders.
 
+### 4. Multi-source edges
+
+`a, b, c -> d` gives E0002. Fishbones and fan-in flows need it.
+
+- Change: in src/parse.rs, accept a comma list before the operator and expand it to one edge per source, keeping the label on each.
+- Done when `23-fishbone` uses one line and an e2e test parses `a, b -> c, d` into 4 edges.
+
+### 5. Grid placement
+
+Commutative squares and 2x2 node matrices need nodes on a grid. `require a above b` combined with `left-of` fails for unconnected nodes (E0110), so `22-commutative` draws a diamond.
+
+- Change: add `at row=R col=C` to node statements (or `align grid(a, b; c, d)`). It lowers to `align row` and `align column` constraints, which the solver already supports, plus an order constraint per row and column.
+- Done when `22-commutative` is a square and `20-swot` can use real nodes with bodies.
+
+### 6. Ratio-aware folding of long chains
+
+Timelines and state machines on `page 16:9` come out thin, and `bands=N` does not help, so the gallery uses `page 3:1`.
+
+- Change: in `fit_ratio` (src/main.rs), try `bands = 1..=3` for layered layouts and keep the one with the largest font at the requested ratio.
+- Done when `17-timeline` at `page 16:9` uses two bands with a larger font than one band.
+
+### 7. Image nodes
+
+Mixed figures (a plot inside an architecture diagram) are common in surveys 2 to 4.
+
+- Change: add `~ image "path.png"` as a figure row. It is sized by aspect ratio and embedded in SVG and PDF, with TikZ using `\includegraphics`.
+- This keeps plots out of scope while letting diagrams contain them.
+
+### 8. Dependency arcs and Sankey widths (low priority)
+
+- Dependency arcs: words on one baseline with arcs above them. This needs a new `layout arcs` that places nodes in source order on one row and draws edges as nested arcs. It is small now that `order=source` exists, but the figure type is mostly NLP-specific.
+- Sankey: edge width proportional to a value (`width=N`). The layout is fine, but readable Sankeys need crossing-free ribbons and node heights tied to flow, which is closer to a plotting tool. Revisit now that edge heads exist.
+
 ### Performance
 
-The 1-second goal held for every gallery file after two changes:
+The slowest gallery file takes about 0.3 s. Watch these when adding features:
 
-- `fit_ratio` runs the first full probe alone and only fans out when it misses.
-- Annealing in polish scales with movable nodes (`POLISH_PER_NODE`) instead of a fixed 150k moves.
-
-The slowest gallery file now takes about 0.3 s. Watch these when adding features:
-
-- Ratio pages run up to 4 quick solves plus 1 to 6 full solves. Plan 9 multiplies that by the band count, so it should reuse the quick solve per band.
+- Ratio pages run up to 4 quick solves plus 1 to 6 full solves. Plan 6 multiplies that by the band count, so it should reuse the quick solve per band.
 - Large docs pages (35 nodes) still spend most of their time in the CSP search, not polish.
