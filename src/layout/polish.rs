@@ -60,6 +60,8 @@ impl Readable {
 
 pub(super) const POLISH_MOVES: usize = 150_000;
 
+pub(super) const POLISH_PER_NODE: usize = 6_000;
+
 pub(super) const POLISH_REACH: f64 = 10.0;
 
 pub(super) const SOFT_PENALTY: f64 = 1000.0;
@@ -105,6 +107,8 @@ pub(super) fn polish(
     if movable.is_empty() {
         return soft_cost;
     }
+    // Small scenes settle long before the full budget, and the budget dominated their compile time.
+    let moves = moves.min(movable.len() * POLISH_PER_NODE);
     let mut idx = vec![
         usize::MAX;
         ctx.tree
