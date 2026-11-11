@@ -1,5 +1,5 @@
 # Cause-and-effect (Ishikawa) diagram (quality management), drawn as a tree into the effect.
-layout layered dir=right
+layout layered dir=right order=source
 page 16:9
 font 9pt..28pt
 style cause shape=none

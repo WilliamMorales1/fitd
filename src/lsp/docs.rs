@@ -21,7 +21,7 @@ pub const KEYWORDS: &[Keyword] = &[
         "layout",
         "layout ${1|layered,radial|}",
         "layout NAME [attributes]",
-        "Selects the layout algorithm: `layered` (flows; `dir`, `bands`) or `radial` (mind maps; `root`).",
+        "Selects the layout algorithm: `layered` (flows; `dir`, `bands`, `order`) or `radial` (mind maps; `root`).",
     ),
     (
         "page",
@@ -216,6 +216,12 @@ pub const ATTRS: &[Attr] = &[
         doc: "Most bands a long `layered` flow may wrap into; `bands=1` forbids wrapping.",
     },
     Attr {
+        key: "order",
+        on: &["layout"],
+        values: &["auto", "source"],
+        doc: "Sibling order in a `layered` layout: `auto` cuts crossings, `source` keeps declaration and edge order.",
+    },
+    Attr {
         key: "margin",
         on: &["page"],
         values: &[],
@@ -378,7 +384,7 @@ pub const WORDS: &[(&str, &str, &str)] = &[
     (
         "layout",
         "layered",
-        "Layered layout for flows and pipelines. Takes `dir=down|right` and `bands=N`.",
+        "Layered layout for flows and pipelines. Takes `dir=down|right`, `bands=N`, and `order=auto|source`.",
     ),
     (
         "layout",

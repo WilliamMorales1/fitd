@@ -509,7 +509,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     }
                     "layered" => {
                         set.layout = Some(LayoutKind::Layered(Dir::Down));
-                        &["dir", "bands"]
+                        &["dir", "bands", "order"]
                     }
                     _ => {
                         s.diags
@@ -538,6 +538,13 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                         ("bands", v) => {
                             s.type_err(v, "expected a whole number of bands, 1 or more".into())
                         }
+                        ("order", Value::Name(n)) if n.text == "source" => set.source_order = true,
+                        ("order", Value::Name(n)) if n.text == "auto" => set.source_order = false,
+                        ("order", Value::Name(n)) => {
+                            s.diags
+                                .push(unknown("E0009", "order", n, &["auto", "source"]))
+                        }
+                        ("order", v) => s.type_err(v, "expected `auto` or `source`".into()),
                         (_, v) => s.type_err(v, "expected `down` or `right`".into()),
                     }
                 }

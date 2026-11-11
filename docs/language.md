@@ -198,7 +198,7 @@ key "Principal" shape=circle fill=#FFFFFF color=#222222
 
 ### Layout selection
 
-`layout NAME` selects layout algorithm and accepts layout-specific attributes. Supported algorithms include `radial` and `layered`. Radial layouts use `root=ID`; layered layouts accept `dir=down` or `dir=right`.
+`layout NAME` selects layout algorithm and accepts layout-specific attributes. Supported algorithms include `radial` and `layered`. Radial layouts use `root=ID`; layered layouts accept `dir=down` or `dir=right`, `bands=N`, and `order=source`. By default a layered layout reorders nodes within a layer to cut edge crossings; `order=source` instead keeps roots in declaration order and children in the order of their incoming edges, which org charts, syntax trees, and fishbones need.
 
 ### Page and font settings
 

@@ -59,7 +59,7 @@ fn layers(n: usize, dag: &[(usize, usize)]) -> Vec<usize> {
     layer
 }
 
-fn order(n: usize, layer: &[usize], dag: &[(usize, usize)]) -> Vec<Vec<usize>> {
+fn order(n: usize, layer: &[usize], dag: &[(usize, usize)], source: bool) -> Vec<Vec<usize>> {
     let depth = layer.iter().max().map_or(0, |m| m + 1);
     let mut rows: Vec<Vec<usize>> = vec![Vec::new(); depth];
     for v in 0..n {
@@ -74,6 +74,27 @@ fn order(n: usize, layer: &[usize], dag: &[(usize, usize)]) -> Vec<Vec<usize>> {
         }
     };
     set_rank(&rows, &mut rank);
+    if source {
+        // One downward pass: each node follows its parents, and siblings keep edge order.
+        for l in 1..depth {
+            let key = |v: usize| {
+                let up: Vec<(usize, f64)> = (dag.iter().enumerate())
+                    .filter(|&(_, &(a, b))| b == v && layer[a] < l)
+                    .map(|(i, &(a, _))| (i, rank[a]))
+                    .collect();
+                match up.first() {
+                    Some(&(i, _)) => (up.iter().map(|p| p.1).sum::<f64>() / up.len() as f64, i),
+                    None => (rank[v], usize::MAX),
+                }
+            };
+            let mut keyed: Vec<((f64, usize), usize)> =
+                rows[l].iter().map(|&v| (key(v), v)).collect();
+            keyed.sort_by(|a, b| a.0.0.total_cmp(&b.0.0).then(a.0.1.cmp(&b.0.1)));
+            rows[l] = keyed.into_iter().map(|(_, v)| v).collect();
+            set_rank(&rows, &mut rank);
+        }
+        return rows;
+    }
     for sweep in 0..8 {
         let down = sweep % 2 == 0;
         let seq: Vec<usize> = if down {
@@ -242,7 +263,7 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         .map(|w| w + 2.0 * b)
         .sum::<f64>();
     let cross_len = cross_len - strip_len;
-    let mut rows = order(n, &layer, &dag);
+    let mut rows = order(n, &layer, &dag, g.settings.source_order);
     for r in &mut rows {
         r.retain(|&v| !detached[v]);
     }
@@ -452,6 +473,17 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
             }
         }
     }
+    if g.settings.source_order {
+        let ahead = match dir {
+            Dir::Down => (1.0, 0.0),
+            Dir::Right => (0.0, -1.0),
+        };
+        for row in &rows {
+            for w in row.windows(2) {
+                cons.push((vec![w[0], w[1]], Kind::Before(ahead.0, ahead.1), 0));
+            }
+        }
+    }
     for &(a, c) in &along {
         for u in (0..n).filter(|&u| u != a && u != c && layer[u] == layer[a]) {
             cons.push((vec![a, c, u], Kind::Clear(sep * 0.25), 0));
@@ -563,7 +595,7 @@ mod tests {
 
     #[test]
     fn barycenter_uncrosses_two_edges() {
-        let rows = order(4, &[0, 0, 1, 1], &[(0, 3), (1, 2)]);
+        let rows = order(4, &[0, 0, 1, 1], &[(0, 3), (1, 2)], false);
         assert_eq!(rows[1], vec![3, 2]);
     }
 }

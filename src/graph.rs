@@ -187,6 +187,8 @@ pub struct Settings {
     pub page_ratio: Option<(f64, f64)>,
     pub page_fixed: bool,
     pub bands: Option<usize>,
+    /// Set by `layout layered order=source`: siblings keep declaration order.
+    pub source_order: bool,
     pub margin: Option<f64>,
     pub key_size: Option<f64>,
     pub font: Option<(f64, f64)>,

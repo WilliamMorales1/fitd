@@ -1,6 +1,6 @@
 # Syntax tree (ACL-Fig: NLP grammar examples, trees).
 include "std/tree.fitd"
-layout layered
+layout layered order=source
 page 4:3
 font 9pt..28pt
 use tree_cat("s", "S")

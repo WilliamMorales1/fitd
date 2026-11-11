@@ -1810,3 +1810,31 @@ fn ratio_page_is_smallest_that_fits() {
     ]);
     assert!(!ok, "a page 30% smaller should not fit at the floor: {log}");
 }
+
+#[test]
+fn source_order_keeps_children_in_edge_order() {
+    // Nodes are declared in reverse, so only edge order can put the leaves a..e left to right.
+    let src = tmp("source-order.fitd");
+    std::fs::write(
+        &src,
+        "layout layered order=source\nnode e \"E\"\nnode d \"D\"\nnode c \"C\"\nnode b \"B\"\nnode a \"A\"\nnode p \"P\"\np -> a, b, c, d, e\n",
+    )
+    .unwrap();
+    let svg = tmp("source-order.svg");
+    let (ok, log) = fitd(&[
+        src.to_str().unwrap(),
+        "-o",
+        svg.to_str().unwrap(),
+        "--short",
+    ]);
+    assert!(ok, "{log}");
+    let xs: Vec<f64> = outlines(&std::fs::read_to_string(&svg).unwrap())
+        .iter()
+        .take(5)
+        .map(|o| o.0)
+        .collect();
+    assert!(
+        xs.windows(2).all(|w| w[0] > w[1]),
+        "leaves out of edge order: {xs:?}"
+    );
+}

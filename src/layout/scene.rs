@@ -411,6 +411,7 @@ impl Problem for Scene<'_> {
             }
             Kind::Clear(thin) => !segment_hits_rect(at(0), at(1), &rect(2).inflate(thin)),
             Kind::NoCross => !segments_cross(at(0), at(1), at(2), at(3)),
+            Kind::Before(dx, dy) => (at(1).0 - at(0).0) * dx + (at(1).1 - at(0).1) * dy > 0.0,
             Kind::Aligned(side) => aligned(side, &rect(0), &rect(1), self.tol),
             Kind::Rel(ci) => {
                 let by_node = |u: usize| self.rects[self.var[u]][val[self.var[u]] as usize];

@@ -251,6 +251,8 @@ pub enum Kind {
     Outward(f64),
     Clear(f64),
     NoCross,
+    /// Before keeps the second node's center ahead of the first's along (dx, dy).
+    Before(f64, f64),
     Rel(usize),
     Aligned(Side),
     LabelClear(usize, usize, f64),

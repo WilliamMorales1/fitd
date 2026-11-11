@@ -1,6 +1,6 @@
 # Tree / hierarchy, here an org chart (DocFigure tree diagram; ACL-Fig trees).
 include "std/tree.fitd"
-layout layered
+layout layered order=source
 page 16:9
 font 9pt..28pt
 use tree_unit("ceo", "Ada", "CEO")
