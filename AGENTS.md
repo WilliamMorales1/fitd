@@ -200,6 +200,20 @@ Nothing shows that a non-stdlib file can serve as a library.
 - Add e2e tests that write a small library file, include it, and call its templates, plus an example under `examples/` that does the same.
 - Done when the tests pass and the example builds with no errors.
 
+### 14. Default styling from studies of professional diagrams
+
+The presets copy GitHub's Primer colors (src/theme.rs: `dark` is `#0D1117` with Primer accents, `light` uses Primer greys), and `dark` is the default. Published figures rarely look like that. The defaults should match how professional diagrams are most often styled.
+
+- Research first, and write the findings into this file with citations before changing code:
+  - Re-read surveys 1 to 6 above for anything they report about styling, not just figure types.
+  - Find aggregate studies of how published or professional diagrams are styled: figure-style audits of journal or conference papers, design-guideline meta-reviews, and color-use studies of scientific figures.
+  - Record the most common choice for each of these, with the share where the study gives one: background, text and line colors, palette and fill use (solid, tinted, or none), node shape and corner radius, line weight, arrowheads, font family (serif or sans) and weight, group frames, and how heavily diagrams are decorated.
+  - Only cite studies that were actually found and read. Where no aggregate data exists for an attribute, say so and fall back to a named style guide (journal figure guidelines, for example), not to taste.
+- Change: make a new default preset that follows the findings, and keep `dark`, `light`, and `mono` as named presets. Revisit the embedded fonts (fonts/, src/metrics.rs) if the findings favor a different family. Keep a colorblind-safe palette unless the findings argue against it.
+- The defaults must still meet the goals above: sane with no overrides, and no decoration beyond what the figure type needs.
+- Rebuild every committed render, look at all of them, and update README and docs images.
+- Done when the findings section exists with sources, the default preset follows it, and `cargo test --release` passes on fresh renders.
+
 ### Performance
 
 The 1-second goal held for every gallery file after two changes:
