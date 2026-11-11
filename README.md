@@ -19,6 +19,20 @@ leaf -> sugar "produces"
 require sun above leaf
 ```
 
+## Design goals
+
+Every change to fitd, its standard library, or its docs is judged against these goals:
+
+- Minimal code should produce a professional result. The compiler does most of the work.
+- Sane defaults, with optional overrides.
+- Deterministic: the same source always gives the same drawing.
+- One second at most for most reasonable compilations.
+- An expansive, reliable, and easy-to-use standard library.
+- Source code should be readable.
+- Diagrams carry the minimal amount of text.
+
+[AGENTS.md](AGENTS.md) maps these goals onto the diagram types fitd covers and the work still planned.
+
 ## Installation
 
 Requires Rust 1.85 or newer and Cargo.
