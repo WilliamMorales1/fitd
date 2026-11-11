@@ -98,6 +98,8 @@ Whitespace separates tokens. Spaces and tabs may appear between tokens. Whitespa
 
 A body line begins with `|` in first non-whitespace position. It appends text to most recently declared node. Multiple body lines may follow one declaration. A body line without preceding node is invalid.
 
+Spaces after the one following `|` indent the line in box and frameless nodes, as in pseudocode; wrapped continuation lines keep that indent. In any node text, `**` toggles bold, so `**if** x **then**` sets the keywords in bold.
+
 ```fitd
 node leaf "Leaf" .plant shape=box color=#2E7D32
 | converts light into stored energy
@@ -301,6 +303,7 @@ A path beginning with `std/` names a module of the bundled library instead of a 
 | `std/time.fitd` | Timelines: `time_event`, `time_mile`, `time_chain` |
 | `std/seq.fitd` | UML sequence diagrams for `layout lanes`: `seq_actor`, `seq_msg`, `seq_reply` (dashed) |
 | `std/venn.fitd` | Venn diagrams for `layout venn`: `venn_two`, `venn_three`, `venn_items`, `venn_set`, set styles `venn_a`..`venn_c` |
+| `std/algo.fitd` | Algorithm and pseudocode blocks: `algo_block` with `;`-separated, indentable lines and `**` keywords |
 | `std/model.fitd` | Research models: `model_iv`, `model_dv`, `model_med`, `model_mod`, `model_ctl`, `model_hyp`, `model_key()` |
 
 [examples/gallery](../examples/gallery/) has one diagram per common academic figure type, each built on these modules.
@@ -319,7 +322,7 @@ x -> e -> m
 
 Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, and `${expression}` interpolation. Directives use indentation for readability; block boundaries are marked by `end`. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
 
-Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for node lists. `count(s, sep)` gives the number of fields in `s`; `part(s, sep, i)` gives field `i`, counted from 1 and trimmed. A whitespace separator splits on runs of whitespace, and an empty string has no fields, so templates can take lists as one string:
+Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for node lists. `count(s, sep)` gives the number of fields in `s`; `part(s, sep, i)` gives field `i`, counted from 1, without trailing spaces or the one space after the separator. Further leading spaces stay, so a `|` body line built from a field keeps its indent. A whitespace separator splits on runs of whitespace, and an empty string has no fields, so templates can take lists as one string:
 
 ```fitd
 def row(cells)

@@ -36,7 +36,16 @@ pub fn wrap(fonts: &Fonts, text: &str, size: f64, bold: bool, maxw: f64) -> Vec<
     if words.len() < 2 {
         return vec![words.into_iter().next().unwrap_or_default()];
     }
-    let ww: Vec<f64> = words.iter().map(|w| fonts.width(w, size, bold)).collect();
+    // A word inside a `**` span is measured bold even when the span opened in an earlier word.
+    let mut on = false;
+    let ww: Vec<f64> = words
+        .iter()
+        .map(|w| {
+            let open = if on { "**" } else { "" };
+            on ^= w.matches("**").count() % 2 == 1;
+            fonts.marked_width(&format!("{open}{w}"), size, bold)
+        })
+        .collect();
     let space = fonts.width(" ", size, bold);
     let width = |i: usize, j: usize| ww[i..j].iter().sum::<f64>() + space * (j - i - 1) as f64;
     let fits = |i: usize, j: usize| j == i + 1 || width(i, j) <= maxw;
@@ -71,8 +80,23 @@ pub fn wrap(fonts: &Fonts, text: &str, size: f64, bold: bool, maxw: f64) -> Vec<
         out.push(words[i..j].join(" "));
         i = j;
     }
+    // A `**` span broken across lines is closed at the break and reopened on the next line.
+    let mut on = false;
+    for l in &mut out {
+        let flips = l.matches("**").count() % 2 == 1;
+        if on {
+            l.insert_str(0, "**");
+        }
+        on ^= flips;
+        if on {
+            l.push_str("**");
+        }
+    }
     out
 }
+
+/// INDENT is the body indent per leading space, in body sizes.
+const INDENT: f64 = 0.6;
 
 pub fn line_height(size: f64) -> f64 {
     1.22 * size
@@ -111,33 +135,40 @@ pub fn measure(
         Shape::Diamond => 0.25 * b,
         _ => pad,
     };
-    let mut raw: Vec<(String, f64, bool)> = Vec::new();
+    let mut raw: Vec<(String, f64, bool, f64)> = Vec::new();
     for part in node.title.split('\n').filter(|_| !point) {
         for l in wrap(fonts, part, ts, true, wrap_w) {
-            raw.push((l, ts, true));
+            raw.push((l, ts, true, 0.0));
         }
     }
     let ntitle = raw.len();
+    // Leading spaces indent a body line, as in pseudocode; centred shapes have no left edge to indent from.
+    let left = matches!(shape, Shape::Rect | Shape::Plain);
     for part in &node.body {
-        for l in wrap(fonts, part, bs, false, wrap_w) {
-            raw.push((l, bs, false));
+        let text = part.trim_start_matches(' ');
+        let indent = match left {
+            true => (part.len() - text.len()) as f64 * INDENT * bs,
+            false => 0.0,
+        };
+        for l in wrap(fonts, text, bs, false, (wrap_w - indent).max(bs)) {
+            raw.push((l, bs, false, indent));
         }
     }
     let title_gap = if raw.len() > ntitle { 0.25 * b } else { 0.0 };
     let mut lines = Vec::new();
     let mut top = 0.0;
-    for (i, (text, size, bold)) in raw.into_iter().enumerate() {
+    for (i, (text, size, bold, indent)) in raw.into_iter().enumerate() {
         if i == ntitle {
             top += title_gap;
         }
         let runs = fonts.runs(&text, bold);
-        let width = fonts.runs_width(&runs, size, bold);
+        let width = fonts.runs_width(&runs, size);
         lines.push(TextLine {
             runs,
             size,
             bold,
             width,
-            x: 0.0,
+            x: indent,
             baseline: top + 0.96 * size,
         });
         top += line_height(size);
@@ -149,7 +180,7 @@ pub fn measure(
     } else {
         0.0
     };
-    let text_w = lines.iter().map(|l| l.width).fold(0.0, f64::max);
+    let text_w = lines.iter().map(|l| l.x + l.width).fold(0.0, f64::max);
     let beside = beside && fig_gap > 0.0 && matches!(shape, Shape::Rect | Shape::Plain);
     let content_w = if beside {
         text_w + 2.0 * fig_gap + fw
@@ -164,7 +195,7 @@ pub fn measure(
     let (w, h, dx, dy) = match shape {
         _ if beside => {
             for l in &mut lines {
-                l.x = pad;
+                l.x += pad;
                 l.baseline += pad;
             }
             (
@@ -176,7 +207,7 @@ pub fn measure(
         }
         Shape::Rect | Shape::Plain => {
             for l in &mut lines {
-                l.x = pad;
+                l.x += pad;
                 l.baseline += pad;
             }
             (
@@ -318,7 +349,7 @@ fn figure(fonts: &Fonts, rows: &[Vec<Cell>], bs: f64) -> (Vec<CellBox>, f64, f64
             if !c.gap {
                 let label = c.label.as_ref().map(|t| {
                     let runs = fonts.runs(t, false);
-                    let width = fonts.runs_width(&runs, ls, false);
+                    let width = fonts.runs_width(&runs, ls);
                     TextLine {
                         runs,
                         size: ls,
@@ -462,5 +493,18 @@ mod tests {
             "{lines:?}"
         );
         assert_eq!(lines.join(" "), text);
+    }
+
+    #[test]
+    fn wrap_reopens_a_bold_span_on_the_next_line() {
+        let fonts = Fonts::load(None).unwrap();
+        let w = fonts.width("plain one two", 10.0, false);
+        let lines = wrap(&fonts, "plain **one two three four** end", 10.0, false, w);
+        assert!(lines.len() > 1, "{lines:?}");
+        assert!(
+            lines.iter().all(|l| l.matches("**").count() % 2 == 0),
+            "{lines:?}"
+        );
+        assert!(lines[1].starts_with("**"), "{lines:?}");
     }
 }

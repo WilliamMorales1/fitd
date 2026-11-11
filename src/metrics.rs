@@ -36,6 +36,7 @@ pub struct Run {
     pub text: String,
     pub font: usize,
     pub script: Script,
+    pub bold: bool,
 }
 
 pub struct Fonts {
@@ -292,17 +293,32 @@ impl Fonts {
         v
     }
 
+    /// runs splits node text into font runs, where `**` toggles bold against the line's weight.
     pub fn runs(&self, text: &str, bold: bool) -> Vec<Run> {
+        self.split(text, bold, true)
+    }
+
+    fn split(&self, text: &str, bold: bool, markup: bool) -> Vec<Run> {
         let mut out: Vec<Run> = Vec::new();
+        let mut b = bold;
         for (script, s) in spans(text) {
-            for c in s.chars() {
-                let font = self.advance(bold, c).1;
+            let mut cs = s.chars().peekable();
+            while let Some(c) = cs.next() {
+                if markup && c == '*' && cs.peek() == Some(&'*') {
+                    cs.next();
+                    b = !b;
+                    continue;
+                }
+                let font = self.advance(b, c).1;
                 match out.last_mut() {
-                    Some(r) if r.font == font && r.script == script => r.text.push(c),
+                    Some(r) if r.font == font && r.script == script && r.bold == b => {
+                        r.text.push(c)
+                    }
                     _ => out.push(Run {
                         text: c.to_string(),
                         font,
                         script,
+                        bold: b,
                     }),
                 }
             }
@@ -310,17 +326,26 @@ impl Fonts {
         out
     }
 
-    pub fn runs_width(&self, runs: &[Run], size: f64, bold: bool) -> f64 {
+    pub fn runs_width(&self, runs: &[Run], size: f64) -> f64 {
         runs.iter()
             .map(|r| {
-                r.text.chars().map(|c| self.advance(bold, c).0).sum::<f64>()
+                r.text
+                    .chars()
+                    .map(|c| self.advance(r.bold, c).0)
+                    .sum::<f64>()
                     * size
                     * r.script.scale()
             })
             .sum()
     }
 
+    /// width measures plain text, where `**` is literal.
     pub fn width(&self, text: &str, size: f64, bold: bool) -> f64 {
-        self.runs_width(&self.runs(text, bold), size, bold)
+        self.runs_width(&self.split(text, bold, false), size)
+    }
+
+    /// marked_width measures node text, where `**` toggles bold.
+    pub fn marked_width(&self, text: &str, size: f64, bold: bool) -> f64 {
+        self.runs_width(&self.runs(text, bold), size)
     }
 }

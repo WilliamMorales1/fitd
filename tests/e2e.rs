@@ -2097,3 +2097,33 @@ fn venn_rejects_a_fourth_set() {
         "{log}"
     );
 }
+
+#[test]
+fn algorithm_lines_keep_indent_and_bold_keywords() {
+    let src = "layout layered\ninclude \"std/algo.fitd\"\n\
+               use algo_block(\"a\", \"Algo\", \"**Qkw** Qa;   Qb;     Qc; Qd\")\n";
+    let svg = build_svg("algo-indent", src);
+    let x = |w: &str| text_at(&svg, w).0;
+    let step = x("Qb") - x("Qkw");
+    assert!(step > 1.0, "{svg}");
+    assert!((x("Qc") - x("Qkw") - 2.0 * step).abs() < 0.05, "{svg}");
+    assert!((x("Qd") - x("Qkw")).abs() < 0.05, "{svg}");
+    assert!(!svg.contains("**"), "{svg}");
+    let kw = &svg[..svg.find(">Qkw<").unwrap()];
+    assert!(kw[kw.rfind("<tspan").unwrap()..].contains("font-weight=\"bold\""));
+    let path = tmp("algo-indent.fitd");
+    let tex = tmp("algo-indent.tex");
+    let (ok, log) = fitd(&[
+        path.to_str().unwrap(),
+        "-o",
+        tmp("algo-indent2.svg").to_str().unwrap(),
+        "--tikz",
+        tex.to_str().unwrap(),
+    ]);
+    assert!(ok, "{log}");
+    assert!(
+        std::fs::read_to_string(&tex)
+            .unwrap()
+            .contains("{\\bfseries Qkw}")
+    );
+}

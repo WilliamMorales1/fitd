@@ -7,7 +7,7 @@ Exit 0 = written. Diagnostics: stderr.
 
 Syntax: one statement per line, # comment. Only nodes and edges are needed.
   node ID "Title" .style        # ID: letters digits _ inner -; title defaults to ID
-  | body line                   # detail text under node above
+  | body line                   # under node; lead spaces indent; **bold**
   ~ # %60 . _ LBL "two words"   # figure row: # solid %NN shade . outline _ gap, else label
                                 #   LBL*3 spans 3 columns; rows grid up: strips, heatmaps
   a -> b, c "label" -> d        # flow edge (-- undirected); hops chain
@@ -26,7 +26,7 @@ Syntax: one statement per line, # comment. Only nodes and edges are needed.
   require REL                   # must hold, else E0110
   prefer REL weight=2           # soft; W0205 if unmet
   include "part.fitd"           # splice; relative to file
-  include "std/uml.fitd"        # std: nn flow palette grid arch uml er tree time model seq venn
+  include "std/uml.fitd"        # std: nn flow palette grid arch uml er tree time model seq venn algo
   for i in 1..3 / if X / def f(a)...end; use f(1); ${i}; count(s,";") part(s,";",i)
 REL:
   a left-of b gap=2em | right-of | above | below   # chains: a above b above c
@@ -60,4 +60,4 @@ Flowchart:
 
 Fix loop: fix first error, rebuild. `fitd explain CODE` details a code.
 Unsat (E0110): drop or `prefer` one listed constraint, or use a larger page.
-No fit: lower the font floor, use a larger page, or follow the printed help.
+No fit: lower the font floor, use a larger page, or see help.

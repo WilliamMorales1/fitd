@@ -83,7 +83,7 @@ Each row lists the figure type, the surveys (by number above) that name it, and 
 | UML sequence | 5, 6 | yes, no activation bars or self-messages | `std/seq` | `25-sequence` |
 | Venn | 3, 4, 5 | yes, up to three sets | `std/venn` | `26-venn`, `27-venn-three` |
 | Euler | 3, 4, 5 | **no** | planned | |
-| Algorithm / pseudocode | 3, 4 | **no** | planned | |
+| Algorithm / pseudocode | 3, 4 | yes, indented lines and bold keywords | `std/algo` | `28-algorithm` |
 | UML use case | 6 | partial: no actor glyph | planned | |
 | Dependency arcs (NLP) | 4 | **no** | planned, low priority | |
 | Sankey / flow widths | 1 | **no** | out of scope for now | |
@@ -141,13 +141,14 @@ Edges and edge styles take `head=` and `tail=` (`arrow|triangle|diamond|odiamond
 - `venn_items_land_in_their_regions` and `venn_rejects_a_fourth_set` check it.
 - Left out: Euler diagrams (disjoint or nested sets drawn apart or inside) and area-proportional circles.
 
-### 6. Preformatted bodies: algorithm and pseudocode blocks
+### 6. Preformatted bodies: algorithm and pseudocode blocks (done)
 
-DocFigure and ACL-Fig both have an "algorithm" class. Body lines are trimmed, which loses indentation.
+Body lines keep the spaces after `| `: `measure` (src/layout/measure.rs) indents each body line by `INDENT` (0.6 body sizes) per leading space in box and frameless nodes, and wrapped continuations keep the indent. `**` toggles bold inside node text: `Run` carries its own weight (src/metrics.rs), SVG and PDF pick the font per run, TikZ wraps the run in `\bfseries` or `\mdseries`, and `wrap` closes a span at a line break and reopens it on the next line. Edge labels and titles drawn outside nodes keep `**` literal.
 
-- Change: add `style NAME mono=true`, or a `|>` body line that keeps leading spaces and uses a monospace font metric (src/metrics.rs needs a mono width table).
-- Then `std/algo.fitd` gives `algo_block(id, title, lines)` with `;`-separated lines and keyword bolding through existing markup.
-- Done when a gallery algorithm keeps 2-level indentation in SVG and PDF.
+- `part()` now drops only trailing spaces and the one space after the separator, so a `;` field can carry an indent into a body line.
+- `std/algo` gives `algo_block(id, title, lines)`. Gallery 28 draws Dijkstra with three indent levels.
+- `algorithm_lines_keep_indent_and_bold_keywords` and `wrap_reopens_a_bold_span_on_the_next_line` check it.
+- Left out: a monospace font. Algorithm figures in papers are mostly set with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords, so indentation and bold cover them. Add a mono face only for code listings.
 
 ### 7. Multi-source edges
 

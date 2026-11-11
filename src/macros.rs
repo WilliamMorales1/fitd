@@ -914,7 +914,13 @@ impl Expander<'_> {
             } else if sep.trim().is_empty() {
                 s.split_whitespace().collect()
             } else {
-                s.split(sep.as_str()).map(str::trim).collect()
+                // Spaces past the one after the separator survive, so a body field can indent.
+                s.split(sep.as_str())
+                    .map(|f| {
+                        let f = f.trim_end();
+                        f.strip_prefix(' ').unwrap_or(f)
+                    })
+                    .collect()
             };
             if f == "count" {
                 return Ok(Val::Int(fields.len() as i64));

@@ -1,0 +1,6 @@
+# Algorithm block (DocFigure and ACL-Fig: "algorithm" class).
+include "std/algo.fitd"
+layout layered
+page 4:3
+font 9pt..28pt
+use algo_block("dijkstra", "Algorithm 1: Dijkstra(G, s)", "**for** v **in** V **do**;   d[v] = inf;   prev[v] = none; d[s] = 0; Q = V; **while** Q not empty **do**;   u = argmin d[u] **in** Q;   remove u from Q;   **for** v **in** adj(u) **do**;     **if** d[u] + w(u, v) < d[v] **then**;       d[v] = d[u] + w(u, v);       prev[v] = u; **return** d, prev")

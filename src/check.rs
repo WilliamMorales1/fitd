@@ -240,7 +240,7 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
     for v in 0..n {
         let b = &lay.boxes[v];
         for l in &b.lines {
-            let width = fonts.runs_width(&l.runs, l.size, l.bold);
+            let width = fonts.runs_width(&l.runs, l.size);
             let fits = match b.shape {
                 Shape::Rect | Shape::Plain => {
                     l.x + width <= b.w - b.pad + 0.01

@@ -368,7 +368,7 @@ fn svg_line(out: &mut String, fonts: &Fonts, l: &TextLine, x: f64, y: f64, fill:
     );
     let mut shift = 0.0;
     for r in &l.runs {
-        let f = fonts.font(l.bold, r.font);
+        let f = fonts.font(r.bold, r.font);
         let target = -r.script.shift() * l.size;
         let _ = write!(
             out,
@@ -897,7 +897,11 @@ fn cname(c: &str) -> String {
 fn tikz_line(o: &mut String, l: &TextLine, x: f64, y: f64, color: &str) {
     let mut body = String::new();
     for r in &l.runs {
-        let t = tex(&r.text);
+        let t = match r.bold == l.bold {
+            true => tex(&r.text),
+            false if r.bold => format!("{{\\bfseries {}}}", tex(&r.text)),
+            false => format!("{{\\mdseries {}}}", tex(&r.text)),
+        };
         if r.script == Script::Normal {
             body += &t;
         } else {
@@ -936,7 +940,7 @@ pub fn tikz(
                 for c in r.text.chars() {
                     fallback
                         .entry(c)
-                        .or_insert_with(|| fonts.font(l.bold, r.font).family.clone());
+                        .or_insert_with(|| fonts.font(r.bold, r.font).family.clone());
                 }
             }
         }
