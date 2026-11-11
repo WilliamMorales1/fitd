@@ -14,6 +14,8 @@ pub(super) struct Route {
     pub(super) opts: Vec<(usize, f64)>,
     pub(super) label: Option<(f64, f64)>,
     pub(super) paths: Vec<Vec<P>>,
+    /// Group whose frame the link ends on, with its members.
+    pub(super) frame: Option<(Relation, Vec<usize>)>,
 }
 
 impl Route {
@@ -204,13 +206,19 @@ impl Scene<'_> {
             let (w, h) = self.size[self.var[u]];
             inside_box(self.center(u, val), self.shapes[self.var[u]], w, h, p)
         };
+        let fr = r
+            .frame
+            .as_ref()
+            .map(|(rel, _)| frame(rel, &|v| self.node_rect(v, val), self.body));
+        let in_b = |p: P| fr.map_or_else(|| inside(r.b, p), |f| f.contains(p));
+        let pb = fr.map_or_else(|| self.center(r.b, val), |f| f.center());
         Cow::Owned(match r.opts[k].0.checked_sub(r.bows.len()) {
-            Some(j) => trim(&r.vias[j], &|p| inside(r.a, p), &|p| inside(r.b, p)),
+            Some(j) => trim(&r.vias[j], &|p| inside(r.a, p), &in_b),
             None => curve(
                 self.center(r.a, val),
                 &|p| inside(r.a, p),
-                self.center(r.b, val),
-                &|p| inside(r.b, p),
+                pb,
+                &in_b,
                 r.bows[r.opts[k].0],
             ),
         })
@@ -630,6 +638,7 @@ pub(super) fn build<'a>(
         }
     }
     let mut edges = plan.edges;
+    fold_group_links(g, &mut edges);
     for (k, e) in edges.iter_mut().enumerate() {
         let link = e.style == EdgeStyle::Link;
         if !link && e.label.is_none() {
@@ -637,18 +646,21 @@ pub(super) fn build<'a>(
         }
         let bows: Vec<f64> = if link { BOWS.to_vec() } else { vec![0.0] };
         let mut vias = Vec::new();
+        let frame_of = e.frame.as_ref().map(|rel| {
+            let members: Vec<usize> = rel.nodes().collect();
+            (rel.clone(), members)
+        });
+        let ends_in = |u: usize| u == e.b || frame_of.as_ref().is_some_and(|f| f.1.contains(&u));
         if link && routing {
             let others: Vec<Rect> = (0..n)
-                .filter(|&u| u != e.a && u != e.b)
+                .filter(|&u| u != e.a && !ends_in(u))
                 .map(|u| sc.rects[sc.var[u]][0])
                 .collect();
-            vias = detours(
-                sc.at[sc.var[e.a]][0],
-                sc.at[sc.var[e.b]][0],
-                &others,
-                &sc.page,
-                0.4 * b,
-            );
+            let target = match &frame_of {
+                Some((rel, _)) => frame(rel, &|v| sc.rects[sc.var[v]][0], b).center(),
+                None => sc.at[sc.var[e.b]][0],
+            };
+            vias = detours(sc.at[sc.var[e.a]][0], target, &others, &sc.page, 0.4 * b);
         }
         let spots: &[f64] = if e.label.is_some() { &SPOTS } else { &[0.5] };
         let opts = (0..bows.len() + vias.len())
@@ -665,6 +677,7 @@ pub(super) fn build<'a>(
             opts,
             label,
             paths: Vec::new(),
+            frame: frame_of,
         });
         if routing {
             let i = sc.routes.len() - 1;
@@ -680,6 +693,7 @@ pub(super) fn build<'a>(
                             .filter(|&u| {
                                 u != r.a
                                     && u != r.b
+                                    && !r.frame.as_ref().is_some_and(|f| f.1.contains(&u))
                                     && path.iter().any(|&p| {
                                         inside_box(
                                             sc.at[sc.var[u]][0],
@@ -707,7 +721,12 @@ pub(super) fn build<'a>(
     let push = |sc: &mut Scene, nodes: &[usize], routes: &[usize], kind: Kind, w: u64| {
         let mut scope: Vec<usize> = nodes.iter().map(|&u| sc.var[u]).collect();
         for &i in routes {
-            scope.extend([sc.var[sc.routes[i].a], sc.var[sc.routes[i].b], base + i]);
+            let r = &sc.routes[i];
+            scope.extend([sc.var[r.a], sc.var[r.b]]);
+            if let Some((_, members)) = &r.frame {
+                scope.extend(members.iter().map(|&u| sc.var[u]));
+            }
+            scope.push(base + i);
         }
         let mut seen = Vec::new();
         scope.retain(|v| {
@@ -762,7 +781,8 @@ pub(super) fn build<'a>(
         if routing && links.contains(&i) {
             let (a, b2) = (sc.routes[i].a, sc.routes[i].b);
             push(&mut sc, &[], &[i], Kind::LinkPage(i), 0);
-            for u in (0..n).filter(|&u| u != a && u != b2) {
+            let members = sc.routes[i].frame.as_ref().map_or(Vec::new(), |f| f.1.clone());
+            for u in (0..n).filter(|&u| u != a && u != b2 && !members.contains(&u)) {
                 push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, 0.0), 40);
                 push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, CLEAR), 2);
             }
@@ -798,6 +818,41 @@ pub(super) fn build<'a>(
         }
     }
     (sc, edges, (plan.kx, plan.ky, plan.tol))
+}
+
+/// fold_group_links turns links from one node to every member of a group into one link to its frame.
+fn fold_group_links(g: &Graph, edges: &mut Vec<Drawn>) {
+    for c in &g.constraints {
+        let Relation::Group { items, .. } = &c.rel else {
+            continue;
+        };
+        if items.len() < 2 {
+            continue;
+        }
+        for a in (0..g.nodes.len()).filter(|a| !items.contains(a)) {
+            let hits: Vec<usize> = (0..edges.len())
+                .filter(|&k| {
+                    let e = &edges[k];
+                    e.style == EdgeStyle::Link
+                        && e.a == a
+                        && e.frame.is_none()
+                        && items.contains(&e.b)
+                })
+                .collect();
+            let mut ends: Vec<usize> = hits.iter().map(|&k| edges[k].b).collect();
+            ends.sort_unstable();
+            ends.dedup();
+            if ends.len() != items.len()
+                || hits.iter().any(|&k| edges[k].label != edges[hits[0]].label)
+            {
+                continue;
+            }
+            edges[hits[0]].frame = Some(c.rel.clone());
+            for &k in hits[1..].iter().rev() {
+                edges.remove(k);
+            }
+        }
+    }
 }
 
 #[cfg(test)]

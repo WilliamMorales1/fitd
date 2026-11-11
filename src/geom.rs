@@ -18,6 +18,10 @@ impl Rect {
         }
     }
 
+    pub fn center(&self) -> P {
+        ((self.x0 + self.x1) / 2.0, (self.y0 + self.y1) / 2.0)
+    }
+
     pub fn inflate(&self, g: f64) -> Rect {
         Rect {
             x0: self.x0 - g,

@@ -149,6 +149,8 @@ pub struct Drawn {
     pub t: f64,
     pub label_size: (f64, f64),
     pub aim: P,
+    /// Group the link points at: set when `a` links to every member, so one arrow meets its frame.
+    pub frame: Option<Relation>,
 }
 
 impl Drawn {
@@ -164,6 +166,7 @@ impl Drawn {
             t: 0.5,
             label_size: (0.0, 0.0),
             aim: (0.0, 0.0),
+            frame: None,
         }
     }
 }
@@ -201,24 +204,31 @@ impl Layout {
         )
     }
 
+    /// target_frame is the frame a group link ends on.
+    pub fn target_frame(&self, e: &Drawn) -> Option<Rect> {
+        e.frame
+            .as_ref()
+            .map(|rel| frame(rel, &|v| self.rect(v), self.body))
+    }
+
     pub fn ends(&self, e: &Drawn) -> (P, P) {
-        (
-            self.pos[e.a],
-            (self.pos[e.b].0 + e.aim.0, self.pos[e.b].1 + e.aim.1),
-        )
+        let pb = match self.target_frame(e) {
+            Some(f) => f.center(),
+            None => (self.pos[e.b].0 + e.aim.0, self.pos[e.b].1 + e.aim.1),
+        };
+        (self.pos[e.a], pb)
     }
 
     pub fn path(&self, e: &Drawn) -> Vec<P> {
         let (pa, pb) = self.ends(e);
+        let f = self.target_frame(e);
+        let in_b = |p: P| match &f {
+            Some(f) => f.contains(p),
+            None => self.inside(e.b, p),
+        };
         match &e.via {
-            Some(way) => trim(way, &|p| self.inside(e.a, p), &|p| self.inside(e.b, p)),
-            None => curve(
-                pa,
-                &|p| self.inside(e.a, p),
-                pb,
-                &|p| self.inside(e.b, p),
-                e.bow,
-            ),
+            Some(way) => trim(way, &|p| self.inside(e.a, p), &in_b),
+            None => curve(pa, &|p| self.inside(e.a, p), pb, &in_b, e.bow),
         }
     }
 
