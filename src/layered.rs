@@ -337,13 +337,30 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     }
 
     let step = 0.5 * b;
+    let spread = |l: usize| {
+        let (lo, hi) = slices[band[l]];
+        let total: f64 = rows[l].iter().map(|&v| size(v).1).sum();
+        let space = ((hi - lo - total) / rows[l].len() as f64).clamp(0.0, 4.0 * b);
+        (total, space)
+    };
+    // One band with a strip: flow and strip close up and center together, not apart.
+    let close = if k == 1 && !strip.is_empty() {
+        let widest = (0..rows.len())
+            .map(|l| {
+                let (total, space) = spread(l);
+                total + space * rows[l].len() as f64
+            })
+            .fold(0.0, f64::max);
+        (cross_len - widest).max(0.0) / 2.0
+    } else {
+        0.0
+    };
     let mut cands: Vec<Vec<Cand>> = (0..n).map(|_| Vec::new()).collect();
     for (l, row) in rows.iter().enumerate().filter(|_| feasible) {
         let (lo, hi) = slices[band[l]];
-        let total: f64 = row.iter().map(|&v| size(v).1).sum();
-        let space = ((hi - lo - total) / row.len() as f64).clamp(0.0, 4.0 * b);
+        let (total, space) = spread(l);
         let span = total + space * row.len() as f64;
-        let mut c = (lo + hi) / 2.0 - span / 2.0 + space / 2.0;
+        let mut c = (lo + hi) / 2.0 - span / 2.0 + space / 2.0 + close;
         for &v in row {
             let (_, w) = size(v);
             let ideal = c + w / 2.0;
@@ -365,7 +382,7 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         }
     }
 
-    let mut c = (cross_len - strip_len) / 2.0 + 2.0 * b;
+    let mut c = (cross_len - strip_len) / 2.0 + 2.0 * b - close;
     for r in &strip {
         let thick = r.iter().map(|&v| size(v).1).fold(0.0, f64::max);
         let total = r.iter().map(|&v| size(v).0).sum::<f64>();
