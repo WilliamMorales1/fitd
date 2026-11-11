@@ -30,7 +30,7 @@ Exit status is zero when output is written. Diagnostics go to standard error. Er
 | `--max-font PT` | Set upper font-size search bound in points. |
 | `--wrap EM` | Set text wrapping width in em units. |
 | `--bands N` | Set maximum bands for layered layout. |
-| `--theme NAME` | Select `dark`, `light`, or `mono` theme. |
+| `--theme NAME` | Select `paper` (default), `light`, `dark`, or `mono` theme. |
 | `--font-family NAME` | Select installed font family. |
 | `--budget CHECKS` | Set layout search check budget. Default: 20,000,000. |
 | `--expand-budget STEPS` | Set macro expansion budget. Default: 100,000. |
@@ -52,7 +52,7 @@ For multiple input files and PDF output, fitd writes one page per input. `--grid
 
 ## Themes and fonts
 
-Theme presets are `dark`, `light`, and `mono`. Source-level overrides use `theme` attributes. Supported theme keys are `background`, `gradient`, `text`, `edge`, `link`, `label`, `root`, and `palette`.
+Theme presets are `paper` (the default), `light`, `dark`, and `mono`. `paper` follows how published diagrams are most often styled: black sans-serif text on white, and Okabe-Ito colorblind-safe colors drawn as borders with light tints. Source-level overrides use `theme` attributes. Supported theme keys are `background`, `gradient`, `text`, `edge`, `link`, `label`, `root`, and `palette`.
 
 Node, edge, and group attributes include `color`, `fill`, and `text` where supported. `family` selects font family in source; `--font-family` overrides it. A requested family must be available through fontconfig. Without embedded fonts, fontconfig is required for font discovery.
 

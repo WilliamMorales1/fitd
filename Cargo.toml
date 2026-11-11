@@ -9,7 +9,7 @@ description = "Constraint-diagram compiler: concept maps and flowcharts laid out
 
 [features]
 default = ["embedded-fonts"]
-# Built-in DejaVu Serif and DejaVu Math TeX Gyre; without it, fonts come from fc-match.
+# Built-in DejaVu Sans and DejaVu Math TeX Gyre; without it, fonts come from fc-match.
 embedded-fonts = []
 
 [dependencies]

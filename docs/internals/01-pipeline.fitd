@@ -32,7 +32,7 @@ group "Layout" ${names("s", 6, 8)} color=#8250DF
 group "Output" s9, s10 color=#1A7F37
 
 node fonts "Fonts" color=#57606A
-| DejaVu Serif, Sans Bold, Math TeX Gyre compiled in
+| DejaVu Sans, Sans Bold, Math TeX Gyre compiled in
 | (embedded-fonts feature), so layout needs no fontconfig;
 | only a named family goes through fc-match
 | every SVG names each font file with an FNV-1a hash,

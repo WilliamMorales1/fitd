@@ -1,4 +1,5 @@
-pub const PRESETS: &[&str] = &["light", "dark", "mono"];
+/// PRESETS lists theme names; the first is the default (see "How professional diagrams are styled" in AGENTS.md).
+pub const PRESETS: &[&str] = &["paper", "light", "dark", "mono"];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Theme {
@@ -44,6 +45,20 @@ fn strs(xs: &[&str]) -> Vec<String> {
 impl Theme {
     pub fn preset(name: &str) -> Option<Theme> {
         let (bg, text, edge, link, label, root, palette, tint) = match name {
+            // Black on white, Okabe-Ito colors as light tints: the common published style.
+            "paper" => (
+                "#FFFFFF",
+                "#000000",
+                "#333333",
+                "#666666",
+                "#333333",
+                "#F2F2F2",
+                &[
+                    "#0072B2", "#E69F00", "#009E73", "#D55E00", "#CC79A7", "#56B4E9", "#F0E442",
+                    "#666666",
+                ],
+                0.12,
+            ),
             "light" => (
                 "#FFFFFF",
                 "#1F2328",

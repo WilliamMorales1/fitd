@@ -37,9 +37,9 @@ pub const KEYWORDS: &[Keyword] = &[
     ),
     (
         "theme",
-        "theme ${1|dark,light,mono|}",
-        "theme [dark|light|mono] [attributes]",
-        "Selects a color preset (default `dark`) and overrides single colors: `background`, `gradient`, `text`, `edge`, `link`, `label`, `root`, `palette`.",
+        "theme ${1|paper,light,dark,mono|}",
+        "theme [paper|light|dark|mono] [attributes]",
+        "Selects a color preset (default `paper`) and overrides single colors: `background`, `gradient`, `text`, `edge`, `link`, `label`, `root`, `palette`.",
     ),
     (
         "style",
@@ -425,7 +425,8 @@ pub const WORDS: &[(&str, &str, &str)] = &[
         "radial",
         "Radial layout for mind maps around `root=ID`.",
     ),
-    ("theme", "dark", "Dark preset, the default."),
+    ("theme", "paper", "Black on white with colorblind-safe tints, the default."),
+    ("theme", "dark", "Dark preset."),
     ("theme", "light", "Light preset on white."),
     ("theme", "mono", "Monochrome preset for print."),
     ("flag", "portrait", "Page taller than wide."),

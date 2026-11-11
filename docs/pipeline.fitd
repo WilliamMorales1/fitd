@@ -1,9 +1,8 @@
 title "How fitd compiles a diagram"
 layout layered dir=right
 page 297x210mm margin=1cm
-theme dark link=#D29922
 
-style io color=#1F883D shape=circle
+style io color=#009E73 shape=circle
 
 node src "Source .fitd" .io
 node parse "Parser"

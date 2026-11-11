@@ -256,7 +256,7 @@ A ratio `W:H` such as `16:9`, `4:3`, or `1.414:1` fixes only the page shape. fit
 
 ### Themes and styles
 
-`theme [PRESET] [attributes]` selects theme and applies overrides. Presets are `dark`, `light`, and `mono`; default preset is `dark`. `style NAME attributes` declares reusable node or edge attributes. A declaration may use multiple classes; class attributes are applied in order.
+`theme [PRESET] [attributes]` selects theme and applies overrides. Presets are `paper`, `light`, `dark`, and `mono`; default preset is `paper`. `style NAME attributes` declares reusable node or edge attributes. A declaration may use multiple classes; class attributes are applied in order.
 
 On nodes, edges, and groups, `color`, `fill`, and `text` specify border, fill, and text colors where supported. `shape` accepts `box`, `circle`, `diamond`, or `none` for nodes and styles, and `stack` accepts 1 to 8 copies for nodes and styles. `shape=none` draws the text and figure with no frame or fill, for margin annotations and lane labels; such a node still participates in layout, edges, and constraints. Attribute support depends on statement kind; unknown or ill-typed attributes produce diagnostics.
 

@@ -41,7 +41,7 @@ use std::process::ExitCode;
 const USAGE: &str = "usage:
   fitd <input[.fitd]|-> [-o out.svg|out.png|out.pdf] [--tikz out.tex] [--page a0..a4|WxH|WxHmm|W:H]
               [--portrait|--landscape] [--bands N] [--margin PT] [--min-font PT] [--max-font PT] [--wrap EM] [--force] [--draft]
-              [--short] [--budget CHECKS] [--expand-budget STEPS] [--scale PX] [--theme light|dark|mono] [--font-family NAME]
+              [--short] [--budget CHECKS] [--expand-budget STEPS] [--scale PX] [--theme paper|light|dark|mono] [--font-family NAME]
               [--stable LOCK] [--watch]
   fitd <a.fitd> <b.fitd> ... -o out.pdf   one PDF, a page per input, in order
   fitd explain <CODE>
@@ -552,7 +552,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
     let name = theme_name
         .as_deref()
         .or(set.theme.as_deref())
-        .unwrap_or("dark");
+        .unwrap_or(theme::PRESETS[0]);
     let th = theme::Theme::preset(name)
         .ok_or(format!(
             "unknown theme `{name}` (expected one of: {})",

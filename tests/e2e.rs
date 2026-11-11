@@ -660,7 +660,7 @@ fn layout_needs_no_fontconfig() {
     );
     let s = std::fs::read_to_string(&without).unwrap();
     assert!(
-        s.contains("<!-- fitd fonts: DejaVu Serif (embedded:DejaVuSerif.ttf) "),
+        s.contains("<!-- fitd fonts: DejaVu Sans (embedded:DejaVuSans.ttf) "),
         "{s}"
     );
     assert!(

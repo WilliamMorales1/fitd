@@ -48,16 +48,11 @@ pub struct Fonts {
 }
 
 #[cfg(feature = "embedded-fonts")]
-const EMBEDDED: [(&str, &str, &[u8]); 4] = [
+const EMBEDDED: [(&str, &str, &[u8]); 3] = [
     (
-        "DejaVu Serif",
-        "DejaVuSerif.ttf",
-        include_bytes!("../fonts/DejaVuSerif.ttf"),
-    ),
-    (
-        "DejaVu Serif",
-        "DejaVuSerif-Bold.ttf",
-        include_bytes!("../fonts/DejaVuSerif-Bold.ttf"),
+        "DejaVu Sans",
+        "DejaVuSans.ttf",
+        include_bytes!("../fonts/DejaVuSans.ttf"),
     ),
     (
         "DejaVu Sans",
@@ -73,7 +68,7 @@ const EMBEDDED: [(&str, &str, &[u8]); 4] = [
 
 #[cfg(feature = "embedded-fonts")]
 fn fallbacks(bold: bool) -> Vec<Font> {
-    let chain: &[usize] = if bold { &[1, 2, 3] } else { &[0, 3] };
+    let chain: &[usize] = if bold { &[1, 2] } else { &[0, 2] };
     chain
         .iter()
         .map(|&i| {
@@ -109,14 +104,12 @@ fn fnv1a(data: &[u8]) -> u64 {
 
 #[cfg(not(feature = "embedded-fonts"))]
 const REGULAR: &[&str] = &[
-    "DejaVu Serif:style=Book",
+    "DejaVu Sans:style=Book",
     "DejaVu Math TeX Gyre",
     "Noto Sans Math",
-    "DejaVu Sans",
 ];
 #[cfg(not(feature = "embedded-fonts"))]
 const BOLD: &[&str] = &[
-    "DejaVu Serif:style=Bold",
     "DejaVu Sans:style=Bold",
     "DejaVu Math TeX Gyre",
     "Noto Sans Math",
@@ -215,7 +208,7 @@ impl Fonts {
         };
         match family {
             Some(fam) if cfg!(feature = "embedded-fonts") && !fontconfig() => {
-                fonts.notes.push(format!("font family `{fam}` ignored: fc-match is not installed, so only the built-in DejaVu Serif is available"));
+                fonts.notes.push(format!("font family `{fam}` ignored: fc-match is not installed, so only the built-in DejaVu Sans is available"));
             }
             Some(fam) => {
                 let wanted = |f: &Font| f.family.eq_ignore_ascii_case(fam);

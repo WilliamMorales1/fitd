@@ -1,12 +1,12 @@
 # Neural-network blocks: data, layers, operators, attention masks.
 # Shapes are drawn as figure rows, so every block states its tensor shape.
 style nn_data color=#0072B2
-style nn_block color=#3949AB
+style nn_block color=#CC79A7
 style nn_step color=#56B4E9
 style nn_result color=#009E73
 style nn_loss color=#D55E00
 style nn_note shape=none
-style nn_op color=#3949AB shape=circle
+style nn_op color=#CC79A7 shape=circle
 
 # nn.input(id, name, dims): a data block labelled with its shape.
 def input(id, name, dims)

@@ -1,9 +1,9 @@
 fitd: .fitd text -> SVG/PNG/PDF/TikZ at the largest font that fits.
 
 Build:  fitd FILE.fitd -o out.svg|.png|.pdf [--tikz out.tex] [--short]
-Book:   fitd A.fitd B.fitd -o out.pdf  (a page each)
+Book:   fitd A.fitd B.fitd -o out.pdf  (page each)
 Stdin:  fitd - -o out.svg <<'EOF' ... EOF
-Exit 0 = written. Diagnostics: stderr.
+Exit 0: written; errors on stderr.
 
 Syntax: one statement per line, # comment. Only nodes and edges are needed.
   node ID "Title" .style        # ID: letters digits _ inner -; title defaults to ID
@@ -19,7 +19,7 @@ Syntax: one statement per line, # comment. Only nodes and edges are needed.
   layout venn                   # groups: set circles (<=3)
   page a0..a4|WxHmm|16:9 portrait|landscape margin=1cm # 16:9 tightest
   font 8pt..30pt wrap=16em
-  theme light|dark|mono
+  theme paper|light|dark|mono
   style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle|diamond|none stack=N (copies)
         wrap=24em place=aside (layered: strip after flow, ..> to flow)
   group "Title" a, b, c .style color=#hex times=N  # framed; times=N: dashed, titled `Nx`

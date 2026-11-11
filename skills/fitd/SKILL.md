@@ -70,7 +70,7 @@ Only `node` lines and edges are required. Leave out `page`, `font`, `theme`, and
 | `--stable FILE.lock` | Keep nodes and font in place when editing a map someone already saw. |
 | `--page a0..a4`, `WxHmm`, or `16:9` | Page size; smaller pages give smaller fonts. A ratio picks the smallest page of that shape that fits at the font floor. |
 | `--portrait` / `--landscape` | Fix orientation. |
-| `--theme light\|dark\|mono` | Color preset; `mono` for print. |
+| `--theme paper\|light\|dark\|mono` | Color preset; `paper` (default) is black on white, `mono` for grayscale print. |
 
 Flags override settings in the file.
 

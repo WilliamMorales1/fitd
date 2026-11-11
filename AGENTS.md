@@ -100,12 +100,42 @@ Data plots belong to plotting libraries (matplotlib, ggplot2, pgfplots, Vega-Lit
 
 These cover a large share of the figures in surveys 2 to 4. fitd should not grow a plotting engine. A figure that mixes a plot and a diagram should put the plot in as an image once image nodes exist (plan 7).
 
+## How professional diagrams are styled
+
+Research behind the default `paper` preset (November 2026). Aggregate data on diagram styling is thin: most corpus studies classify figure types or audit color maps, not box-and-arrow styling. Where no study gives a share, the row falls back to a named guideline.
+
+Sources read:
+
+- S1. Marshall, Jay & Freitas, "Structuralist analysis for neural network system diagrams", [arXiv:2104.14810](https://arxiv.org/abs/2104.14810), 2021. 40 diagrams hand-coded from 114 papers at COLING, EMNLP, NAACL, and NeurIPS.
+- S2. Zhu et al., "PaperBanana: Automating Academic Illustration for AI Scientists", [arXiv:2601.23265](https://arxiv.org/abs/2601.23265), 2026, appendix F. A style guide that Gemini-3-Pro summarized from 292 NeurIPS 2025 methodology diagrams. Its shares are model estimates, not human coding, so they rank below S1.
+- S3. Westaway, "Rainbow colour maps remain widely used in the geosciences", [Geosci. Commun. 5, 83](https://gc.copernicus.org/articles/5/83/2022/), 2022. 2,638 papers, with Stoelzle & Stein (2021): 55% have a figure with color problems (34% rainbow maps, 21% red-green without another cue).
+- S4. Jambor et al., "Creating clear and informative image-based figures for scientific publications", [PLOS Biology 19(3)](https://journals.plos.org/plosbiology/article?id=10.1371%2Fjournal.pbio.3001161), 2021. 580 papers: 21 to 45% by field contain images unreadable with deuteranopia; recommends colorblind-safe colors and a second cue (dashed lines, open heads).
+- G1. Nature, ["Preparing figures: our specifications"](https://research-figure-guide.nature.com/figures/preparing-figures-our-specifications/): sans-serif (Helvetica or Arial), black text, no colored text, no drop shadows, no superfluous icons or decoration, accessible palette.
+- G2. Okabe & Ito, ["Color Universal Design"](https://jfly.uni-koeln.de/color/), 2002/2008: the colorblind-safe set (vermilion, bluish green, sky blue, blue, orange, reddish purple, yellow); never color alone; vary line style too.
+- G3. APA 7 figure guidelines (via university library guides; the APA page did not load): sans-serif text, 8 to 14 pt.
+- G4. IEEE Standards graphics guidelines (mentor.ieee.org `stylegraph.pdf`, via search summary): lines 0.5 to 1 pt, 8 pt type, nothing under 6 pt.
+
+Surveys 1, 3, 4, and 6 above classify figure types only. Survey 2 (Viziometrics) was re-read and reports no styling attributes. Survey 5 (Nickerson) was not available beyond its abstract.
+
+| Attribute | Most common choice | Evidence |
+| --- | --- | --- |
+| Background | White | S2: light backgrounds throughout; G1 forbids hard-to-read backgrounds. No corpus share found. |
+| Text color | Black | G1: black text, no colored text. |
+| Line color | Dark grey or black | No study; follows text color per G1. |
+| Palette | Colorblind-safe categorical, Okabe-Ito | S3, S4: a third to half of papers fail colorblind readers; G1, G2. |
+| Fill | Light tint of the role color, about 10 to 15% | S2: pastel fills at ~10-15% opacity are the norm; ~20% use white with colored borders. |
+| Node shape | Rounded rectangle | S2: ~80% of process nodes, corner radius small (5-10 px). |
+| Line weight | 0.5 to 1 pt at print size | G4; no study. |
+| Arrowheads | Filled directional arrows; dashed for secondary links | S1: 92.5% use directional arrows, 42.5% dotted ones. S2: dashed means auxiliary flow. |
+| Font | Sans-serif, regular body, bold titles; math in serif italic | G1, G3; S2 (labels sans-serif, headers bold, math serif italic). |
+| Group frames | Light tinted zone or dashed border | S2: tinted zones, dashed for logical stages. S1: 27.5% mark key parts by boundary lines or shading. |
+| Decoration | None: no shadows, gradients, or icons | G1. S2 notes icons in ML papers, but fitd keeps them out (goal: minimal text and decoration). |
+
 ## Plans
 
 Only open work belongs here: planned changes, known problems, and caveats. Delete a plan once it is done, and move anything it left out into Known gaps. The plans are ordered to avoid redoing work. Each plan gives the change, where it goes, and when it is done.
 
-- Default styling (3) comes first. It changes every render and may change the fonts and metrics, so it goes before the layout plans. Layout tuning and done checks (larger font in 6, the square in 5) then run against the final metrics, and the full image review happens once.
-- The layout and feature plans (4 to 7) follow, smallest first. Each only re-checks its own renders.
+- The layout and feature plans (4 to 7) come first, smallest first. Each only re-checks its own renders.
 - Dependency arcs and Sankey (8) are low priority and stay last.
 
 ### Known gaps in finished work
@@ -117,21 +147,8 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Sequence diagrams: no activation bars, self-messages, or lane-relative `group` frames inside a sequence.
 - Venn: no Euler diagrams (disjoint or nested sets drawn apart or inside) and no area-proportional circles.
 - User libraries: `include "user/LIB"` only looks beside the including file. There is no library search path or `FITD_PATH`; add one if libraries get shared across projects.
+- Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
-
-### 3. Default styling from studies of professional diagrams
-
-The presets copy GitHub's Primer colors (src/theme.rs: `dark` is `#0D1117` with Primer accents, `light` uses Primer greys), and `dark` is the default. Published figures rarely look like that. The defaults should match how professional diagrams are most often styled.
-
-- Research first, and write the findings into this file with citations before changing code:
-  - Re-read surveys 1 to 6 above for anything they report about styling, not just figure types.
-  - Find aggregate studies of how published or professional diagrams are styled: figure-style audits of journal or conference papers, design-guideline meta-reviews, and color-use studies of scientific figures.
-  - Record the most common choice for each of these, with the share where the study gives one: background, text and line colors, palette and fill use (solid, tinted, or none), node shape and corner radius, line weight, arrowheads, font family (serif or sans) and weight, group frames, and how heavily diagrams are decorated.
-  - Only cite studies that were actually found and read. Where no aggregate data exists for an attribute, say so and fall back to a named style guide (journal figure guidelines, for example), not to taste.
-- Change: make a new default preset that follows the findings, and keep `dark`, `light`, and `mono` as named presets. Revisit the embedded fonts (fonts/, src/metrics.rs) if the findings favor a different family. Keep a colorblind-safe palette unless the findings argue against it.
-- The defaults must still meet the goals above: sane with no overrides, and no decoration beyond what the figure type needs.
-- Rebuild every committed render, look at all of them, and update README and docs images.
-- Done when the findings section exists with sources, the default preset follows it, and `cargo test --release` passes on fresh renders.
 
 ### 4. Multi-source edges
 
