@@ -182,6 +182,24 @@ Mixed figures (a plot inside an architecture diagram) are common in surveys 2 to
 - Dependency arcs: words on one baseline with arcs above them. This needs a new `layout arcs` that places nodes in source order on one row and draws edges as nested arcs. It is small once plan 1 exists, but the figure type is mostly NLP-specific.
 - Sankey: edge width proportional to a value (`width=N`). The layout is fine, but readable Sankeys need crossing-free ribbons and node heights tied to flow, which is closer to a plotting tool. Revisit after plan 3.
 
+### 12. Module syntax for the standard library
+
+Stdlib includes and calls read as paths and prefixed names today: `include "std/nn.fitd"` and `use nn_input(...)`.
+
+- Change: accept `include "nn"` for a stdlib module, and call its templates as `nn.input(...)` on their own line instead of `use nn_input(...)`.
+  - The include resolver (src/include.rs) maps a bare module name to `MODULES` in src/stdlib.rs.
+  - The macro expander (src/macros.rs) resolves `MOD.name(...)` to the module's `def`, so templates no longer need the module prefix in their names. Styles stay global, so style names keep the prefix.
+  - Keep the old forms working until the gallery, docs, guide, and LSP completions move to the new ones.
+- Done when every gallery file and `docs/language.md` use `include "MOD"` and `MOD.func(...)`, and the old forms still compile.
+
+### 13. User libraries
+
+Nothing shows that a non-stdlib file can serve as a library.
+
+- Change: accept `include "user/LIB"` for a user library, with calls written `LIB.func(...)` as in plan 12. Decide where `user/` resolves (beside the including file, or a configured library directory) and document it.
+- Add e2e tests that write a small library file, include it, and call its templates, plus an example under `examples/` that does the same.
+- Done when the tests pass and the example builds with no errors.
+
 ### Performance
 
 The 1-second goal held for every gallery file after two changes:
