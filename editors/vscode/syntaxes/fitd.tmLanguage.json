@@ -77,7 +77,12 @@
           }
         },
         {
-          "comment": "A lone name, or `mod.name`, opens a style block up to `end`.",
+          "comment": "A node line without `node`: an id followed by a title or attribute.",
+          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def|use)\\b)([A-Za-z_][\\w-]*)(?=\\s+(?:\"|[\\w-]+=))",
+          "captures": { "1": { "name": "entity.name.function.node.fitd" } }
+        },
+        {
+          "comment": "A lone name, or `mod.name`, opens a style block over the lines indented under it, or reopens a node.",
           "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def|use)\\b)([A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)?)\\s*(?=#|$)",
           "captures": { "1": { "name": "entity.name.type.style.fitd" } }
         },

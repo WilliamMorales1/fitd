@@ -6,13 +6,15 @@ Stdin:  fitd - -o out.svg <<'EOF' ... EOF
 Exit 0: written; errors on stderr.
 
 Syntax: one statement per line, # comment.
-  node ID "Title" row=1 col=2   # ID: letters digits _ inner -; no title: ID
-  STYLE                         # lines indented under take STYLE (or nn.block), no `node`
+  ID "Title" row=1 col=2        # ID: letters digits _ inner -; keyword: node ID
+    KID "Kid"                   # child: ID->KID (radial --)
+    -> x "label"                # edge from ID; lone ID reopens it
+  STYLE                         # lines indented under: STYLE (or nn.block)
   | body line                   # under node; lead spaces indent; **bold**
   ~ # %60 . _ LBL "two words"   # figure row: # solid %NN shade . outline _ gap, else label
                                 #   LBL*3 spans 3 columns; rows grid up: strips, heatmaps
   ~ image "plot.png" width=10em # PNG/JPEG
-  a, b -> c, d "label" -> e     # flow edge (-- undirected); hops chain
+  a, b -> c, d "label" -> e     # flow edge (-- undirected); chains
   a ..> b "label"               # cross link, dashed (.. undirected)
   title "Text"
   layout radial root=ID         # default: mind map
@@ -41,24 +43,20 @@ Units: pt mm cm in em. Edge: color=#hex line=solid|dashed|dotted
 Concept map:
   title "Photosynthesis"
   style in color=#F9A825
-  in
-    sun "Light"
-    | photons hit chlorophyll
-  node leaf "Leaf"
-  node sugar "Glucose"
-  leaf -> sun, sugar
+  leaf "Leaf"
+    in
+      sun "Light"
+    sugar "Glucose"
   sun ..> sugar "drives"
 
 Flowchart:
   layout layered dir=right
-  node in "Input"
-  node check "Valid?"
-  node out "Save"
-  node err "Error"
-  in -> check
-  check -> out "yes"
-  check -> err "no"
-  require out above err
+  in "Input"
+    check "Valid?"
+      -> out "yes"
+      -> err "no"
+  out "Save"
+  err "Error"
 
 Fix first error, rebuild. `fitd explain CODE` details a code.
 E0110: drop or `prefer` one listed constraint, or use a larger page.

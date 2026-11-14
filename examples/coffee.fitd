@@ -10,51 +10,40 @@ style hub color=#3E2723 fill=#3E2723 text=#FFE0B2
 hub
   coffee "Coffee"
   | seed of the Coffea cherry
-
-node farm "Growing"
-| arabica above 1000 m
-| robusta lower, hardier
-node altitude "Altitude"
-| slower ripening, denser beans
-node cherry "Harvest"
-| hand-picked or stripped
-
-node process "Processing"
-node washed "Washed"
-| fruit removed before drying
-| clean, bright acidity
-node natural "Natural"
-| dried whole in the fruit
-| heavy body, fruity notes
-
-node roast "Roasting"
-| Maillard reactions, then caramelization
-node light "Light roast"
-| origin flavors, more acidity
-node dark "Dark roast"
-| roast flavors, more bitterness
-
-node brew "Brewing"
-| extraction: 18-22% of the dose
-method
-  espresso "Espresso"
-  | 9 bar, 25-30 s
-  filter "Pour-over"
-  | paper filter, 3-4 min
-  press "French press"
-  | full immersion, metal mesh
-
-node taste "Tasting"
-node acidity "Acidity"
-node body "Body"
-node sweet "Sweetness"
-
-coffee -- farm, process, roast, brew, taste
-farm -- altitude, cherry
-process -- washed, natural
-roast -- light, dark
-brew -- espresso, filter, press
-taste -- acidity, body, sweet
+coffee
+  farm "Growing"
+  | arabica above 1000 m
+  | robusta lower, hardier
+    altitude "Altitude"
+    | slower ripening, denser beans
+    cherry "Harvest"
+    | hand-picked or stripped
+  process "Processing"
+    washed "Washed"
+    | fruit removed before drying
+    | clean, bright acidity
+    natural "Natural"
+    | dried whole in the fruit
+    | heavy body, fruity notes
+  roast "Roasting"
+  | Maillard reactions, then caramelization
+    light "Light roast"
+    | origin flavors, more acidity
+    dark "Dark roast"
+    | roast flavors, more bitterness
+  brew "Brewing"
+  | extraction: 18-22% of the dose
+    method
+      espresso "Espresso"
+      | 9 bar, 25-30 s
+      filter "Pour-over"
+      | paper filter, 3-4 min
+      press "French press"
+      | full immersion, metal mesh
+  taste "Tasting"
+    acidity "Acidity"
+    body "Body"
+    sweet "Sweetness"
 
 altitude .. acidity "denser beans, brighter cup"
 washed .. acidity

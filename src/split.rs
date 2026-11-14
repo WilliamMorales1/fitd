@@ -105,8 +105,18 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         )
     };
     let mut last: BTreeSet<Page> = BTreeSet::new();
+    // A nested child's edge spans only the child, so its operator is rebuilt from the edge kind.
+    let nested = |k: &StmtKind| match k {
+        StmtKind::Edge { from, to, link, directed, .. } if to.first().is_some_and(|t| t.span == from.span) => {
+            Some(["--", "->", "..", "..>"][2 * *link as usize + *directed as usize])
+        }
+        _ => None,
+    };
     for st in &stmts {
-        let own = snippet(st.span.lo, st.span.hi);
+        let own = match (&st.kind, nested(&st.kind)) {
+            (StmtKind::Edge { from, to, .. }, Some(op)) => format!("{} {op} {}", from.text, to[0].text),
+            _ => snippet(st.span.lo, st.span.hi),
+        };
         let looks: Looks = match &st.kind {
             StmtKind::Node { classes, .. }
             | StmtKind::Edge { classes, .. }
@@ -188,8 +198,13 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         };
         match &st.kind {
             StmtKind::Edge { from, to, .. } => {
-                let op = parse[from.span.hi..to[0].span.lo].trim().to_string();
-                let tail = snippet(to.last().unwrap().span.hi, st.span.hi);
+                let (op, tail) = match nested(&st.kind) {
+                    Some(op) => (op.to_string(), String::new()),
+                    None => (
+                        parse[from.span.hi..to[0].span.lo].trim().to_string(),
+                        snippet(to.last().unwrap().span.hi, st.span.hi),
+                    ),
+                };
                 for t in to {
                     let line = format!("{} {op} {}{tail}", from.text, t.text);
                     let on = meet(&[from, t]);

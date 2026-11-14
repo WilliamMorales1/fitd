@@ -243,3 +243,29 @@ flow.key()
       (name)
       (name))
     arguments: (arguments)))
+
+================================================================================
+Nested nodes
+================================================================================
+
+coffee "Coffee"
+  brew "Brewing"
+    -> crema "crema"
+coffee
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (node_statement
+    id: (name)
+    title: (string))
+  (node_statement
+    id: (name)
+    title: (string))
+  (edge_statement
+    operator: (edge_operator)
+    to: (name)
+    label: (string))
+  (block_statement
+    style: (qualified_name
+      (name))))

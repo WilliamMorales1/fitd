@@ -8,6 +8,11 @@ struct Parser<'a> {
     pos: usize,
     styles: std::collections::HashSet<String>,
     open: Vec<(Name, usize)>,
+    /// scope holds the node lines that later, deeper lines nest under, with their columns.
+    scope: Vec<(Name, usize)>,
+    known: std::collections::HashSet<String>,
+    /// directed is the default operator for nested children: `->` unless the layout is radial.
+    directed: bool,
 }
 
 type PResult<T> = Result<T, Diag>;
@@ -150,7 +155,10 @@ impl Parser<'_> {
     }
 
     fn edge(&mut self) -> PResult<Vec<StmtKind>> {
-        let mut froms = vec![self.name("a node name")?];
+        let mut froms = match self.scope.last() {
+            Some((n, _)) if self.arrow().is_some() => vec![Name { text: n.text.clone(), span: self.span() }],
+            _ => vec![self.name("a node name")?],
+        };
         while *self.peek() == Tok::Comma {
             self.bump();
             froms.push(self.name("a node name")?);
@@ -268,24 +276,51 @@ impl Parser<'_> {
             )
     }
 
+    /// nest records a node line at `col` and gives the edge from the node it is indented under.
+    fn nest(&mut self, id: &Name, col: usize) -> Option<StmtKind> {
+        let edge = self.scope.last().map(|(parent, _)| StmtKind::Edge {
+            from: Name { text: parent.text.clone(), span: id.span },
+            link: false,
+            directed: self.directed,
+            to: vec![id.clone()],
+            label: None,
+            classes: Vec::new(),
+            attrs: Vec::new(),
+        });
+        self.scope.push((id.clone(), col));
+        edge
+    }
+
     fn stmt(&mut self) -> PResult<Vec<StmtKind>> {
-        if self.edge_at(0) {
+        if self.edge_at(0) || (self.arrow().is_some() && !self.scope.is_empty()) {
             return self.edge();
         }
+        let col = self.col();
         if self.lone_name().is_some() {
-            let col = self.col();
+            let at = self.pos;
             let name = self.class_name()?;
-            if self.open.is_empty() || self.is_style(&name.text) {
+            if self.known.contains(&name.text) && !self.is_style(&name.text) {
+                return Ok(self.nest(&name, col).into_iter().collect());
+            }
+            if self.is_style(&name.text) || (self.open.is_empty() && self.scope.is_empty()) {
                 self.open.push((name.clone(), col));
                 return Ok(vec![StmtKind::Open(name)]);
             }
-            self.pos -= 1;
+            self.pos = at;
         }
-        if !self.open.is_empty()
-            && *self.peek() == Tok::Ident
+        let bare = *self.peek() == Tok::Ident
             && !KEYWORDS.contains(&self.text(self.span()))
-        {
-            return Ok(vec![self.node()?]);
+            && (matches!(self.peek_at(1), Tok::Str(_) | Tok::Newline | Tok::Eof)
+                || (*self.peek_at(1) == Tok::Ident && *self.peek_at(2) == Tok::Eq));
+        if bare || self.keyword_is(0, "node") {
+            if !bare {
+                self.bump();
+            }
+            let node = self.node()?;
+            let StmtKind::Node { id, .. } = &node else { unreachable!() };
+            self.known.insert(id.text.clone());
+            let id = id.clone();
+            return Ok(self.nest(&id, col).into_iter().chain([node]).collect());
         }
         self.stmt1().map(|k| vec![k])
     }
@@ -361,7 +396,6 @@ impl Parser<'_> {
                 name: self.name("a style name")?,
                 attrs: self.attrs()?,
             },
-            "node" => self.node()?,
             "key" => {
                 let label = match self.peek().clone() {
                     Tok::Str(s) => {
@@ -423,12 +457,21 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
         .filter_map(|i| toks.get(i + 1).filter(|t| t.tok == Tok::Ident))
         .map(|t| text[t.span.lo..t.span.hi].to_string())
         .collect();
+    let directed = (0..toks.len())
+        .filter(|&i| i == 0 || toks[i - 1].tok == Tok::Newline)
+        .filter(|&i| &text[toks[i].span.lo..toks[i].span.hi] == "layout")
+        .filter_map(|i| toks.get(i + 1))
+        .last()
+        .is_some_and(|t| &text[t.span.lo..t.span.hi] != "radial");
     let mut p = Parser {
         text,
         toks,
         pos: 0,
         styles,
         open: Vec::new(),
+        scope: Vec::new(),
+        known: Default::default(),
+        directed,
     };
     let mut stmts = Vec::new();
     loop {
@@ -441,8 +484,13 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
         let lo = p.span().lo;
         // Off-side rule: a line indented no deeper than a block's opener closes that block.
         let col = p.col();
-        while p.open.last().is_some_and(|&(_, c)| c >= col) {
-            p.open.pop();
+        if !matches!(p.peek(), Tok::Body(_) | Tok::Cells(_)) {
+            while p.open.last().is_some_and(|&(_, c)| c >= col) {
+                p.open.pop();
+            }
+            while p.scope.last().is_some_and(|&(_, c)| c >= col) {
+                p.scope.pop();
+            }
         }
         match p.stmt() {
             Ok(kinds) if p.at_end() => {
@@ -584,6 +632,31 @@ mod tests {
         assert_eq!(lines[2], vec!["step"]);
         assert!(lines[3].is_empty() && lines[4].is_empty(), "outside the block");
         assert!(matches!(&stmts.last().unwrap().kind, StmtKind::Edge { from, .. } if from.text == "radial"));
+    }
+
+    #[test]
+    fn indented_node_lines_nest() {
+        let edges = |src: &str| {
+            let (stmts, errs) = parse(src);
+            assert!(errs.is_empty(), "{:?}", errs.iter().map(|d| &d.msg).collect::<Vec<_>>());
+            stmts
+                .iter()
+                .filter_map(|s| match &s.kind {
+                    StmtKind::Edge { from, to, directed, label, .. } => Some(format!(
+                        "{}{}{}{}",
+                        from.text,
+                        if *directed { ">" } else { "-" },
+                        to.iter().map(|t| t.text.as_str()).collect::<Vec<_>>().join(","),
+                        label.as_deref().unwrap_or("")
+                    )),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        let src = "style s\nr \"R\"\n  | body\n    a \"A\"\n    s\n      b\n  c\n    -> a \"L\"\nr\n  d\n";
+        assert_eq!(edges(src), ["r-a", "r-b", "r-c", "c>aL", "r-d"]);
+        assert_eq!(edges("layout layered\nnode a\n  b\n"), ["a>b"]);
+        assert_eq!(edges("layout radial\na \"A\"\n  b\n"), ["a-b"]);
     }
 
     #[test]

@@ -49,7 +49,7 @@ module.exports = grammar({
     font_statement: $ => seq('font', field('size', $._value), optional(seq('..', field('max', $._value))), repeat($.attribute)),
     theme_statement: $ => seq('theme', optional(field('preset', $.name)), repeat($.attribute)),
     style_statement: $ => seq('style', field('name', $.name), repeat($.attribute)),
-    // Inside a style block a node line may drop `node` when a title or attribute follows the id.
+    // A node line may drop `node` when a title or attribute follows the id; indentation nests it, which only parse.rs tracks.
     node_statement: $ => choice(
       seq('node', field('id', $.name), optional(field('title', $.string)), repeat($.attribute)),
       seq(field('id', $.name), choice(seq(field('title', $.string), repeat($.attribute)), repeat1($.attribute))),
@@ -58,8 +58,8 @@ module.exports = grammar({
     block_statement: $ => field('style', $.qualified_name),
     body: _ => token(seq('|', /[^\n]*/)),
     edge_statement: $ => seq(
-      // A node may be named like a macro keyword; the edge operator after it tells.
-      field('from', choice($.name, alias(choice('for', 'if', 'else', 'end', 'def', 'use'), $.name))),
+      // A node may be named like a macro keyword; the edge operator after it tells. No source: from the node above.
+      optional(field('from', choice($.name, alias(choice('for', 'if', 'else', 'end', 'def', 'use'), $.name)))),
       repeat1($._hop),
       repeat($.attribute),
     ),

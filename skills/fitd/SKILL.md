@@ -15,11 +15,10 @@ fitd compiles a small text language into a diagram. A constraint solver places e
 ```sh
 fitd - -o out/leaf.png --short <<'EOF'
 title "Photosynthesis"
-node leaf "Leaf"
-node sun "Light"
-| photons absorbed by chlorophyll
-node sugar "Glucose"
-leaf -> sun, sugar
+leaf "Leaf"
+  sun "Light"
+  | photons absorbed by chlorophyll
+  sugar "Glucose"
 sun ..> sugar "drives"
 EOF
 ```
@@ -32,15 +31,16 @@ If the user wants the source kept, write it to `NAME.fitd` and build with `fitd 
 
 - Concept map or mind map (one topic branching out): the default, `layout radial`. Pick the center with `root=ID`; otherwise fitd picks it.
 - Process, pipeline, timeline, decision flow: `layout layered dir=down` or `dir=right`. Long flows wrap into bands; `bands=1` forbids wrapping. Trees (org chart, syntax tree): add `order=source` to keep children in edge order.
+- Indent a node line under another to make it a child: the parent links to it (`--` in radial maps, `->` in layered ones), so trees need no edge lines. Under a node, `-> x "label"` is an edge from it, and a line with only a declared id reopens that node.
 - `->` edges build the hierarchy or flow. `..>` draws a dashed cross link that does not change the structure. Use cross links for "relates to" connections. Hops chain on one line: `a -> b -> c, d` is `a -> b`, `b -> c`, `b -> d`, and `a, b -> c` fans in; `node a row=1 col=2` puts nodes on a grid (squares, 2x2 matrices); a trailing `color=` applies to every edge in it. `--` and `..` are the same without an arrowhead, for relations with no direction.
 
 ## Repetition
 
-When many nodes or edges share one style, write the style once as a block: `style step color=#0072B2`, then a line `step` and the lines indented under it (`lint "Lint"`, `test "Test"`, `a -> b`); the first line indented no deeper closes the block, with no `end`. Node lines inside a block drop `node`; module styles open blocks too (`nn.block`). Outside blocks, keep `node` for unstyled nodes. When many nodes share one shape (numbered steps, one box per service, layers, recursion trees), write a loop or a template instead of copying lines: `for i in 1..n` or `for i, x in a, b, c` ... `end`, `def NAME(args)` ... `end` with `use NAME(...)`, and `${expr}` inside any line. Errors on generated lines are reported at the template line.
+When many nodes or edges share one style, write the style once as a block: `style step color=#0072B2`, then a line `step` and the lines indented under it (`lint "Lint"`, `test "Test"`, `a -> b`); the first line indented no deeper closes the block, with no `end`. Module styles open blocks too (`nn.block`). Node lines need `node` only for keyword ids (`node font`) or a lone untitled node outside blocks. When many nodes share one shape (numbered steps, one box per service, layers, recursion trees), write a loop or a template instead of copying lines: `for i in 1..n` or `for i, x in a, b, c` ... `end`, `def NAME(args)` ... `end` with `use NAME(...)`, and `${expr}` inside any line. Errors on generated lines are reported at the template line.
 
 ## Start minimal
 
-Only `node` lines and edges are required. Leave out `page`, `font`, `theme`, and constraints at first: the defaults (A1 page, paper theme, font searched) usually work. Add a `require` only when the user asks for a specific placement, because each one can make the layout unsatisfiable. Prefer `prefer` over `require` when the placement is a wish, not a rule.
+Only node lines and edges are required. Leave out `page`, `font`, `theme`, and constraints at first: the defaults (A1 page, paper theme, font searched) usually work. Add a `require` only when the user asks for a specific placement, because each one can make the layout unsatisfiable. Prefer `prefer` over `require` when the placement is a wish, not a rule.
 
 ## Fix loop
 

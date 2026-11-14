@@ -447,51 +447,59 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "FIELD",
-          "name": "from",
-          "content": {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "name"
-              },
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "CHOICE",
-                  "members": [
-                    {
-                      "type": "STRING",
-                      "value": "for"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "from",
+              "content": {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "name"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": "for"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "if"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "else"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "end"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "def"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "use"
+                        }
+                      ]
                     },
-                    {
-                      "type": "STRING",
-                      "value": "if"
-                    },
-                    {
-                      "type": "STRING",
-                      "value": "else"
-                    },
-                    {
-                      "type": "STRING",
-                      "value": "end"
-                    },
-                    {
-                      "type": "STRING",
-                      "value": "def"
-                    },
-                    {
-                      "type": "STRING",
-                      "value": "use"
-                    }
-                  ]
-                },
-                "named": true,
-                "value": "name"
+                    "named": true,
+                    "value": "name"
+                  }
+                ]
               }
-            ]
-          }
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         },
         {
           "type": "REPEAT1",

@@ -27,7 +27,7 @@ Source          = { Newline | Statement, Newline } ;
 
 Statement       = Title | Root | Layout | Page | Font | Theme | Style
                 | Node | Body | Cells | Edge | Group | Key | Constraint | Include
-                | StyleBlock ;
+                | StyleBlock | NodeBlock ;
 
 Title           = "title", String ;
 Root            = "root", Name ;
@@ -38,6 +38,8 @@ Theme           = "theme", [ Name ], { Attribute } ;
 Style           = "style", Name, { Attribute } ;
 StyleBlock      = QualName, Newline, Indent, { Statement, Newline }, Dedent ;
 Node            = [ "node" ], Name, [ String ], { Attribute } ;
+NodeBlock       = ( Node | Name ), Newline, Indent, { Statement | ScopedEdge, Newline }, Dedent ;
+ScopedEdge      = EdgeHop, { EdgeHop }, { Attribute } ;
 Body            = BodyLine ;
 Cells           = CellRow ;
 Group           = "group", [ String ], NameList, { Attribute } ;
@@ -96,9 +98,27 @@ Whitespace separates tokens. Spaces and tabs may appear between tokens. Whitespa
 
 ### Node declarations and body lines
 
-`node ID ["title"] [attributes]` declares a node. When title is omitted, identifier is used as title.
+`ID ["title"] [attributes]` declares a node. When title is omitted, identifier is used as title. The `node` keyword is optional; it is needed only for an identifier that is also a statement keyword (`node font "Font"`) and for a lone untitled node outside any block (`node a`).
 
-A line holding only a style name opens a style block. The lines indented deeper than it form the block, and the first line indented no deeper closes it (the off-side rule), so a block needs no `end`. Every node, edge, group, and key inside the block takes that style, so a style is written once for many lines. Module styles use qualified names: `nn.block` opens a block of module-prefixed style `nn_block`. Blocks nest, and inner styles apply after outer ones. Inside a block a node line may drop `node`: `ID ["title"] [attributes]`. A lone name inside a block is a node unless it is a declared style, so a node and a style may share a name; a lone undeclared name outside any block is E0004. A block may hold `for`, `if`, and `use`, and may sit inside them. Macro bodies expand at the indent of their directive or call, so a template body opens and closes blocks relative to where it is used. The older `: NAME` suffix is an error.
+A node line indented under another node line is its child: the parent gets an edge to it, `--` in a radial layout (the default) and `->` in the others. A line that starts with an edge operator inside a node's scope is an edge from that node, so `-> b "yes"` under `a` means `a -> b "yes"`. A line holding only a declared node's identifier reopens it for more children and, when indented under another node, also links that node to it. Body and figure rows (`|`, `~`) never close a scope, and a style block indented under a node keeps the node's scope, so a whole branch can take a style:
+
+```fitd
+style method shape=box
+coffee "Coffee"
+  brew "Brewing"
+  | extraction: 18-22% of the dose
+    method
+      espresso "Espresso"
+      -> crema "crema"
+      filter "Pour-over"
+  crema "Crema"
+coffee
+  roast "Roasting"
+```
+
+Only one hierarchy can follow indentation, so cross links, groups, and lanes stay explicit.
+
+A line holding only a style name opens a style block. The lines indented deeper than it form the block, and the first line indented no deeper closes it (the off-side rule), so a block needs no `end`. Every node, edge, group, and key inside the block takes that style, so a style is written once for many lines. Module styles use qualified names: `nn.block` opens a block of module-prefixed style `nn_block`. Blocks nest, and inner styles apply after outer ones. A lone name inside a block is a node unless it is a declared style, so a node and a style may share a name; a lone undeclared name outside any block is E0004. A block may hold `for`, `if`, and `use`, and may sit inside them. Macro bodies expand at the indent of their directive or call, so a template body opens and closes blocks relative to where it is used. The older `: NAME` suffix is an error.
 
 A body line begins with `|` in first non-whitespace position. It appends text to most recently declared node. Multiple body lines may follow one declaration. A body line without preceding node is invalid.
 
@@ -384,6 +404,6 @@ end
 
 ![Diagnostic code families and individual codes](language/08-diagnostics.png)
 
-Node identifiers must be declared, with `node` or a style name, before being referenced by edges, groups, or constraints. Node and style declarations must be unique. Styles must exist when referenced. Layouts, relation operators, positions, attributes, and attribute values are validated according to statement context.
+Node identifiers must be declared by a node line somewhere in the file to be referenced by edges, groups, or constraints. Node and style declarations must be unique. Styles must exist when referenced. Layouts, relation operators, positions, attributes, and attribute values are validated according to statement context.
 
 Diagnostic codes use three ranges: E00xx for front-end errors, E01xx for layout errors, and W02xx for warnings. Warnings do not block output. `fitd explain CODE` prints detailed explanation for a diagnostic code. Source locations are retained through includes and macro expansion where possible.

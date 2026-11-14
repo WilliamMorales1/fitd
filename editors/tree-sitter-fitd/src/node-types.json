@@ -195,7 +195,7 @@
     "fields": {
       "from": {
         "multiple": false,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "name",

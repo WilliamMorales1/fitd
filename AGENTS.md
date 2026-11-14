@@ -150,7 +150,7 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
 - Style blocks: `fitd split` writes `node` on every line inside a block. Indents count characters, so a tab is one column; mixing tabs and spaces can close a block early.
-- Editor grammars: tree-sitter cannot tell a lone node inside a block from a nested block opener, so both parse as `block_statement`. It also rejects `~` figure rows, comma fan-in (`a, b -> c`), and nodes named like statement keywords (`font -> csp`).
+- Editor grammars: tree-sitter cannot tell a lone node, or a reopened one, from a block opener, so all parse as `block_statement`; it also leaves nesting by indent to parse.rs. It also rejects `~` figure rows, comma fan-in (`a, b -> c`), and nodes named like statement keywords (`font -> csp`).
 
 ### 8. Dependency arcs and Sankey widths (low priority)
 
