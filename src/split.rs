@@ -1,6 +1,6 @@
 use crate::ast::{Attr, Name, Rel, StmtKind};
 use crate::diag::Level;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 type Page = usize;
 const OVERVIEW: Page = usize::MAX;
@@ -54,25 +54,43 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
 
     let mut shared = String::new();
     let mut title = None;
+    // Node lines with their rows come first on a page, so a style block opens once for all of them.
     let mut body: Vec<Vec<(Looks, String)>> = vec![Vec::new(); heads.len() + 1];
+    let mut rest: Vec<Vec<(Looks, String)>> = vec![Vec::new(); heads.len() + 1];
     let slot = |p: Page| if p == OVERVIEW { heads.len() } else { p };
     let mut dropped = Vec::new();
     let mut framed: BTreeMap<Page, Vec<BTreeSet<String>>> = BTreeMap::new();
     let mut stubs: Vec<Vec<usize>> = vec![Vec::new(); heads.len() + 1];
-    let meet = |names: &[&Name]| -> BTreeSet<Page> {
-        let mut on: Option<BTreeSet<Page>> = None;
-        for n in names {
-            let Some(v) = index(n) else { continue };
-            let p = pages_of(v);
-            on = Some(on.map_or(p.clone(), |o| o.intersection(&p).copied().collect()));
-        }
-        on.unwrap_or_default()
-    };
+    let mut group_stubs: Vec<Vec<&str>> = vec![Vec::new(); heads.len() + 1];
     let home = |v: usize| {
         *pages_of(v)
             .iter()
             .find(|&&p| p != OVERVIEW)
             .unwrap_or(&OVERVIEW)
+    };
+    let groups: HashMap<&str, (&Option<String>, Vec<usize>)> = stmts
+        .iter()
+        .filter_map(|st| match &st.kind {
+            StmtKind::Group { id: Some(id), title, items, .. } => {
+                Some((id.text.as_str(), (title, items.iter().filter_map(index).collect())))
+            }
+            _ => None,
+        })
+        .collect();
+    // A group ID stands for the pages its members are written on.
+    let pages_named = |n: &Name| -> Option<BTreeSet<Page>> {
+        match index(n) {
+            Some(v) => Some(pages_of(v)),
+            None => groups.get(n.text.as_str()).map(|(_, m)| m.iter().map(|&v| home(v)).collect()),
+        }
+    };
+    let meet = |names: &[&Name]| -> BTreeSet<Page> {
+        let mut on: Option<BTreeSet<Page>> = None;
+        for n in names {
+            let Some(p) = pages_named(n) else { continue };
+            on = Some(on.map_or(p.clone(), |o| o.intersection(&p).copied().collect()));
+        }
+        on.unwrap_or_default()
     };
     let parts = |items: &[Name]| -> Vec<(Page, Vec<Name>)> {
         let mut out: Vec<(Page, Vec<Name>)> = Vec::new();
@@ -187,7 +205,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 }
                 sets.push(set);
             }
-            body[slot(p)].push((looks, own));
+            rest[slot(p)].push((looks, own));
             continue;
         }
         let attrs_of = |attrs: &[Attr]| {
@@ -209,17 +227,32 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                     let line = format!("{} {op} {}{tail}", from.text, t.text);
                     let on = meet(&[from, t]);
                     if let Some(&p) = on.iter().find(|&&p| p != OVERVIEW).or(on.first()) {
-                        body[slot(p)].push((looks.clone(), line));
+                        rest[slot(p)].push((looks.clone(), line));
                         continue;
                     }
-                    let (Some(a), Some(b)) = (index(from), index(t)) else {
+                    if pages_named(from).is_none() || pages_named(t).is_none() {
                         continue;
+                    }
+                    let end_home = |n: &Name| match index(n) {
+                        Some(v) => home(v),
+                        None => groups[n.text.as_str()].1.first().map_or(OVERVIEW, |&v| home(v)),
                     };
-                    for (here, there) in [(a, b), (b, a)] {
-                        let p = home(here);
-                        body[slot(p)].push((looks.clone(), line.clone()));
-                        if !stubs[slot(p)].contains(&there) {
-                            stubs[slot(p)].push(there);
+                    for (here, there) in [(from, t), (t, from)] {
+                        let p = end_home(here);
+                        rest[slot(p)].push((looks.clone(), line.clone()));
+                        let members = match index(there) {
+                            Some(v) => vec![v],
+                            None => {
+                                if !group_stubs[slot(p)].contains(&there.text.as_str()) {
+                                    group_stubs[slot(p)].push(there.text.as_str());
+                                }
+                                groups[there.text.as_str()].1.clone()
+                            }
+                        };
+                        for v in members.into_iter().filter(|&v| home(v) != p) {
+                            if !stubs[slot(p)].contains(&v) {
+                                stubs[slot(p)].push(v);
+                            }
                         }
                     }
                 }
@@ -245,7 +278,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                         continue;
                     }
                     sets.push(set);
-                    body[slot(p)].push((looks.clone(), line));
+                    rest[slot(p)].push((looks.clone(), line));
                 }
             }
             StmtKind::Constraint { hard, rel, attrs } => {
@@ -265,19 +298,19 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                                 }
                                 Some(&p) => {
                                     if let Some((q, r)) = run.replace((p, pair)) {
-                                        body[slot(q)].push((None, format!("{kw} {r}{attrs}")));
+                                        rest[slot(q)].push((None, format!("{kw} {r}{attrs}")));
                                     }
                                 }
                                 None => {
                                     if let Some((q, r)) = run.take() {
-                                        body[slot(q)].push((None, format!("{kw} {r}{attrs}")));
+                                        rest[slot(q)].push((None, format!("{kw} {r}{attrs}")));
                                     }
                                     dropped.push(format!("{kw} {pair}{attrs}"));
                                 }
                             }
                         }
                         if let Some((q, r)) = run {
-                            body[slot(q)].push((None, format!("{kw} {r}{attrs}")));
+                            rest[slot(q)].push((None, format!("{kw} {r}{attrs}")));
                         }
                     }
                     Rel::Align { side, items } => {
@@ -286,7 +319,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                             let ids: Vec<&str> = part.iter().map(|n| n.text.as_str()).collect();
                             match part.len() {
                                 1 => alone.push(ids[0].to_string()),
-                                _ => body[slot(p)].push((
+                                _ => rest[slot(p)].push((
                                     None,
                                     format!("{kw} align {}({}){attrs}", side.text, ids.join(", ")),
                                 )),
@@ -317,7 +350,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             "# Written by `fitd split` from {from}.\ninclude \"{stem}-shared.fitd\"\n{title}\nroot {}\n\n",
             g.nodes[root].id
         );
-        s += &blocks(&body[slot(p)]);
+        s += &blocks(&[&body[slot(p)][..], &rest[slot(p)][..]].concat());
         if !stubs[slot(p)].is_empty() {
             s += "\n# Nodes on other pages that edges here reach.\n";
         }
@@ -325,6 +358,12 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         for &v in &stubs[slot(p)] {
             stub.push(decl[v].clone());
             stub.push((None, format!("| see page {}", file(home(v)).trim_end_matches(".fitd"))));
+        }
+        for &id in &group_stubs[slot(p)] {
+            let (title, members) = &groups[id];
+            let ids: Vec<&str> = members.iter().map(|&v| g.nodes[v].id.as_str()).collect();
+            let title = title.as_deref().map_or(String::new(), |t| format!(" {}", quoted(t)));
+            stub.push((Some(Vec::new()), format!("group {id}{title} {}", ids.join(", "))));
         }
         s += &blocks(&stub);
         (file(p), s)
@@ -408,6 +447,22 @@ mod tests {
         );
         assert!(get("m-b.fitd").ends_with("a1 ..> b1\n\n# Nodes on other pages that edges here reach.\nnode a1\n| see page m-a\n"), "{}", get("m-b.fitd"));
         assert_eq!(out.dropped, ["require a1 near b1"]);
+    }
+
+    #[test]
+    fn group_edges_and_style_blocks_survive_a_split() {
+        let text = "layout radial root=r\nstyle s color=#0072B2\nr \"Root\"\n  a \"A\"\n    a1\n    a2\n  b \"B\"\n    s\n      b1\n      b2\ngroup G \"Gr\" a1, a2\nG -> b1\n";
+        let out = split("m.fitd", text, "m").unwrap();
+        let get = |n: &str| &out.files.iter().find(|f| f.0 == n).unwrap().1;
+        let (a, b) = (get("m-a.fitd"), get("m-b.fitd"));
+        assert!(a.contains("G -> b1\n") && a.contains("s\n  b1\n  | see page m-b\n"), "{a}");
+        assert!(
+            b.contains("s\n  b1\n  b2\nb -- b1\n")
+                && b.contains("G -> b1\n")
+                && b.ends_with("a1\n| see page m-a\na2\n| see page m-a\ngroup G \"Gr\" a1, a2\n"),
+            "{b}"
+        );
+        assert!(out.dropped.is_empty(), "{:?}", out.dropped);
     }
 
     #[test]

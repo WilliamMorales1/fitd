@@ -144,11 +144,11 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Ordered layouts: no per-group `ordered` flag. A group draws a frame, so it is a poor switch for ordering alone. Add one only if a figure needs source order in one part and crossing reduction in another.
 - Sequence diagrams: no activation bars, self-messages, or lane-relative `group` frames inside a sequence.
 - Venn: no Euler diagrams (disjoint or nested sets drawn apart or inside) and no area-proportional circles.
-- Group edges: `layout lanes` and `layout venn` reject them (E0016). `fitd split` drops edges whose end is a group ID. An edge runs from a stand-in member, so a long group edge may leave the frame off center.
+- Group edges: `layout lanes` and `layout venn` reject them (E0016). An edge runs from a stand-in member, so a long group edge may leave the frame off center.
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
-- Style blocks: `fitd split` writes `node` on every line inside a block. Indents count characters, so a tab is one column; mixing tabs and spaces can close a block early.
+- Style blocks: indents count characters, so a tab is one column; mixing tabs and spaces can close a block early.
 - Editor grammars: tree-sitter cannot tell a lone node, or a reopened one, from a block opener, so all parse as `block_statement`; template rows parse as `row_statement` only when they cannot be a node line, and a lone template name parses as a block. Nesting by indent is left to parse.rs and macros.rs.
 
 ### 8. Dependency arcs and Sankey widths (low priority)
