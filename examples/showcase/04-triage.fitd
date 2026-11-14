@@ -1,0 +1,27 @@
+# A triage guide: a decision tree whose leaves hand off to flowchart steps.
+include "tree"
+include "flow"
+title "Bug triage"
+layout layered dir=right
+page 16:9
+font 8pt..24pt
+tree.q
+  crash "Crashes?"
+  repro "Reproducible?"
+tree.leaf
+  p0 "P0: page on-call"
+  low "Backlog"
+io
+  rep "Report"
+step
+  bisect "Bisect"
+done
+  fixed "Fix shipped"
+rep -> crash
+crash -> p0 "yes"
+crash -> repro "no"
+repro -> bisect "yes"
+repro -> low "no"
+p0 -> bisect
+bisect -> fixed
+flow.key

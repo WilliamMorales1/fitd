@@ -1,0 +1,22 @@
+# A domain model: UML classes, inheritance and composition, persisted into an arch store.
+include "uml"
+include "arch"
+title "Orders domain"
+layout layered dir=down
+page 4:3
+font 8pt..24pt
+uml.class
+  order Order "id; total()"
+  line Line "sku; qty"
+  pay Payment "amount; capture()"
+uml.iface bill Billable "charge()"
+uml.class
+  card Card "last4"
+  inv Invoice "due"
+arch.store db Postgres
+uml.has order line "1..*"
+uml.is pay bill
+uml.is card pay
+uml.is inv pay
+order ..> pay "paid by"
+order ..> db "persists"

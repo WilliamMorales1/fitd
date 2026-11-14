@@ -529,19 +529,15 @@ fn theme_colors_reach_svg_and_tikz() {
 /// busy core run slower per CPU second, so a CPU budget failed under load with identical
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
-const EXAMPLES: [(&str, usize, u64); 11] = [
+const EXAMPLES: [(&str, usize, u64); 8] = [
     ("coffee", 2, 155_000_000),
     ("compiler", 2, 4_200_000),
-    ("debugging", 0, 33_000),
     ("fib_calls", 0, 8_000_000),
     ("fitd_language", 1, 1_700_000),
     ("group_theory", 0, 164_000_000),
     // Built from a user library beside it, `library/runbook.fitd`.
     ("library/oncall", 0, 5_000),
-    // Dense layers cross by nature: every W0206 here is an unavoidable crossing.
-    ("neural_net", 60, 8_200_000),
     ("pipeline", 0, 94_000),
-    ("release_pipeline", 0, 11_700_000),
     ("semester", 0, 34_000),
 ];
 
@@ -1471,6 +1467,13 @@ fn committed_docs_match_a_fresh_build() {
         }
     }
     jobs.push(("docs/pipeline.fitd".into(), "docs/pipeline.png".into()));
+    for f in glob("examples/showcase/*.fitd") {
+        jobs.push((
+            f.clone(),
+            f.replace("showcase/", "showcase/out/")
+                .replace(".fitd", ".png"),
+        ));
+    }
     for (src, committed) in &jobs {
         let fresh = tmp(&committed.replace('/', "-"));
         let (ok, log) = fitd(&[src, "-o", fresh.to_str().unwrap()]);
@@ -1490,7 +1493,10 @@ fn committed_docs_match_a_fresh_build() {
 
 #[test]
 fn gallery_and_every_std_module_compile_cleanly() {
-    for src in glob("examples/gallery/*.fitd") {
+    for src in glob("examples/gallery/*.fitd")
+        .into_iter()
+        .chain(glob("examples/showcase/*.fitd"))
+    {
         let fresh = tmp(&src.replace('/', "-").replace(".fitd", ".svg"));
         let (ok, log) = fitd(&[&src, "-o", fresh.to_str().unwrap()]);
         assert!(ok && !log.contains("warning["), "{src}\n{log}");

@@ -91,7 +91,7 @@ When many nodes or edges share one style, write the style once as a block: `styl
 | `algo` | `algo.block` pseudocode, `;` lines, extra spaces indent, `**` keywords | 28 |
 | `palette` | Okabe-Ito colors | |
 
-Gallery sources: `examples/gallery/NN-*.fitd` (also 07 network, 13 cycle, 19 mind map, 22 commutative, 23 fishbone, 24 swimlane, 29 image). Not drawable yet: Euler diagrams, UML use-case actor glyph, dependency arcs, Sankey. Out of scope: data plots (embed as `~ image`), maps, photos, circuits.
+Gallery sources: `examples/gallery/NN-*.fitd` (also 07 network, 13 cycle, 19 mind map, 22 commutative, 23 fishbone, 24 swimlane, 29 image). `examples/showcase/` mixes modules in one figure (arch+time+flow, nn+grid, uml+arch, tree+flow). Not drawable yet: Euler diagrams, UML use-case actor glyph, dependency arcs, Sankey. Out of scope: data plots (embed as `~ image`), maps, photos, circuits.
 
 ## Start minimal
 
@@ -143,4 +143,4 @@ The chosen font is often not the largest that fits. fitd also lays out at 5% and
 
 ## Examples
 
-`examples/` in the fitd repo holds worked diagrams; `examples/00-index.fitd` lists the features each shows, and `examples/out/` holds renders. `coffee.fitd`, `group_theory.fitd`, `circular_financing.fitd` (radial maps; palette, undirected edges, groups, a `key`), `compiler.fitd` (dark layered flow with groups and styles), `fitd_language.fitd` (every statement, relation, and macro form once), `debugging.fitd` (mono decision flow at a fixed font), `release_pipeline.fitd` (bands, `include`, theme overrides, chained constraints), `semester.fitd`, `fib_calls.fitd`, `neural_net.fitd` (macros: loops, recursive template), `library/` (a `user/LIB` library). Read one when the user asks for a feature the guide only names.
+`examples/` in the fitd repo holds worked diagrams; `examples/00-index.fitd` lists the features each shows, and `examples/out/` holds renders. `coffee.fitd`, `group_theory.fitd`, `circular_financing.fitd` (radial maps; palette, undirected edges, groups, a `key`), `compiler.fitd` (dark layered flow with groups and styles, chained constraints), `fitd_language.fitd` (every statement, relation, and macro form once), `semester.fitd` and `fib_calls.fitd` (macros: loops, if, recursive template), `library/` (a `user/LIB` library). Read one when the user asks for a feature the guide only names.

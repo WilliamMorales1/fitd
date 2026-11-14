@@ -2,12 +2,9 @@
 examples/00-index.fitd	18525265	0.707
 examples/coffee.fitd	148100382	4.513
 examples/compiler.fitd	3827207	2.872
-examples/debugging.fitd	17372	0.214
 examples/fib_calls.fitd	174683	0.180
 examples/fitd_language.fitd	1516219	0.453
 examples/group_theory.fitd	74283233	6.247
-examples/neural_net.fitd	5333862	0.794
-examples/release_pipeline.fitd	10612567	3.278
 examples/semester.fitd	4771	0.750
 fixtures/cell_biology.fitd	16055958	0.547
 fixtures/collatz.fitd	0	0.249

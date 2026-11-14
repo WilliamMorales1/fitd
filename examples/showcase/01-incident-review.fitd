@@ -1,0 +1,27 @@
+# Incident review: arch (the system), time (the outage), flow (the response) in one page.
+include "arch"
+include "time"
+include "flow"
+title "Checkout outage, 14 Nov"
+layout layered dir=right
+page 16:9
+font 8pt..24pt
+arch.client web "Web app"
+arch.service api API
+arch.store db Postgres
+arch.queue q Jobs
+time.event
+  t1 14:02 deploy
+  t2 14:09 errors
+time.mile t3 14:31 rollback
+decide
+  d "Schema change?"
+step
+  fix "Revert migration"
+web -> api -> db
+api -> q
+db ..> t2
+t1 -> t2 -> d "yes"
+d -> fix -> t3
+arch_zone
+  group "System" web, api, db, q
