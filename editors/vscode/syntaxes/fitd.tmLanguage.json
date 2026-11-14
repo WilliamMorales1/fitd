@@ -82,6 +82,11 @@
           "captures": { "1": { "name": "entity.name.function.node.fitd" } }
         },
         {
+          "comment": "`mod.name` followed by words calls a template without parentheses.",
+          "match": "^\\s*([A-Za-z_][\\w-]*\\.[A-Za-z_][\\w-]*)(?=\\s+[^\\s#=(])",
+          "captures": { "1": { "name": "entity.name.function.template.fitd" } }
+        },
+        {
           "comment": "A lone name, or `mod.name`, opens a style block over the lines indented under it, or reopens a node.",
           "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def|use)\\b)([A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)?)\\s*(?=#|$)",
           "captures": { "1": { "name": "entity.name.type.style.fitd" } }

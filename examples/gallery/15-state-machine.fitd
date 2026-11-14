@@ -3,11 +3,12 @@ include "uml"
 layout layered dir=right
 page 16:9
 font 9pt..28pt
-uml.start("s0")
-uml.state("idle", "Idle", "")
-uml.state("run", "Running", "do: tick")
-uml.state("done", "Done", "")
-uml.final("s1")
+uml.start s0
+uml.state
+  idle Idle ""
+  run Running "do: tick"
+  done Done ""
+uml.final s1
 s0 -> idle
 idle -> run "start"
 run -> done "finish"

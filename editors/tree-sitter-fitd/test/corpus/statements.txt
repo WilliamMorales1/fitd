@@ -269,3 +269,35 @@ coffee
   (block_statement
     style: (qualified_name
       (name))))
+
+================================================================================
+Template rows
+================================================================================
+
+tree.unit
+  ceo Ada CEO
+    web "Web team" 6
+  use adopt 2 +
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (block_statement
+    style: (qualified_name
+      (name)
+      (name)))
+  (row_statement
+    name: (qualified_name
+      (name))
+    argument: (name)
+    argument: (name))
+  (row_statement
+    name: (qualified_name
+      (name))
+    argument: (string)
+    argument: (number))
+  (row_statement
+    name: (name)
+    argument: (name)
+    argument: (number)
+    argument: (word)))

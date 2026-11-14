@@ -3,14 +3,10 @@ include "tree"
 layout layered order=source
 page 4:3
 font 9pt..28pt
-tree.cat("s", "S")
-tree.cat("np", "NP")
-tree.cat("vp", "VP")
-tree.cat("np2", "NP")
-tree.word("she", "she")
-tree.word("saw", "saw")
-tree.word("it", "it")
-tree.kids("s", "np; vp")
-tree.kids("np", "she")
-tree.kids("vp", "saw; np2")
-tree.kids("np2", "it")
+tree.cat s S
+  np NP
+    tree.word she she
+  vp VP
+    tree.word saw saw
+    np2 NP
+      tree.word it it

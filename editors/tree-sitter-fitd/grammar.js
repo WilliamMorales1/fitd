@@ -11,7 +11,7 @@ module.exports = grammar({
 
   // A name after a target or chain link may be the next one or an attribute key; only the
   // `=` after it tells, one token too late for LR(1), so both are explored.
-  conflicts: $ => [[$._targets], [$.chain]],
+  conflicts: $ => [[$._targets], [$.chain], [$.node_statement, $.qualified_name]],
 
   rules: {
     source_file: $ => seq(repeat(seq(optional($._statement), $._newline)), optional($._statement)),
@@ -40,6 +40,7 @@ module.exports = grammar({
       $.def_statement,
       $.use_statement,
       $.call_statement,
+      $.row_statement,
     ),
 
     title_statement: $ => seq('title', $.string),
@@ -77,6 +78,10 @@ module.exports = grammar({
     def_statement: $ => seq('def', field('name', $.name), '(', optional(seq(field('parameter', $.name), repeat(seq(',', field('parameter', $.name))))), ')'),
     use_statement: $ => seq('use', field('name', $.name), field('arguments', $.arguments)),
     call_statement: $ => seq(field('name', $.qualified_name), field('arguments', $.arguments)),
+    // A template call without parentheses, or a row of a template block; only macros.rs knows which names are templates.
+    row_statement: $ => prec.dynamic(-1, seq(field('name', choice($.qualified_name, $.string, $.number, $.word, alias('use', $.name))), repeat1(field('argument', $._row_word)))),
+    _row_word: $ => choice($.name, $.string, $.number, $.word),
+    word: _ => token(prec(-1, /[^\s"#=.]+(\.[^\s"#=.]+)*/)),
     expression: _ => token(prec(-1, /[^\n#]+/)),
     arguments: _ => token(seq('(', /[^\n#]*/)),
 

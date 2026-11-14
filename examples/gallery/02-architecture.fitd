@@ -3,12 +3,13 @@ include "arch"
 layout layered dir=right
 page 16:9
 font 9pt..28pt
-arch.client("web", "Web app")
-arch.service("api", "API")
-arch.service("work", "Worker")
-arch.queue("q", "Jobs")
-arch.store("db", "Postgres")
-arch.ext("pay", "Stripe")
+arch.client web "Web app"
+arch.service
+  api API
+  work Worker
+arch.queue q Jobs
+arch.store db Postgres
+arch.ext pay Stripe
 web -> api -> q -> work
 api -> db
 work -> db

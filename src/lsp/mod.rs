@@ -847,5 +847,11 @@ mod tests {
             .map(|v| v["label"].as_str().unwrap())
             .collect();
         assert!(labels.contains(&"input") && labels.contains(&"layer"), "{labels:?}");
+        let rows = "include \"nn\"\nnn.layer\n  e Enc d 2\nnn.step s Pool\n";
+        let d = doc("file:///r.fitd", "/r.fitd", rows, &none);
+        for line in [1, 3] {
+            let h = features::hover(&d, &json!({ "line": line, "character": 4 }), &[]);
+            assert!(h["contents"]["value"].as_str().unwrap().contains("nn."), "{h}");
+        }
     }
 }

@@ -3,11 +3,12 @@ include "arch"
 layout layered dir=right
 page 3:1
 font 9pt..28pt
-arch.ext("sensor", "Sensors")
-arch.service("clean", "Clean")
-arch.service("feat", "Featurize")
-arch.store("lake", "Data lake")
-arch.service("train", "Train")
-arch.client("dash", "Dashboard")
+arch.ext sensor Sensors
+arch.service
+  clean Clean
+  feat Featurize
+  train Train
+arch.store lake "Data lake"
+arch.client dash Dashboard
 sensor -> clean "raw" -> lake -> feat -> train
 train -> dash "metrics"

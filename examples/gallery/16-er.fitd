@@ -3,10 +3,12 @@ include "er"
 layout layered dir=right
 page 3:1
 font 9pt..28pt
-er.entity("cust", "Customer", "PK id; name")
-er.entity("ord", "Order", "PK id; FK customer; date")
-er.weak("line", "Line item", "FK order; qty")
-er.entity("prod", "Product", "PK sku; price")
-er.relation("places", "places", "cust", "ord", "1:N")
-er.relation("holds", "holds", "ord", "line", "1:N")
-er.rel("line", "prod", "N:1")
+er.entity
+  cust Customer "PK id; name"
+  ord Order "PK id; FK customer; date"
+  prod Product "PK sku; price"
+er.weak line "Line item" "FK order; qty"
+er.relation
+  places places cust ord 1:N
+  holds holds ord line 1:N
+er.rel line prod N:1

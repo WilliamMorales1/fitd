@@ -2,13 +2,16 @@
 include "seq"
 layout lanes order=source
 page 4:3
-seq.actor("user", "User")
-seq.actor("app", "App")
-seq.actor("api", "API")
-seq.actor("db", "Database")
-seq.msg("m1", "user", "app", "log in")
-seq.msg("m2", "app", "api", "POST /session")
-seq.msg("m3", "api", "db", "find user")
-seq.reply("m4", "db", "api", "row")
-seq.reply("m5", "api", "app", "token")
-seq.reply("m6", "app", "user", "home page")
+seq.actor
+  user User
+  app App
+  api API
+  db Database
+seq.msg
+  m1 user app "log in"
+  m2 app api "POST /session"
+  m3 api db "find user"
+seq.reply
+  m4 db api row
+  m5 api app token
+  m6 app user "home page"

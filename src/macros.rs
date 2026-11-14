@@ -399,7 +399,17 @@ enum Kind {
     For(Vec<String>, Iter, Vec<Item>),
     If(Vec<(Option<Expr>, Vec<Item>)>),
     Use(String, Vec<Expr>),
+    Rows(Vec<Row>),
     Skip,
+}
+
+/// Row is one call in a template block: its line, nesting depth, default template, and text.
+#[derive(Clone, Debug)]
+struct Row {
+    line: usize,
+    depth: usize,
+    name: String,
+    text: String,
 }
 
 #[derive(Clone, Debug)]
@@ -452,6 +462,71 @@ fn is_call_line(t: &str) -> bool {
         return false;
     };
     word(r).is_some_and(|j| r[j..].trim_start().starts_with('('))
+}
+
+/// block_name gives the `MOD.name` that line `t` holds alone, a possible template block opener.
+fn block_name(t: &str) -> Option<&str> {
+    let (m, n) = t.split_once('.')?;
+    let id = |w: &str| {
+        !w.is_empty()
+            && !w.starts_with(|c: char| c.is_ascii_digit())
+            && w.chars().all(|c| c.is_alphanumeric() || c == '_')
+    };
+    (id(m) && id(n)).then_some(t)
+}
+
+/// row_args reads a template row: an optional `MOD.name`, then words, where quotes group text and digits are numbers.
+fn row_args(t: &str, defs: &HashMap<String, Def>) -> Result<(Option<String>, Vec<Expr>), String> {
+    let cs: Vec<char> = t.chars().collect();
+    let mut words: Vec<(bool, String)> = Vec::new();
+    let mut i = 0;
+    while i < cs.len() {
+        let c = cs[i];
+        if c.is_whitespace() {
+            i += 1;
+        } else if c == '#' {
+            break;
+        } else if c == '"' {
+            let mut w = String::new();
+            i += 1;
+            loop {
+                match cs.get(i) {
+                    None => return Err("unterminated string".into()),
+                    Some('"') => break,
+                    Some('\\') if i + 1 < cs.len() => {
+                        w.push(cs[i + 1]);
+                        i += 2;
+                    }
+                    Some(&o) => {
+                        w.push(o);
+                        i += 1;
+                    }
+                }
+            }
+            i += 1;
+            words.push((true, w));
+        } else {
+            let lo = i;
+            while i < cs.len() && !cs[i].is_whitespace() && cs[i] != '"' {
+                i += 1;
+            }
+            words.push((false, cs[lo..i].iter().collect()));
+        }
+    }
+    let name = match words.first() {
+        Some((false, w)) if block_name(w).is_some() && defs.contains_key(w) => Some(words.remove(0).1),
+        _ => None,
+    };
+    let args = words
+        .into_iter()
+        .map(|(quoted, w)| {
+            Expr::Lit(match w.parse() {
+                Ok(n) if !quoted && w.bytes().all(|b| b.is_ascii_digit()) => Val::Int(n),
+                _ => Val::Str(w),
+            })
+        })
+        .collect();
+    Ok((name, args))
 }
 
 fn classify(line: &str) -> Result<Line, String> {
@@ -633,6 +708,19 @@ impl Builder<'_> {
         while self.i < self.lines.len() {
             let at = self.i;
             self.i += 1;
+            let t = self.lines[at].trim();
+            let head = t.split_whitespace().next().unwrap_or("");
+            if let Some(name) = block_name(head)
+                && self.defs.contains_key(name)
+            {
+                let kind = self.rows(at, name.to_string(), &t[head.len()..]);
+                items.push(Item {
+                    lo: at,
+                    hi: self.i - 1,
+                    kind,
+                });
+                continue;
+            }
             let line = match classify(self.lines[at]) {
                 Ok(l) => l,
                 Err(m) => {
@@ -716,6 +804,48 @@ impl Builder<'_> {
         (items, Stop::Eof, self.lines.len())
     }
 
+    /// rows reads the lines indented under template block opener `at`, one call each.
+    fn rows(&mut self, at: usize, name: String, rest: &str) -> Kind {
+        let col = indent(self.lines[at]);
+        let mut rows = Vec::new();
+        let mut cols: Vec<usize> = Vec::new();
+        if !rest.trim().is_empty() {
+            rows.push(Row {
+                line: at,
+                depth: 0,
+                name: name.clone(),
+                text: rest.to_string(),
+            });
+            cols.push(col);
+        }
+        let mut k = self.i;
+        while k < self.lines.len() {
+            let l = self.lines[k];
+            let t = l.trim();
+            k += 1;
+            if t.is_empty() || t.starts_with('#') {
+                continue;
+            }
+            let c = indent(l);
+            if c <= col {
+                break;
+            }
+            self.i = k;
+            while cols.last().is_some_and(|&x| x >= c) {
+                cols.pop();
+            }
+            let depth = cols.len();
+            cols.push(c);
+            rows.push(Row {
+                line: k - 1,
+                depth,
+                name: name.clone(),
+                text: t.to_string(),
+            });
+        }
+        Kind::Rows(rows)
+    }
+
     fn close(&mut self, at: usize, stop: &Stop, what: &str) {
         match stop {
             Stop::End => {}
@@ -776,6 +906,11 @@ impl Expander<'_> {
 
     /// nest runs `body` re-based under the directive on line `at`, as if its lines stood at that indent.
     fn nest(&mut self, at: usize, body: &[Item]) -> Run<()> {
+        self.nest_at(self.at(self.lines[at]), body)
+    }
+
+    /// nest_at runs `body` re-based to indent `base`.
+    fn nest_at(&mut self, base: usize, body: &[Item]) -> Run<()> {
         let first = body
             .iter()
             .map(|it| self.lines[it.lo])
@@ -784,9 +919,67 @@ impl Expander<'_> {
             .min()
             .unwrap_or(0);
         let old = self.shift;
-        self.shift = (first, self.at(self.lines[at]));
+        self.shift = (first, base);
         let r = self.run(body, false);
         self.shift = old;
+        r
+    }
+
+    /// invoke expands template `name` called on line `at`, at indent `base` when given.
+    fn invoke(&mut self, at: usize, name: &str, args: &[Expr], base: Option<usize>) -> Run<()> {
+        let defs = self.defs;
+        let local = self.mods[at]
+            .filter(|_| !name.contains('.'))
+            .and_then(|m| defs.get(&format!("{m}.{name}")));
+        let Some(def) = local.or_else(|| defs.get(name)) else {
+            let mut known: Vec<&String> = defs.keys().collect();
+            known.sort();
+            let hint = if known.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    " (templates: {})",
+                    known
+                        .iter()
+                        .map(|k| k.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            self.fail(at, format!("unknown template `{name}`{hint}"));
+            return Err(());
+        };
+        if args.len() != def.params.len() {
+            self.fail(
+                at,
+                format!(
+                    "`{name}` takes {} argument{} ({}), found {}",
+                    def.params.len(),
+                    if def.params.len() == 1 { "" } else { "s" },
+                    def.params.join(", "),
+                    args.len()
+                ),
+            );
+            return Err(());
+        }
+        if self.calls.len() >= MAX_DEPTH {
+            self.fail(at, format!("templates nest more than {MAX_DEPTH} deep"));
+            self.out_of_budget = true;
+            return Err(());
+        }
+        let mut frame = HashMap::new();
+        for (p, a) in def.params.iter().zip(args) {
+            let v = self.eval(at, a)?;
+            frame.insert(p.clone(), v);
+        }
+        self.frames.push(frame);
+        self.calls.push((name.to_string(), at));
+        let r = match base {
+            Some(b) => self.nest_at(b, &def.body),
+            None => self.nest(at, &def.body),
+        };
+        self.calls.pop();
+        self.frames.pop();
         r
     }
 
@@ -1096,58 +1289,40 @@ impl Expander<'_> {
                     }
                 }
             }
-            Kind::Use(name, args) => {
-                let defs = self.defs;
-                let local = self.mods[at]
-                    .filter(|_| !name.contains('.'))
-                    .and_then(|m| defs.get(&format!("{m}.{name}")));
-                let Some(def) = local.or_else(|| defs.get(name)) else {
-                    let mut known: Vec<&String> = defs.keys().collect();
-                    known.sort();
-                    let hint = if known.is_empty() {
-                        String::new()
-                    } else {
-                        format!(
-                            " (templates: {})",
-                            known
-                                .iter()
-                                .map(|k| k.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
+            Kind::Use(name, args) => self.invoke(at, name, args, None)?,
+            Kind::Rows(rows) => {
+                let mut bases = vec![self.at(self.lines[at])];
+                for r in rows {
+                    bases.truncate(r.depth + 1);
+                    let mut t = String::new();
+                    match pieces(&r.text) {
+                        Ok(Some(ps)) => {
+                            for p in &ps {
+                                match p {
+                                    Piece::Lit(l) => t += l,
+                                    Piece::Expr(e) => t += &self.eval(r.line, e)?.to_string(),
+                                }
+                            }
+                        }
+                        Ok(None) => t.clone_from(&r.text),
+                        Err(m) => {
+                            self.fail(r.line, m);
+                            return Err(());
+                        }
+                    }
+                    let (name, args) = match row_args(&t, self.defs) {
+                        Ok((n, a)) => (n.unwrap_or_else(|| r.name.clone()), a),
+                        Err(m) => {
+                            self.fail(r.line, m);
+                            return Err(());
+                        }
                     };
-                    self.fail(at, format!("unknown template `{name}`{hint}"));
-                    return Err(());
-                };
-                if args.len() != def.params.len() {
-                    self.fail(
-                        at,
-                        format!(
-                            "`{name}` takes {} argument{} ({}), found {}",
-                            def.params.len(),
-                            if def.params.len() == 1 { "" } else { "s" },
-                            def.params.join(", "),
-                            args.len()
-                        ),
-                    );
-                    return Err(());
+                    let from = self.text.len();
+                    self.invoke(r.line, &name, &args, Some(bases[r.depth]))?;
+                    // Children sit right of every line the parent emitted, so its style opener cannot close the parent's scope.
+                    let deep = self.text[from..].lines().filter(|l| !l.trim().is_empty()).map(indent).max();
+                    bases.push(deep.map_or(bases[r.depth], |d| d + 1));
                 }
-                if self.calls.len() >= MAX_DEPTH {
-                    self.fail(at, format!("templates nest more than {MAX_DEPTH} deep"));
-                    self.out_of_budget = true;
-                    return Err(());
-                }
-                let mut frame = HashMap::new();
-                for (p, a) in def.params.iter().zip(args) {
-                    let v = self.eval(at, a)?;
-                    frame.insert(p.clone(), v);
-                }
-                self.frames.push(frame);
-                self.calls.push((name.clone(), at));
-                let r = self.nest(at, &def.body);
-                self.calls.pop();
-                self.frames.pop();
-                r?;
             }
         }
         Ok(())
@@ -1177,7 +1352,11 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
     };
     if !lines
         .iter()
-        .any(|l| l.contains("${") || is_kw_line(l.trim()).is_some() || is_call_line(l.trim()))
+        .any(|l| {
+            let t = l.trim();
+            let head = t.split_whitespace().next().unwrap_or("");
+            l.contains("${") || is_kw_line(t).is_some() || is_call_line(t) || block_name(head).is_some()
+        })
     {
         let parse = a.text.clone();
         return Loaded {
@@ -1334,6 +1513,33 @@ mod tests {
         assert!(bad.diags.iter().any(|d| d.msg.contains("outside 1..2")));
         let ws = run("node a \"${count(\" 90  5 5 \", \" \")}\"\n");
         assert_eq!(visible(&ws), ["node a \"3\""]);
+    }
+
+    #[test]
+    fn template_rows_call_and_nest() {
+        let go = |body: &str| load("t.fitd", &format!("include \"tree\"\n{body}"), DEFAULT_BUDGET);
+        let l = go("tree.unit a A \"x y\"\n  b \"B\" r\n    tree.word c c\n  d D r\nfor i in 1..2\n  tree.unit\n    s${i} \"S ${i}\" r\nend\n");
+        let msgs: Vec<_> = l.diags.iter().map(|d| &d.msg).collect();
+        assert!(msgs.is_empty(), "{msgs:?}");
+        let got: Vec<&str> = l.parse.lines().filter(|s| s.trim_start().starts_with(['n', '|'])).collect();
+        assert_eq!(
+            got,
+            [
+                "  node a \"A\"",
+                "  | x y",
+                "     node b \"B\"",
+                "     | r",
+                "        node c \"c\"",
+                "     node d \"D\"",
+                "     | r",
+                "  node s1 \"S 1\"",
+                "  | r",
+                "  node s2 \"S 2\"",
+                "  | r",
+            ]
+        );
+        assert!(go("tree.unit a b\n").diags.iter().any(|d| d.msg.contains("takes 3 arguments")));
+        assert!(go("tree.unit\n  a \"A\n").diags.iter().any(|d| d.msg.contains("unterminated")));
     }
 
     #[test]

@@ -339,9 +339,23 @@ b, c -> d
 
 A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name(args)` on a line of its own; `use` is not needed. Styles are global and keep the module prefix; open a block with `nn.layer` for style `nn_layer`.
 
+A template call can also drop the parentheses: `MOD.name a "Two words" 3` passes its words as arguments. A bare word is text, a run of digits is a number, and quotes group text with spaces or symbols. A template name alone on a line opens a template block, which takes precedence over a style block of the same name: each line indented under it is one call, and a row may start with another template name to call that one instead. A row indented under another row is its child, linked the way a nested node line is, so trees need no edge lines:
+
+```fitd
+include "tree"
+layout layered order=source
+tree.cat s S
+  np NP
+    tree.word she she
+  vp VP
+    tree.word saw saw
+```
+
+Rows are read after `${...}` substitution, so they work inside loops and templates.
+
 | Module    | Contents                                                                                                                                                                                                                                                   |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `nn`      | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus classes such as `: nn.block` and `: nn.data`                                                                  |
+| `nn`      | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus styles such as `nn.block` and `nn.data`                                                                  |
 | `flow`    | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow.key()`                                                                                                                                                               |
 | `palette` | Okabe-Ito color-blind-safe classes `c1`..`c8`                                                                                                                                                                                                              |
 | `grid`    | Figure-row grids: `grid.head`, `grid.row`, `grid.title_row` (tables), `grid.heat`, `grid.shade` (heat maps, confusion matrices), `grid.bar` (unit bar charts), `grid.task`, `grid.scale` (Gantt), `grid.layers` (layer stacks), `grid.quad` (2x2 matrices) |
@@ -359,11 +373,11 @@ A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bu
 
 ```fitd
 include "nn"
-nn.input("x", "Tokens", "B x L")
-nn.layer("e", "Encoder", "d 64", 2)
+nn.input x Tokens "B x L"
+nn.layer e Encoder "d 64" 2
 nn.block
   block "Block"
-nn.mask("m", "Causal mask", 4, 1)
+nn.mask m "Causal mask" 4 1
 x -> e -> m
 ```
 
@@ -371,8 +385,8 @@ x -> e -> m
 
 ```fitd
 include "user/runbook"
-runbook.check("deploy", "Deploy in last hour?")
-runbook.act("rollback", "Roll back", "on-call")
+runbook.check deploy "Deploy in last hour?"
+runbook.act rollback "Roll back" on-call
 deploy -> rollback "yes"
 ```
 
@@ -380,7 +394,7 @@ deploy -> rollback "yes"
 
 ![Macro directives, expressions, scope, and expansion limits](language/05-macros.png)
 
-Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, module template calls `MOD.name(...)`, and `${expression}` interpolation. Macro blocks close with `end`. Their bodies expand at the indent of the directive or call line, keeping deeper indents, so style blocks inside them nest as written. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
+Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, module template calls and blocks (`MOD.name(...)`, `MOD.name a b`), and `${expression}` interpolation. Macro blocks close with `end`. Their bodies expand at the indent of the directive or call line, keeping deeper indents, so style blocks inside them nest as written. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
 
 Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for node lists. `count(s, sep)` gives the number of fields in `s`; `part(s, sep, i)` gives field `i`, counted from 1, without trailing spaces or the one space after the separator. Further leading spaces stay, so a `|` body line built from a field keeps its indent. A whitespace separator splits on runs of whitespace, and an empty string has no fields, so templates can take lists as one string:
 

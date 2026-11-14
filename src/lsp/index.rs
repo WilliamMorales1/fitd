@@ -509,7 +509,10 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
             end: (n - 1, utf16(&line[..hi])),
         };
         let call = template_name(t);
-        let (w, name_lo) = if call.contains('.') && t[call.len()..].trim_start().starts_with('(') {
+        let after = &t[call.len()..];
+        let row = (after.is_empty() || after.starts_with(char::is_whitespace))
+            && b.out.defs.iter().any(|d| d.name == call);
+        let (w, name_lo) = if call.contains('.') && (after.trim_start().starts_with('(') || row) {
             ("use".to_string(), lead)
         } else {
             let w: String = t.chars().take_while(|&c| is_ident(c)).collect();

@@ -3,9 +3,10 @@ include "nn"
 layout layered
 page 3:4
 font 9pt..28pt
-nn.input("x", "Tokens", "B x L")
-nn.layer("emb", "Embedding", "d 512", 1)
-nn.layer("enc", "Encoder", "d 512", 6)
-nn.step("pool", "Mean pool")
-nn.out("y", "Classes", "B x 4")
+nn.input x Tokens "B x L"
+nn.layer
+  emb Embedding "d 512" 1
+  enc Encoder "d 512" 6
+nn.step pool "Mean pool"
+nn.out y Classes "B x 4"
 x -> emb -> enc -> pool -> y

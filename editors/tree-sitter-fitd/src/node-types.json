@@ -600,6 +600,60 @@
     }
   },
   {
+    "type": "row_statement",
+    "named": true,
+    "fields": {
+      "argument": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": "name",
+            "named": true
+          },
+          {
+            "type": "number",
+            "named": true
+          },
+          {
+            "type": "string",
+            "named": true
+          },
+          {
+            "type": "word",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "name",
+            "named": true
+          },
+          {
+            "type": "number",
+            "named": true
+          },
+          {
+            "type": "qualified_name",
+            "named": true
+          },
+          {
+            "type": "string",
+            "named": true
+          },
+          {
+            "type": "word",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "source_file",
     "named": true,
     "root": true,
@@ -674,6 +728,10 @@
         },
         {
           "type": "root_statement",
+          "named": true
+        },
+        {
+          "type": "row_statement",
           "named": true
         },
         {
@@ -944,5 +1002,9 @@
   {
     "type": "use",
     "named": false
+  },
+  {
+    "type": "word",
+    "named": true
   }
 ]

@@ -3,10 +3,8 @@ include "tree"
 layout layered order=source
 page 16:9
 font 9pt..28pt
-tree.unit("ceo", "Ada", "CEO")
-tree.unit("cto", "Lin", "CTO")
-tree.unit("cfo", "Sam", "CFO")
-tree.unit("web", "Web team", "6 people")
-tree.unit("ml", "ML team", "4 people")
-tree.kids("ceo", "cto; cfo")
-tree.kids("cto", "web; ml")
+tree.unit ceo Ada CEO
+  cto Lin CTO
+    web "Web team" "6 people"
+    ml "ML team" "4 people"
+  cfo Sam CFO

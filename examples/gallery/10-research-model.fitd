@@ -3,12 +3,13 @@ include "model"
 layout layered dir=right
 page 16:9
 font 9pt..28pt
-model.iv("ease", "Ease of use")
-model.med("use", "Usefulness")
-model.dv("adopt", "Adoption")
-model.mod("exp", "Experience")
-model.hyp("ease", "use", 1, "+")
-model.hyp("use", "adopt", 2, "+")
-model.hyp("ease", "adopt", 3, "+")
+model.iv ease "Ease of use"
+model.med use Usefulness
+model.dv adopt Adoption
+model.mod exp Experience
+model.hyp
+  ease use 1 +
+  use adopt 2 +
+  ease adopt 3 +
 exp ..> adopt "H4"
 model.key()

@@ -134,6 +134,10 @@
         {
           "type": "SYMBOL",
           "name": "call_statement"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "row_statement"
         }
       ]
     },
@@ -853,6 +857,92 @@
         }
       ]
     },
+    "row_statement": {
+      "type": "PREC_DYNAMIC",
+      "value": -1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "name",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "qualified_name"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "string"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "number"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "word"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "STRING",
+                    "value": "use"
+                  },
+                  "named": true,
+                  "value": "name"
+                }
+              ]
+            }
+          },
+          {
+            "type": "REPEAT1",
+            "content": {
+              "type": "FIELD",
+              "name": "argument",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_row_word"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "_row_word": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "name"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "string"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "number"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "word"
+        }
+      ]
+    },
+    "word": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PREC",
+        "value": -1,
+        "content": {
+          "type": "PATTERN",
+          "value": "[^\\s\"#=.]+(\\.[^\\s\"#=.]+)*"
+        }
+      }
+    },
     "expression": {
       "type": "TOKEN",
       "content": {
@@ -1199,6 +1289,10 @@
     ],
     [
       "chain"
+    ],
+    [
+      "node_statement",
+      "qualified_name"
     ]
   ],
   "precedences": [],
