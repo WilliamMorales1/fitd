@@ -146,7 +146,6 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Sequence diagrams: no activation bars, self-messages, or lane-relative `group` frames inside a sequence.
 - Venn: no Euler diagrams (disjoint or nested sets drawn apart or inside) and no area-proportional circles.
 - Group edges: `layout lanes` and `layout venn` reject them (E0016). `fitd split` drops edges whose end is a group ID. An edge runs from a stand-in member, so a long group edge may leave the frame off center.
-- User libraries: `include "user/LIB"` only looks beside the including file. There is no library search path or `FITD_PATH`; add one if libraries get shared across projects.
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.

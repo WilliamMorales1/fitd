@@ -43,14 +43,25 @@ pub fn unused_shared_style(src: &Source, d: &Diag) -> bool {
 
 /// resolve maps an include target to the file it names and the module whose templates it defines.
 ///
-/// A bare name like `nn` names a bundled module, `user/LIB` names `LIB.fitd` in `dir`, and anything else is a path relative to `dir`.
+/// A bare name like `nn` names a bundled module, `user/LIB` names `LIB.fitd` in `dir` or else in the first `FITD_PATH` directory that has it, and anything else is a path relative to `dir`.
 pub fn resolve<'t>(target: &'t str, dir: &Path) -> Result<(PathBuf, Option<&'t str>), Diag> {
     if let Some(lib) = target.strip_prefix("user/") {
         if !is_ident(lib) {
-            return Err(Diag::error("E0011", format!("bad library name `{lib}`"))
-                .note("write `include \"user/LIB\"`, where LIB.fitd sits beside this file"));
+            return Err(Diag::error("E0011", format!("bad library name `{lib}`")).note(
+                "write `include \"user/LIB\"`, where LIB.fitd sits beside this file or in a FITD_PATH directory",
+            ));
         }
-        return Ok((dir.join(format!("{lib}.fitd")), Some(lib)));
+        let file = format!("{lib}.fitd");
+        let here = dir.join(&file);
+        let found = (!here.is_file())
+            .then(|| std::env::var_os("FITD_PATH"))
+            .flatten()
+            .and_then(|v| {
+                std::env::split_paths(&v)
+                    .map(|d| d.join(&file))
+                    .find(|p| p.is_file())
+            });
+        return Ok((found.unwrap_or(here), Some(lib)));
     }
     if !target.contains(['/', '.']) {
         if crate::stdlib::get(target).is_none() {

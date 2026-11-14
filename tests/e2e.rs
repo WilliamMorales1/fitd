@@ -1781,6 +1781,40 @@ fn user_libraries_are_included_beside_the_file() {
 }
 
 #[test]
+fn user_libraries_fall_back_to_fitd_path() {
+    let dir = tmp("fitdpath");
+    let (libs, other, work) = (dir.join("libs"), dir.join("other"), dir.join("work"));
+    for d in [&libs, &other, &work] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    std::fs::write(libs.join("kit.fitd"), "def tag(id)\nnode ${id} \"From path\"\nend\n").unwrap();
+    let main = work.join("main.fitd");
+    std::fs::write(&main, "include \"user/kit\"\nkit.tag a\n").unwrap();
+    let o = work.join("main.svg");
+    let run = |path: Option<String>| {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_fitd"));
+        c.args([main.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
+        match path {
+            Some(p) => c.env("FITD_PATH", p),
+            None => c.env_remove("FITD_PATH"),
+        };
+        let out = c.output().unwrap();
+        (out.status.success(), String::from_utf8_lossy(&out.stderr).into_owned())
+    };
+    let (ok, log) = run(None);
+    assert!(!ok && log.contains("cannot read"), "{log}");
+    let joined = std::env::join_paths([&other, &libs]).unwrap();
+    let (ok, log) = run(Some(joined.to_string_lossy().into_owned()));
+    assert!(ok, "{log}");
+    assert!(std::fs::read_to_string(&o).unwrap().contains("From path"));
+    // A library beside the file wins over the search path.
+    std::fs::write(work.join("kit.fitd"), "def tag(id)\nnode ${id} \"Local\"\nend\n").unwrap();
+    let (ok, log) = run(Some(libs.to_string_lossy().into_owned()));
+    assert!(ok, "{log}");
+    assert!(std::fs::read_to_string(&o).unwrap().contains("Local"));
+}
+
+#[test]
 fn repeated_groups_are_dashed_and_frameless_nodes_lose_their_box() {
     let build = |src: &str, name: &str| {
         let f = tmp(&format!("{name}.fitd"));

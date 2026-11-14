@@ -396,7 +396,7 @@ nn.mask m "Causal mask" 4 1
 x -> e -> m
 ```
 
-`include "user/LIB"` reads `LIB.fitd` from the including file's directory and treats it as a library: its templates are called as `LIB.name ARGS`, the same way as bundled modules, and inside the library they can be called unqualified as `name ARGS`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and open a block with `LIB.box` for style `LIB_box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
+`include "user/LIB"` reads `LIB.fitd` from the including file's directory, or else from the first directory in the `FITD_PATH` environment variable (a `:`-separated list, `;` on Windows) that has it, and treats it as a library: its templates are called as `LIB.name ARGS`, the same way as bundled modules, and inside the library they can be called unqualified as `name ARGS`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and open a block with `LIB.box` for style `LIB_box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
 
 ```fitd
 include "user/runbook"
