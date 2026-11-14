@@ -8,5 +8,4 @@ node model "Transformer"
 node eval "Validation"
 ~ image "loss.png" width=9em
 | train solid, val dashed
-data -> model -> eval
-eval ..> model "tune"
+data -> model -> eval ..> model "tune"

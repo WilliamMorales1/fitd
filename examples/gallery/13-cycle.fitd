@@ -6,5 +6,4 @@ node p "Plan"
 node d "Do"
 node c "Check"
 node a "Act"
-p -> d -> c -> a
-a ..> p "repeat"
+p -> d -> c -> a ..> p "repeat"

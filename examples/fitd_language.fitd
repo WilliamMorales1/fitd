@@ -9,6 +9,8 @@ theme light palette="#1565C0 #2E7D32 #EF6C00" edge=#455A64 link=#8E24AA label=#3
 io
   src "Source\n.fitd"
   | one statement per line
+  emit "Output"
+  | svg, png, pdf, tikz
 macro
   expand "Macros"
   | for, if, def, use, $${names}
@@ -20,9 +22,6 @@ stage
   | radial or layered
   solve "Solver"
   | largest font that fits
-io
-  emit "Output"
-  | svg, png, pdf, tikz
 src -> expand -> parse -> sema -> lay -> solve -> emit "one format per -o"
 expand ..> sema "errors point at the template line" color=#C62828
 

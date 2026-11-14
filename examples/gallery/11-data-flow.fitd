@@ -10,5 +10,4 @@ arch.service
   train Train
 arch.store lake "Data lake"
 arch.client dash Dashboard
-sensor -> clean "raw" -> lake -> feat -> train
-train -> dash "metrics"
+sensor -> clean "raw" -> lake -> feat -> train -> dash "metrics"

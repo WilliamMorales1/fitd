@@ -6,20 +6,16 @@ io
   order "Place order"
 step
   pay "Take payment"
-decide
-  stock "In stock?"
-step
   ship "Pack and ship"
   refund "Refund"
   receipt "Send receipt"
+decide
+  stock "In stock?"
 done
   done "Receive parcel"
-order -> pay
-pay -> stock
-stock -> ship "yes"
+order -> pay -> stock -> ship "yes"
 stock -> refund "no"
-ship -> receipt
-receipt -> done
+ship -> receipt -> done
 group "Customer" order, done
 group "Shop" pay, stock, refund, receipt
 group "Warehouse" ship

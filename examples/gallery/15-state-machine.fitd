@@ -9,8 +9,5 @@ uml.state
   run Running "do: tick"
   done Done ""
 uml.final s1
-s0 -> idle
-idle -> run "start"
-run -> done "finish"
-done -> s1
+s0 -> idle -> run "start" -> done "finish" -> s1
 run ..> idle "pause"

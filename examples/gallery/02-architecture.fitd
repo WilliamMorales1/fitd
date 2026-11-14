@@ -12,8 +12,7 @@ arch.store db Postgres
 arch.ext pay Stripe
 web -> api -> q -> work
 api -> db
-work -> db
-work -> pay
+work -> db, pay
 arch_zone
   group "Cloud" api, q, work, db
 arch.key()

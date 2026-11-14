@@ -6,6 +6,7 @@ style io color=#009E73 shape=circle
 
 io
   src "Source : fitd"
+  out "SVG, PNG, TikZ"
 node parse "Parser"
 node csp "CSP search"
 | largest font that fits
@@ -13,8 +14,6 @@ node bnb "Branch and bound"
 node core "QuickXplain"
 | minimal unsat core
 node checker "Checker" color=#F85149
-io
-  out "SVG, PNG, TikZ"
 
 src -> parse -> csp -> bnb, core
 bnb -> checker -> out

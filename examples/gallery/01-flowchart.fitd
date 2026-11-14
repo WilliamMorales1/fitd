@@ -11,8 +11,6 @@ step
   login "Log in"
 done
   serve "Serve page"
-req -> auth
-auth -> serve "yes"
-auth -> login "no"
-login -> serve
+req -> auth -> serve "yes"
+auth -> login "no" -> serve
 flow.key()

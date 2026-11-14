@@ -11,6 +11,7 @@ lock
   read "Read the lock"
   | font, page, and every node center
   | plain text, diffs well, can be committed
+  write "Write the lock"
 node try "Try locked spots first"
 | nodes added since the lock are placed freely;
 | removed ones are dropped
@@ -20,8 +21,6 @@ node charge "Charge every move"
 node fonts "Polish two fonts"
 | the locked font, while it still fits,
 | and the new largest; better merit wins
-lock
-  write "Write the lock"
 node result "Effect"
 | adding one leaf keeps the font and every spot;
 | deleting a large branch lets the font grow
