@@ -97,6 +97,9 @@ pub enum StmtKind {
         attrs: Vec<Attr>,
     },
     Include(String),
+    /// Open starts a style block; nodes, edges, keys, and groups up to its `end` take the style.
+    Open(Name),
+    End,
 }
 
 #[derive(Clone, Debug)]

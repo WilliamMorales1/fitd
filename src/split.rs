@@ -54,7 +54,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
 
     let mut shared = String::new();
     let mut title = None;
-    let mut body: Vec<Vec<String>> = vec![Vec::new(); heads.len() + 1];
+    let mut body: Vec<Vec<(Looks, String)>> = vec![Vec::new(); heads.len() + 1];
     let slot = |p: Page| if p == OVERVIEW { heads.len() } else { p };
     let mut dropped = Vec::new();
     let mut framed: BTreeMap<Page, Vec<BTreeSet<String>>> = BTreeMap::new();
@@ -85,13 +85,13 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         }
         out
     };
-    let decl: Vec<String> = {
-        let mut d = vec![String::new(); g.nodes.len()];
+    let decl: Vec<(Looks, String)> = {
+        let mut d = vec![(None, String::new()); g.nodes.len()];
         for st in &stmts {
-            if let StmtKind::Node { id, .. } = &st.kind
+            if let StmtKind::Node { id, classes, .. } = &st.kind
                 && let Some(v) = index(id)
             {
-                d[v] = snippet(st.span.lo, st.span.hi);
+                d[v] = (Some(names(classes)), snippet(st.span.lo, st.span.hi));
             }
         }
         d
@@ -107,12 +107,21 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let mut last: BTreeSet<Page> = BTreeSet::new();
     for st in &stmts {
         let own = snippet(st.span.lo, st.span.hi);
+        let looks: Looks = match &st.kind {
+            StmtKind::Node { classes, .. }
+            | StmtKind::Edge { classes, .. }
+            | StmtKind::Group { classes, .. }
+            | StmtKind::Key { classes, .. } => Some(names(classes)),
+            _ => None,
+        };
         let names: Vec<&Name> = match &st.kind {
             StmtKind::Title(_) => {
                 title = Some(own);
                 continue;
             }
-            StmtKind::Root(_) | StmtKind::Include(_) => continue,
+            StmtKind::Root(_) | StmtKind::Include(_) | StmtKind::Open(_) | StmtKind::End => {
+                continue;
+            }
             StmtKind::Layout { kind, attrs } => {
                 shared += &format!("layout {}", kind.text);
                 for a in attrs.iter().filter(|a| a.key.text != "root") {
@@ -126,13 +135,12 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             | StmtKind::Theme { .. }
             | StmtKind::Style { .. }
             | StmtKind::Key { .. } => {
-                shared += &own;
-                shared.push('\n');
+                shared += &blocks(&[(looks, own)]);
                 continue;
             }
             StmtKind::Body(_) | StmtKind::Cells(_) => {
                 for &p in last.iter().filter(|&&p| p != OVERVIEW || last.len() == 1) {
-                    body[slot(p)].push(own.clone());
+                    body[slot(p)].push((None, own.clone()));
                 }
                 continue;
             }
@@ -148,11 +156,11 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         let on = meet(&names);
         if matches!(st.kind, StmtKind::Node { .. }) {
             for &p in &on {
-                body[slot(p)].push(own.clone());
+                body[slot(p)].push((looks.clone(), own.clone()));
             }
             if on.len() == 2 {
                 let page = file(*on.iter().find(|&&p| p != OVERVIEW).unwrap());
-                body[slot(OVERVIEW)].push(format!("| see page {}", page.trim_end_matches(".fitd")));
+                body[slot(OVERVIEW)].push((None, format!("| see page {}", page.trim_end_matches(".fitd"))));
             }
             last = on;
             continue;
@@ -169,7 +177,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 }
                 sets.push(set);
             }
-            body[slot(p)].push(own);
+            body[slot(p)].push((looks, own));
             continue;
         }
         let attrs_of = |attrs: &[Attr]| {
@@ -186,7 +194,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                     let line = format!("{} {op} {}{tail}", from.text, t.text);
                     let on = meet(&[from, t]);
                     if let Some(&p) = on.iter().find(|&&p| p != OVERVIEW).or(on.first()) {
-                        body[slot(p)].push(line);
+                        body[slot(p)].push((looks.clone(), line));
                         continue;
                     }
                     let (Some(a), Some(b)) = (index(from), index(t)) else {
@@ -194,7 +202,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                     };
                     for (here, there) in [(a, b), (b, a)] {
                         let p = home(here);
-                        body[slot(p)].push(line.clone());
+                        body[slot(p)].push((looks.clone(), line.clone()));
                         if !stubs[slot(p)].contains(&there) {
                             stubs[slot(p)].push(there);
                         }
@@ -202,18 +210,14 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 }
             }
             StmtKind::Group {
-                title,
-                items,
-                classes,
-                attrs,
+                title, items, attrs, ..
             } => {
                 let title = title
                     .as_ref()
                     .map_or(String::new(), |t| format!(" {}", quoted(t)));
                 for (p, part) in parts(items) {
                     let ids: Vec<&str> = part.iter().map(|n| n.text.as_str()).collect();
-                    let looks: String = classes.iter().map(|c| format!(" : {}", c.text)).collect();
-                    let line = format!("group{title} {}{looks}{}", ids.join(", "), attrs_of(attrs));
+                    let line = format!("group{title} {}{}", ids.join(", "), attrs_of(attrs));
                     let set: BTreeSet<String> = ids.iter().map(|i| i.to_string()).collect();
                     let sets = framed.entry(p).or_default();
                     if sets.contains(&set) {
@@ -223,7 +227,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                         continue;
                     }
                     sets.push(set);
-                    body[slot(p)].push(line);
+                    body[slot(p)].push((looks.clone(), line));
                 }
             }
             StmtKind::Constraint { hard, rel, attrs } => {
@@ -243,19 +247,19 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                                 }
                                 Some(&p) => {
                                     if let Some((q, r)) = run.replace((p, pair)) {
-                                        body[slot(q)].push(format!("{kw} {r}{attrs}"));
+                                        body[slot(q)].push((None, format!("{kw} {r}{attrs}")));
                                     }
                                 }
                                 None => {
                                     if let Some((q, r)) = run.take() {
-                                        body[slot(q)].push(format!("{kw} {r}{attrs}"));
+                                        body[slot(q)].push((None, format!("{kw} {r}{attrs}")));
                                     }
                                     dropped.push(format!("{kw} {pair}{attrs}"));
                                 }
                             }
                         }
                         if let Some((q, r)) = run {
-                            body[slot(q)].push(format!("{kw} {r}{attrs}"));
+                            body[slot(q)].push((None, format!("{kw} {r}{attrs}")));
                         }
                     }
                     Rel::Align { side, items } => {
@@ -264,10 +268,9 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                             let ids: Vec<&str> = part.iter().map(|n| n.text.as_str()).collect();
                             match part.len() {
                                 1 => alone.push(ids[0].to_string()),
-                                _ => body[slot(p)].push(format!(
-                                    "{kw} align {}({}){attrs}",
-                                    side.text,
-                                    ids.join(", ")
+                                _ => body[slot(p)].push((
+                                    None,
+                                    format!("{kw} align {}({}){attrs}", side.text, ids.join(", ")),
                                 )),
                             }
                         }
@@ -296,20 +299,16 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             "# Written by `fitd split` from {from}.\ninclude \"{stem}-shared.fitd\"\n{title}\nroot {}\n\n",
             g.nodes[root].id
         );
-        for line in &body[slot(p)] {
-            s += line;
-            s.push('\n');
-        }
+        s += &blocks(&body[slot(p)]);
         if !stubs[slot(p)].is_empty() {
             s += "\n# Nodes on other pages that edges here reach.\n";
         }
+        let mut stub = Vec::new();
         for &v in &stubs[slot(p)] {
-            s += &format!(
-                "{}\n| see page {}\n",
-                decl[v],
-                file(home(v)).trim_end_matches(".fitd")
-            );
+            stub.push(decl[v].clone());
+            stub.push((None, format!("| see page {}", file(home(v)).trim_end_matches(".fitd"))));
         }
+        s += &blocks(&stub);
         (file(p), s)
     };
     files.push(page(
@@ -323,13 +322,44 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     Ok(Split { files, dropped })
 }
 
+/// Looks holds the styles of the blocks around a line, or None for a line that keeps any open block.
+type Looks = Option<Vec<String>>;
+
+fn names(classes: &[Name]) -> Vec<String> {
+    classes.iter().map(|c| c.text.clone()).collect()
+}
+
+/// blocks writes lines with the style blocks they need, opening and closing only where the styles change.
+fn blocks(lines: &[(Looks, String)]) -> String {
+    let (mut s, mut open) = (String::new(), Vec::<String>::new());
+    for (looks, line) in lines {
+        if let Some(want) = looks {
+            let keep = open.iter().zip(want).take_while(|(a, b)| a == b).count();
+            for _ in keep..open.len() {
+                s += &format!("{}end\n", "  ".repeat(open.len() - 1));
+                open.pop();
+            }
+            for c in &want[keep..] {
+                s += &format!("{}{c}\n", "  ".repeat(open.len()));
+                open.push(c.clone());
+            }
+        }
+        s += &format!("{}{}\n", "  ".repeat(open.len()), line.trim_start());
+    }
+    while !open.is_empty() {
+        open.pop();
+        s += &format!("{}end\n", "  ".repeat(open.len()));
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn branches_get_pages_and_stubs_name_them() {
-        let text = "title \"Map\"\nlayout radial root=r\nstyle s color=#1565C0\nnode r \"Root\"\nnode a \"A\"  : s\n| about a\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\na1 ..> b1\nrequire a1 left-of a\nrequire a1 near b1\n";
+        let text = "title \"Map\"\nlayout radial root=r\nstyle s color=#1565C0\nnode r \"Root\"\ns\n  node a \"A\"\n  | about a\nend\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\na1 ..> b1\nrequire a1 left-of a\nrequire a1 near b1\n";
         let out = split("m.fitd", text, "m").unwrap();
         let names: Vec<&str> = out.files.iter().map(|f| f.0.as_str()).collect();
         assert_eq!(names, ["m-shared.fitd", "m.fitd", "m-a.fitd", "m-b.fitd"]);
@@ -342,7 +372,7 @@ mod tests {
         let overview = get("m.fitd");
         assert!(
             overview.contains("title \"Map\"\nroot r\n")
-                && overview.contains("node a \"A\"  : s\n| see page m-a\n")
+                && overview.contains("s\n  node a \"A\"\n  | see page m-a\nend\n")
                 && overview.contains("r -> a, b"),
             "{overview}"
         );

@@ -419,11 +419,16 @@ pub fn symbols(doc: &Doc) -> Value {
     )
 }
 
-/// folds covers macro blocks, nodes with body lines, and runs of comments.
+/// folds covers macro and style blocks, nodes with body lines, and runs of comments.
 pub fn folds(text: &str) -> Value {
     let lines: Vec<&str> = text.lines().collect();
+    let styles: Vec<&str> = lines
+        .iter()
+        .filter_map(|l| l.trim().strip_prefix("style ")?.split_whitespace().next())
+        .collect();
     let mut out = Vec::new();
-    let mut open: Vec<usize> = Vec::new();
+    // Each open block notes whether it is a style block, which decides what a lone name means.
+    let mut open: Vec<(usize, bool)> = Vec::new();
     let mut node: Option<usize> = None;
     let mut comment: Option<usize> = None;
     let mut push = |lo: usize, hi: usize, kind: Option<&str>| {
@@ -452,20 +457,29 @@ pub fn folds(text: &str) -> Value {
         }
         let rest = &t[w.len()..];
         let directive = !rest.starts_with('-') && !rest.trim_start().starts_with(['-', '.']);
+        let lone = !w.is_empty() && (rest.is_empty() || rest.strip_prefix('.').is_some_and(|n| n.chars().all(|c| c.is_alphanumeric() || c == '_')));
+        let style_open = open.iter().any(|o| o.1);
         match w.as_str() {
-            "for" | "if" | "def" if directive => open.push(i),
+            "for" | "if" | "def" if directive => open.push((i, false)),
             "end" if directive => {
-                if let Some(lo) = open.pop() {
+                if let Some((lo, _)) = open.pop() {
                     push(lo, i, None);
                 }
             }
             "else" if directive => {
-                if let Some(lo) = open.pop() {
+                if let Some((lo, _)) = open.pop() {
                     push(lo, i - 1, None);
                 }
-                open.push(i);
+                open.push((i, false));
             }
-            "node" => node = Some(i),
+            _ if lone
+                && !crate::parse::KEYWORDS.contains(&w.as_str())
+                && (!style_open || styles.contains(&t.replacen('.', "_", 1).as_str())) =>
+            {
+                open.push((i, true))
+            }
+            // Any other line may own the body lines after it, as `node a` or `step a` does.
+            _ if !w.is_empty() && !body && !t.starts_with('#') => node = Some(i),
             _ => {}
         }
     }
@@ -784,6 +798,23 @@ fn item(label: &str, kind: u32, detail: &str, doc: &str) -> Value {
     v
 }
 
+/// style_names lists declared styles plus the `MOD.name` form of each module style.
+fn style_names(idx: &Index) -> Vec<String> {
+    let mut names = idx.style_order.clone();
+    for (module, _) in crate::stdlib::MODULES {
+        let prefix = format!("{module}_");
+        names.extend(
+            idx.style_order
+                .iter()
+                .filter_map(|name| name.strip_prefix(&prefix))
+                .map(|name| format!("{module}.{name}")),
+        );
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
 fn node_items(idx: &Index) -> Vec<Value> {
     idx.node_order
         .iter()
@@ -912,6 +943,15 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
         return json!([]);
     }
     let idx = doc.index();
+    let stmt = if stmt == "edge"
+        && words.len() >= 2
+        && !EDGE_OPS.contains(&words[1])
+        && !first.ends_with(',')
+    {
+        "node"
+    } else {
+        stmt
+    };
     if first == "use" && words.len() == 1 {
         return Value::Array(
             idx.defs
@@ -933,31 +973,17 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                 .collect(),
         );
     }
-    if head.trim_end().ends_with(':') {
-        let mut names = idx.style_order.clone();
-        for (module, _) in crate::stdlib::MODULES {
-            let prefix = format!("{module}_");
-            names.extend(
-                idx.style_order
-                    .iter()
-                    .filter_map(|name| name.strip_prefix(&prefix))
-                    .map(|name| format!("{module}.{name}")),
-            );
-        }
-        names.sort();
-        names.dedup();
-        return Value::Array(
-            names
-                .iter()
-                .map(|name| item(name, 7, "class", "Reusable style class."))
-                .collect(),
-        );
-    }
     if words.len() == 1
         && let Some(m) = first.strip_suffix('.')
         && idx.defs.iter().any(|d| d.name.starts_with(&format!("{m}.")))
     {
-        return Value::Array(
+        let mut out: Vec<Value> = idx
+            .style_order
+            .iter()
+            .filter_map(|n| n.strip_prefix(&format!("{m}_")))
+            .map(|short| item(short, 14, "style block", "Opens a block: lines up to `end` take this module style."))
+            .collect();
+        out.extend(
             idx.defs
                 .iter()
                 .filter_map(|d| Some((d, d.name.strip_prefix(m)?.strip_prefix('.')?)))
@@ -975,8 +1001,9 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                     }
                     v
                 })
-                .collect(),
+                .collect::<Vec<_>>(),
         );
+        return Value::Array(out);
     }
     if head.ends_with('.') && !head.ends_with("..") {
         return Value::Array(
@@ -1026,6 +1053,11 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                 v
             })
             .collect();
+        out.extend(
+            style_names(&idx)
+                .iter()
+                .map(|n| item(n, 14, "style block", "Opens a block: lines up to `end` take this style.")),
+        );
         out.extend(node_items(&idx));
         return Value::Array(out);
     }

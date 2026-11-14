@@ -1,9 +1,9 @@
 title "Diagnostic codes"
-page 320x180mm margin=1cm
+page 340x191mm margin=1cm
 root diag
 
 style front color=#0969DA
-style layout color=#CF222E
+style solve color=#CF222E
 style warn color=#BC4C00
 
 node diag "Diagnostics"
@@ -11,10 +11,16 @@ node diag "Diagnostics"
 | fitd explain CODE prints the long form
 | --short prints one line each
 
-node front "E00xx: front end"  : front
-node lay "E01xx: layout"  : layout
-node warn "W02xx: warnings"  : warn
-| never block output
+front
+  node front "E00xx: front end"
+end
+solve
+  lay "E01xx: layout"
+end
+warn
+  node warn "W02xx: warnings"
+  | never block output
+end
 diag -> front, lay, warn
 
 def code(parent, c, text)
@@ -37,6 +43,7 @@ use code("front", "E0011", "include cycle or unreadable file")
 use code("front", "E0012", "macro error: unknown variable or template, argument count, type, division by zero, nesting too deep")
 use code("front", "E0013", "macro expansion ran past --expand-budget steps")
 use code("front", "E0014", "image row names a missing file or one not PNG or JPEG")
+use code("front", "E0015", "style named after a keyword")
 
 use code("lay", "E0101", "checker: overlap")
 use code("lay", "E0102", "checker: edge through node")

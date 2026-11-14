@@ -12,14 +12,22 @@ style rest color=#BDBDBD
 
 for w, topic in "Regular languages", "Lexers", "Grammars", "LL parsing", "LR parsing", "Syntax trees", "Midterm", "Name resolution", "Break", "Type checking", "IR design", "Optimization", "Code generation", "Final exam"
   if topic == "Midterm" or topic == "Final exam"
-    node w${w} "${topic}"  : exam
+    exam
+      w${w} "${topic}"
+    end
   else if topic == "Break"
-    node w${w} "${topic}"  : rest
+    rest
+      w${w} "${topic}"
+    end
   else if w % 4 == 0
-    node w${w} "${topic}"  : project
-    | project ${w / 4} due
+    project
+      w${w} "${topic}"
+      | project ${w / 4} due
+    end
   else
-    node w${w} "${topic}"  : week
+    week
+      w${w} "${topic}"
+    end
   end
   | week ${w}
   if w > 1

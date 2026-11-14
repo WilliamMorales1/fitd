@@ -8,9 +8,9 @@ page a3 portrait margin=1cm
 font 7pt..40pt wrap=16em
 theme dark link=#FFD54F
 style stage color=#1565C0 shape=box
-node lex "Lexer" .stage color=#fff
+node lex "Lexer" color=#fff
 | tokens with byte spans # not a comment
-lex -> parse, sema "label" .stage
+lex -> parse, sema "label"
 core ..> sema
 group "Front end" lex, parse color=#1565C0
 require bnb left-of core gap=2em
@@ -59,8 +59,6 @@ include "parts/x.fitd"
   (node_statement
     id: (name)
     title: (string)
-    (class
-      (name))
     (attribute
       key: (name)
       value: (color)))
@@ -70,9 +68,7 @@ include "parts/x.fitd"
     operator: (edge_operator)
     to: (name)
     to: (name)
-    label: (string)
-    (class
-      (name)))
+    label: (string))
   (edge_statement
     from: (name)
     operator: (edge_operator)
@@ -192,7 +188,7 @@ end -> in
 Arrow chains
 ================================================================================
 
-a -> b, c "x" -- d .hub
+a -> b, c "x" -- d
 
 --------------------------------------------------------------------------------
 
@@ -204,6 +200,50 @@ a -> b, c "x" -- d .hub
     to: (name)
     label: (string)
     operator: (edge_operator)
-    to: (name)
-    (class
-      (name))))
+    to: (name)))
+
+================================================================================
+Style blocks
+================================================================================
+
+stage
+  lex "Lexer"
+  parse color=#fff
+  lex -> parse
+end
+nn.block
+  node enc
+end
+flow.key()
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (block_statement
+    style: (qualified_name
+      (name)))
+  (node_statement
+    id: (name)
+    title: (string))
+  (node_statement
+    id: (name)
+    (attribute
+      key: (name)
+      value: (color)))
+  (edge_statement
+    from: (name)
+    operator: (edge_operator)
+    to: (name))
+  (end_statement)
+  (block_statement
+    style: (qualified_name
+      (name)
+      (name)))
+  (node_statement
+    id: (name))
+  (end_statement)
+  (call_statement
+    name: (qualified_name
+      (name)
+      (name))
+    arguments: (arguments)))

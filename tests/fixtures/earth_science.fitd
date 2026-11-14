@@ -9,51 +9,69 @@ style process color=#2E7D32
 style atmosphere color=#6A1B9A
 style impact color=#C62828
 
-node water "Water"  : reservoir
-| solid, liquid, and vapor
-| mass is conserved as state changes
-node ocean "Ocean"  : reservoir
-| largest active reservoir
-| stores heat and dissolved salts
-node ice "Ice and snow"  : reservoir
-| glaciers, ice caps, and seasonal snow
-| high albedo reflects solar radiation
-node ground "Groundwater"  : reservoir
-| water stored in pores and fractures
-| residence time can be centuries
-node atmosphere "Atmospheric vapor"  : atmosphere
-| small reservoir with rapid turnover
-| transports water between regions
-node evaporation "Evaporation"  : process
-| liquid -> vapor using solar energy
-| latent heat leaves the surface
-node condensation "Condensation"  : atmosphere
-| vapor -> cloud droplets
-| requires cooling or saturation
-node precipitation "Precipitation"  : atmosphere
-| rain, snow, sleet, or hail
-| gravity returns water to the surface
-node runoff "Runoff"  : process
-| water flows over land to rivers
-| depends on slope, soil, and vegetation
-node infiltration "Infiltration"  : process
-| water enters soil and aquifers
-| permeability controls the rate
-node transpiration "Transpiration"  : process
-| plants release water vapor
-| stomata couple carbon and water exchange
-node storage "Surface storage"  : reservoir
-| lakes, wetlands, and soil moisture
-| buffers floods and droughts
-node human "Human withdrawals"  : impact
-| irrigation and pumping move water
-| use can exceed natural recharge
-node balance "Water balance"  : process
-| input - output = change in storage
-| basin budgets expose unsustainable use
-node climate "Climate feedback"  : impact fill=#FFEBEE
-| warming changes vapor capacity and ice melt
-| circulation shifts precipitation patterns
+reservoir
+  water "Water"
+  | solid, liquid, and vapor
+  | mass is conserved as state changes
+  ocean "Ocean"
+  | largest active reservoir
+  | stores heat and dissolved salts
+  ice "Ice and snow"
+  | glaciers, ice caps, and seasonal snow
+  | high albedo reflects solar radiation
+  ground "Groundwater"
+  | water stored in pores and fractures
+  | residence time can be centuries
+end
+atmosphere
+  node atmosphere "Atmospheric vapor"
+  | small reservoir with rapid turnover
+  | transports water between regions
+end
+process
+  evaporation "Evaporation"
+  | liquid -> vapor using solar energy
+  | latent heat leaves the surface
+end
+atmosphere
+  condensation "Condensation"
+  | vapor -> cloud droplets
+  | requires cooling or saturation
+  precipitation "Precipitation"
+  | rain, snow, sleet, or hail
+  | gravity returns water to the surface
+end
+process
+  runoff "Runoff"
+  | water flows over land to rivers
+  | depends on slope, soil, and vegetation
+  infiltration "Infiltration"
+  | water enters soil and aquifers
+  | permeability controls the rate
+  transpiration "Transpiration"
+  | plants release water vapor
+  | stomata couple carbon and water exchange
+end
+reservoir
+  storage "Surface storage"
+  | lakes, wetlands, and soil moisture
+  | buffers floods and droughts
+end
+impact
+  human "Human withdrawals"
+  | irrigation and pumping move water
+  | use can exceed natural recharge
+end
+process
+  balance "Water balance"
+  | input - output = change in storage
+  | basin budgets expose unsustainable use
+end
+impact
+  climate "Climate feedback" fill=#FFEBEE
+  | warming changes vapor capacity and ice melt
+  | circulation shifts precipitation patterns
+end
 
 water -> ocean
 water -> ice
@@ -69,10 +87,12 @@ precipitation -> infiltration
 runoff -> ocean
 infiltration -> ground
 runoff -> storage -> evaporation
-human ..> ground "pumping"  : impact
-human ..> storage "withdrawal"  : impact
-climate ..> evaporation "warming"  : impact
-climate ..> ice "melting"  : impact
+impact
+  human ..> ground "pumping"
+  human ..> storage "withdrawal"
+  climate ..> evaporation "warming"
+  climate ..> ice "melting"
+end
 ocean ..> balance "reservoir"
 ground ..> balance "reservoir"
 

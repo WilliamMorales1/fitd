@@ -27,6 +27,7 @@ module.exports = grammar({
       $.theme_statement,
       $.style_statement,
       $.node_statement,
+      $.block_statement,
       $.body,
       $.edge_statement,
       $.group_statement,
@@ -38,6 +39,7 @@ module.exports = grammar({
       $.end_statement,
       $.def_statement,
       $.use_statement,
+      $.call_statement,
     ),
 
     title_statement: $ => seq('title', $.string),
@@ -47,13 +49,19 @@ module.exports = grammar({
     font_statement: $ => seq('font', field('size', $._value), optional(seq('..', field('max', $._value))), repeat($.attribute)),
     theme_statement: $ => seq('theme', optional(field('preset', $.name)), repeat($.attribute)),
     style_statement: $ => seq('style', field('name', $.name), repeat($.attribute)),
-    node_statement: $ => seq('node', field('id', $.name), optional(field('title', $.string)), repeat(choice($.class, $.attribute))),
+    // Inside a style block a node line may drop `node` when a title or attribute follows the id.
+    node_statement: $ => choice(
+      seq('node', field('id', $.name), optional(field('title', $.string)), repeat($.attribute)),
+      seq(field('id', $.name), choice(seq(field('title', $.string), repeat($.attribute)), repeat1($.attribute))),
+    ),
+    // A lone name opens a style block up to `end`; inside a block an undeclared one is a node, which only sema knows.
+    block_statement: $ => field('style', $.qualified_name),
     body: _ => token(seq('|', /[^\n]*/)),
     edge_statement: $ => seq(
       // A node may be named like a macro keyword; the edge operator after it tells.
       field('from', choice($.name, alias(choice('for', 'if', 'else', 'end', 'def', 'use'), $.name))),
       repeat1($._hop),
-      repeat(choice($.class, $.attribute)),
+      repeat($.attribute),
     ),
     // A hop's targets feed the next hop: `a -> b, c "x" -- d`.
     _hop: $ => seq(field('operator', $.edge_operator), $._targets, optional(field('label', $.string))),
@@ -68,6 +76,7 @@ module.exports = grammar({
     end_statement: _ => 'end',
     def_statement: $ => seq('def', field('name', $.name), '(', optional(seq(field('parameter', $.name), repeat(seq(',', field('parameter', $.name))))), ')'),
     use_statement: $ => seq('use', field('name', $.name), field('arguments', $.arguments)),
+    call_statement: $ => seq(field('name', $.qualified_name), field('arguments', $.arguments)),
     expression: _ => token(prec(-1, /[^\n#]+/)),
     arguments: _ => token(seq('(', /[^\n#]*/)),
 
@@ -81,7 +90,7 @@ module.exports = grammar({
     relation: $ => $.name,
 
     flag: $ => $.name,
-    class: $ => seq('.', $.name),
+    qualified_name: $ => seq($.name, optional(seq('.', $.name))),
     attribute: $ => seq(field('key', $.name), '=', field('value', choice($._value, $.color))),
     _value: $ => choice($.name, $.string, $.number),
 

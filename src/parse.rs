@@ -6,9 +6,17 @@ struct Parser<'a> {
     text: &'a str,
     toks: Vec<Token>,
     pos: usize,
+    styles: std::collections::HashSet<String>,
+    open: Vec<Name>,
 }
 
 type PResult<T> = Result<T, Diag>;
+
+/// KEYWORDS are the words that start a statement or macro directive, so no style may take one.
+pub const KEYWORDS: &[&str] = &[
+    "title", "root", "layout", "page", "font", "theme", "style", "node", "key", "group",
+    "include", "require", "prefer", "for", "if", "else", "end", "def", "use",
+];
 
 impl Parser<'_> {
     fn peek(&self) -> &Tok {
@@ -105,6 +113,9 @@ impl Parser<'_> {
     fn attrs(&mut self) -> PResult<Vec<Attr>> {
         let mut out = Vec::new();
         while !self.at_end() {
+            if *self.peek() == Tok::Colon {
+                return Err(self.removed_class());
+            }
             let key = self.name("an attribute like `key=value`")?;
             self.expect(Tok::Eq)?;
             out.push(Attr {
@@ -162,7 +173,7 @@ impl Parser<'_> {
         if hops.is_empty() {
             return Err(self.unexpected("`->`, `--`, `..>`, or `..`"));
         }
-        let (classes, attrs) = self.looks()?;
+        let (classes, attrs) = (self.classes(), self.attrs()?);
         let mut out = Vec::new();
         for (froms, link, directed, to, label) in hops {
             for from in froms {
@@ -180,22 +191,33 @@ impl Parser<'_> {
         Ok(out)
     }
 
-    fn looks(&mut self) -> PResult<(Vec<Name>, Vec<Attr>)> {
-        let (mut classes, mut attrs) = (Vec::new(), Vec::new());
-        while !self.at_end() {
-            if *self.peek() == Tok::Colon {
-                self.bump();
-                classes.push(self.class_name()?);
-            } else {
-                let key = self.name("`: NAME` or `key=value`")?;
-                self.expect(Tok::Eq)?;
-                attrs.push(Attr {
-                    key,
-                    value: self.value()?,
-                });
-            }
+    /// classes gives the styles of the open blocks, innermost last.
+    fn classes(&self) -> Vec<Name> {
+        self.open.iter().filter(|c| self.is_style(&c.text)).cloned().collect()
+    }
+
+    /// is_style reports whether `name`, or `MOD_x` for `MOD.x`, is declared anywhere in the file.
+    fn is_style(&self, name: &str) -> bool {
+        self.styles.contains(&name.replacen('.', "_", 1))
+    }
+
+    /// lone_name gives the token count of a line that holds only a name or `MOD.name`.
+    fn lone_name(&self) -> Option<usize> {
+        if *self.peek() != Tok::Ident || KEYWORDS.contains(&self.text(self.span())) {
+            return None;
         }
-        Ok((classes, attrs))
+        let k = if *self.peek_at(1) == Tok::Dot && *self.peek_at(2) == Tok::Ident {
+            3
+        } else {
+            1
+        };
+        matches!(self.peek_at(k), Tok::Newline | Tok::Eof).then_some(k)
+    }
+
+    fn removed_class(&self) -> Diag {
+        Diag::error("E0002", "`: NAME` no longer applies a style")
+            .primary(self.span(), "not valid here")
+            .help("put the line inside a block: a line holding only the style name, the lines, then `end`")
     }
 
     fn rel(&mut self) -> PResult<Rel> {
@@ -228,20 +250,59 @@ impl Parser<'_> {
         Ok(Rel::Chain { nodes, ops })
     }
 
-    fn stmt(&mut self) -> PResult<Vec<StmtKind>> {
-        let mut i = 0;
+    /// edge_at reports whether an edge (`a, b -> c ...`) starts at token offset i.
+    fn edge_at(&self, mut i: usize) -> bool {
         while *self.peek_at(i) == Tok::Ident && *self.peek_at(i + 1) == Tok::Comma {
             i += 2;
         }
-        if *self.peek_at(i) == Tok::Ident
+        *self.peek_at(i) == Tok::Ident
             && matches!(
                 self.peek_at(i + 1),
                 Tok::Arrow | Tok::DashDash | Tok::DotArrow | Tok::DotDot
             )
-        {
+    }
+
+    fn stmt(&mut self) -> PResult<Vec<StmtKind>> {
+        if self.edge_at(0) {
             return self.edge();
         }
+        if self.lone_name().is_some() {
+            let name = self.class_name()?;
+            if self.open.is_empty() || self.is_style(&name.text) {
+                self.open.push(name.clone());
+                return Ok(vec![StmtKind::Open(name)]);
+            }
+            self.pos -= 1;
+        }
+        if self.keyword_is(0, "end") && matches!(self.peek_at(1), Tok::Newline | Tok::Eof) {
+            if self.open.pop().is_none() {
+                return Err(Diag::error("E0002", "`end` without an open block")
+                    .primary(self.span(), "nothing to close"));
+            }
+            self.bump();
+            return Ok(vec![StmtKind::End]);
+        }
+        if !self.open.is_empty()
+            && *self.peek() == Tok::Ident
+            && !KEYWORDS.contains(&self.text(self.span()))
+        {
+            return Ok(vec![self.node()?]);
+        }
         self.stmt1().map(|k| vec![k])
+    }
+
+    fn node(&mut self) -> PResult<StmtKind> {
+        let id = self.name("a node name")?;
+        let title = match self.peek().clone() {
+            Tok::Str(s) => Some((s, self.bump().span)),
+            _ => None,
+        };
+        Ok(StmtKind::Node {
+            id,
+            title,
+            classes: self.classes(),
+            attrs: self.attrs()?,
+        })
     }
 
     fn stmt1(&mut self) -> PResult<StmtKind> {
@@ -301,20 +362,7 @@ impl Parser<'_> {
                 name: self.name("a style name")?,
                 attrs: self.attrs()?,
             },
-            "node" => {
-                let id = self.name("a node name")?;
-                let title = match self.peek().clone() {
-                    Tok::Str(s) => Some((s, self.bump().span)),
-                    _ => None,
-                };
-                let (classes, attrs) = self.looks()?;
-                StmtKind::Node {
-                    id,
-                    title,
-                    classes,
-                    attrs,
-                }
-            }
+            "node" => self.node()?,
             "key" => {
                 let label = match self.peek().clone() {
                     Tok::Str(s) => {
@@ -323,7 +371,7 @@ impl Parser<'_> {
                     }
                     _ => return Err(self.unexpected("a quoted key label")),
                 };
-                let (classes, attrs) = self.looks()?;
+                let (classes, attrs) = (self.classes(), self.attrs()?);
                 StmtKind::Key {
                     label,
                     classes,
@@ -339,7 +387,7 @@ impl Parser<'_> {
                     _ => None,
                 };
                 let items = self.targets()?;
-                let (classes, attrs) = self.looks()?;
+                let (classes, attrs) = (self.classes(), self.attrs()?);
                 StmtKind::Group {
                     title,
                     items,
@@ -370,7 +418,19 @@ impl Parser<'_> {
 
 pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
     let (toks, mut errs) = lex(text);
-    let mut p = Parser { text, toks, pos: 0 };
+    let styles = (0..toks.len())
+        .filter(|&i| i == 0 || toks[i - 1].tok == Tok::Newline)
+        .filter(|&i| toks[i].tok == Tok::Ident && &text[toks[i].span.lo..toks[i].span.hi] == "style")
+        .filter_map(|i| toks.get(i + 1).filter(|t| t.tok == Tok::Ident))
+        .map(|t| text[t.span.lo..t.span.hi].to_string())
+        .collect();
+    let mut p = Parser {
+        text,
+        toks,
+        pos: 0,
+        styles,
+        open: Vec::new(),
+    };
     let mut stmts = Vec::new();
     loop {
         while *p.peek() == Tok::Newline {
@@ -400,6 +460,12 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
         while !p.at_end() {
             p.bump();
         }
+    }
+    for name in p.open {
+        errs.push(
+            Diag::error("E0002", format!("style block `{}` has no `end`", name.text))
+                .primary(name.span, "opened here"),
+        );
     }
     (stmts, errs)
 }
@@ -435,19 +501,19 @@ mod tests {
 
     #[test]
     fn parses_every_statement() {
-        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\"  : hub color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\ngroup \"G\" b, c color=#123\na -> c \"x\"  : hub color=#f00\n";
+        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\" color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\ngroup \"G\" b, c color=#123\nhub\n  a -> c \"x\" color=#f00\nend\n";
         let (stmts, errs) = parse(src);
         assert!(
             errs.is_empty(),
             "{:?}",
             errs.iter().map(|d| &d.msg).collect::<Vec<_>>()
         );
-        assert_eq!(stmts.len(), 16);
+        assert_eq!(stmts.len(), 18);
         assert!(
             matches!(&stmts[14].kind, StmtKind::Group { title: Some(_), items, attrs, .. } if items.len() == 2 && attrs.len() == 1)
         );
         assert!(
-            matches!(&stmts[15].kind, StmtKind::Edge { classes, attrs, .. } if classes.len() == 1 && attrs.len() == 1)
+            matches!(&stmts[16].kind, StmtKind::Edge { classes, attrs, .. } if classes.len() == 1 && attrs.len() == 1)
         );
         assert!(
             matches!(&stmts[4].kind, StmtKind::Theme { preset: Some(_), attrs } if attrs.len() == 2)
@@ -472,7 +538,7 @@ mod tests {
             }
         ));
         assert!(matches!(
-            &stmts[15].kind,
+            &stmts[16].kind,
             StmtKind::Edge { directed: true, .. }
         ));
         assert!(matches!(
@@ -487,21 +553,51 @@ mod tests {
 
     #[test]
     fn parses_arrow_chains() {
-        let (stmts, errs) = parse("a -> b, c \"x\" -- d  : hub color=#f00\n");
+        let (stmts, errs) = parse("style hub\nhub\na -> b, c \"x\" -- d color=#f00\nend\n");
         assert!(errs.is_empty());
-        assert_eq!(stmts.len(), 3);
+        assert_eq!(stmts.len(), 6);
         assert!(
-            matches!(&stmts[0].kind, StmtKind::Edge { from, to, directed: true, label: Some(_), classes, .. } if from.text == "a" && to.len() == 2 && classes.len() == 1)
+            matches!(&stmts[2].kind, StmtKind::Edge { from, to, directed: true, label: Some(_), classes, .. } if from.text == "a" && to.len() == 2 && classes.len() == 1)
         );
         assert!(
-            matches!(&stmts[2].kind, StmtKind::Edge { from, directed: false, label: None, attrs, .. } if from.text == "c" && attrs.len() == 1)
+            matches!(&stmts[4].kind, StmtKind::Edge { from, directed: false, label: None, attrs, .. } if from.text == "c" && attrs.len() == 1)
         );
         assert_eq!(parse("a -> b ->\n").1.len(), 1);
     }
 
     #[test]
+    fn style_blocks_apply_to_lines() {
+        let src = "style step\nstyle nn_block\nstyle radial\nstep\n  a \"A\" color=#f00\n  nn.block\n    e\n  end\n  a -> e\nend\nnode radial\nradial -> a\n";
+        let (stmts, errs) = parse(src);
+        assert!(errs.is_empty());
+        let classes = |k: &StmtKind| match k {
+            StmtKind::Node { classes, .. } | StmtKind::Edge { classes, .. } => {
+                classes.iter().map(|c| c.text.clone()).collect::<Vec<_>>()
+            }
+            k => panic!("not a node or edge: {k:?}"),
+        };
+        let lines: Vec<_> = stmts
+            .iter()
+            .filter(|s| matches!(s.kind, StmtKind::Node { .. } | StmtKind::Edge { .. }))
+            .map(|s| classes(&s.kind))
+            .collect();
+        assert_eq!(lines[0], vec!["step"]);
+        assert_eq!(lines[1], vec!["step", "nn.block"]);
+        assert_eq!(lines[2], vec!["step"]);
+        assert!(lines[3].is_empty() && lines[4].is_empty(), "outside the block");
+        assert!(matches!(&stmts.last().unwrap().kind, StmtKind::Edge { from, .. } if from.text == "radial"));
+    }
+
+    #[test]
+    fn style_block_errors() {
+        assert_eq!(parse("node a\nnode b\na -> b : x\n").1.len(), 1, "`: NAME` is gone");
+        assert_eq!(parse("style s\ns\nnode a\n").1.len(), 1, "no `end`");
+        assert_eq!(parse("node a\nend\n").1.len(), 1, "stray `end`");
+    }
+
+    #[test]
     fn recovers_after_bad_line() {
-        let (stmts, errs) = parse("node a\nnode = b\nnode c\nfrobnicate\n");
+        let (stmts, errs) = parse("node a\nnode = b\nnode c\nfrobnicate x\n");
         assert_eq!(stmts.len(), 2);
         assert_eq!(errs.len(), 2);
     }

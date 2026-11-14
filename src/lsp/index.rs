@@ -316,10 +316,13 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
     let mut last: Option<(Kind, String)> = None;
     for st in &stmts {
         let k = &st.kind;
-        if !matches!(
-            k,
-            StmtKind::Body(_) | StmtKind::Cells(_) | StmtKind::Edge { .. }
-        ) {
+        let bare = matches!(k, StmtKind::Node { .. }) && !b.text(st.span).starts_with("node");
+        if !bare
+            && !matches!(
+                k,
+                StmtKind::Body(_) | StmtKind::Cells(_) | StmtKind::Edge { .. } | StmtKind::Open(_)
+            )
+        {
             b.keyword(st.span);
         }
         match k {
@@ -332,7 +335,8 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
                 }
                 continue;
             }
-            StmtKind::Title(_) => {}
+            StmtKind::Title(_) | StmtKind::End => {}
+            StmtKind::Open(c) => b.classes(std::slice::from_ref(c)),
             StmtKind::Root(n) => b.occ(Kind::Node, n, false),
             StmtKind::Layout { kind, attrs } => {
                 b.spot(
@@ -384,11 +388,11 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
             StmtKind::Node {
                 id,
                 title,
-                classes,
+                classes: _,
                 attrs,
+                ..
             } => {
                 b.occ(Kind::Node, id, true);
-                b.classes(classes);
                 b.attrs("node", attrs);
                 let text = b.text(st.span);
                 let fresh = !b.out.nodes.contains_key(&id.text);
@@ -409,17 +413,16 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
             }
             StmtKind::Key {
                 label,
-                classes,
+                classes: _,
                 attrs,
             } => {
-                b.classes(classes);
                 b.attrs("key", attrs);
                 b.symbol(label.clone(), "key".into(), 14, st.span, st.span);
             }
             StmtKind::Edge {
                 from,
                 to,
-                classes,
+                classes: _,
                 attrs,
                 ..
             } => {
@@ -427,19 +430,17 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
                 for t in to {
                     b.occ(Kind::Node, t, false);
                 }
-                b.classes(classes);
                 b.attrs("edge", attrs);
             }
             StmtKind::Group {
                 title,
                 items,
-                classes,
+                classes: _,
                 attrs,
             } => {
                 for n in items {
                     b.occ(Kind::Node, n, false);
                 }
-                b.classes(classes);
                 b.attrs("group", attrs);
                 let names: Vec<&str> = items.iter().map(|n| n.text.as_str()).collect();
                 let name = title.clone().unwrap_or_else(|| "group".into());

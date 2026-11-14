@@ -14,7 +14,7 @@
 (color) @constant
 
 (attribute key: (name) @property)
-(class (name) @type)
+(block_statement style: (qualified_name (name) @type))
 (style_statement name: (name) @type)
 (flag (name) @constant.builtin)
 (relation (name) @keyword.operator)
@@ -26,6 +26,7 @@
 (node_statement id: (name) @label)
 (def_statement name: (name) @function)
 (use_statement name: (name) @function.call)
+(call_statement name: (qualified_name (name) @function.call))
 (def_statement parameter: (name) @variable.parameter)
 (expression) @embedded
 (arguments) @embedded

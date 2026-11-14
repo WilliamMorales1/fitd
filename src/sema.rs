@@ -593,7 +593,14 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 ),
             },
             StmtKind::Style { name, attrs } => {
-                if let Some((prev, ..)) = styles.get(&name.text) {
+                if crate::parse::KEYWORDS.contains(&name.text.as_str()) {
+                    s.diags.push(
+                        Diag::error("E0015", format!("style `{}` is named after a keyword", name.text))
+                            .primary(name.span, "keyword")
+                            .note("a line holding only a style name opens a style block, so the name cannot be a statement word")
+                            .help(format!("rename it, such as `{}_style`", name.text)),
+                    );
+                } else if let Some((prev, ..)) = styles.get(&name.text) {
                     let d = Diag::error("E0003", format!("style `{}` declared twice", name.text))
                         .primary(name.span, "declared again here");
                     s.diags.push(d.secondary(*prev, "first declared here"));
@@ -602,6 +609,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 }
                 last_node = None;
             }
+            // Body rows after a one-node block still belong to that node.
+            StmtKind::Open(_) | StmtKind::End => {}
             _ => last_node = None,
         }
     }
@@ -800,7 +809,10 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 }
             }
             StmtKind::Node {
-                id, classes, attrs, ..
+                id,
+                classes,
+                attrs,
+                ..
             } => {
                 let Some(&v) = s.ids.get(&id.text) else {
                     continue;
@@ -1005,7 +1017,19 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             StmtKind::Constraint { hard, rel, attrs } => {
                 constraints.extend(constraint(&mut s, *hard, rel, attrs, st.span));
             }
-            StmtKind::Body(_) | StmtKind::Cells(_) | StmtKind::Include(_) => {}
+            StmtKind::Open(c) => {
+                if !styles.contains_key(&c.text) && !styles.contains_key(&c.text.replace('.', "_")) {
+                    let names: Vec<&str> = styles.keys().map(String::as_str).collect();
+                    let d = Diag::error("E0004", format!("unknown style `{}`", c.text))
+                        .primary(c.span, "not a statement or declared style");
+                    let d = match suggest(&c.text, names.iter().copied()) {
+                        Some(h) => d.help(h),
+                        None => d,
+                    };
+                    s.diags.push(d.note(format!("to declare an unstyled node, write `node {}`", c.text)));
+                }
+            }
+            StmtKind::Body(_) | StmtKind::Cells(_) | StmtKind::Include(_) | StmtKind::End => {}
         }
     }
     for (i, classes) in key_classes {
@@ -1522,7 +1546,7 @@ mod tests {
     #[test]
     fn resolves_forward_references_and_styles() {
         let (g, d) = run(
-            "a -> b\nstyle hub shape=circle color=#123456\nnode a  : hub\n| line\nnode b color=#abcdef shape=diamond\n",
+            "a -> b\nstyle hub shape=circle color=#123456\nhub\n  node a\nend\n| line\nnode b color=#abcdef shape=diamond\n",
         );
         assert!(d.is_empty());
         assert_eq!(g.edges.len(), 1);
@@ -1533,9 +1557,21 @@ mod tests {
     }
 
     #[test]
+    fn style_blocks_style_their_nodes() {
+        let (g, d) = run("style radial color=#CC79A7\nradial\n  coffee \"Coffee\"\nend\nnode radial\nradial -> coffee\n");
+        assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        assert_eq!(g.nodes.len(), 2);
+        assert_eq!(g.nodes[0].color.as_deref(), Some("#CC79A7"));
+        assert_eq!(g.nodes[1].color, None);
+        assert_eq!(codes("style node color=#f00\nnode a\n"), vec!["E0015"]);
+        assert_eq!(codes("style for color=#f00\nnode a\n"), vec!["E0015"]);
+        assert_eq!(codes("style step\nstp\n  a\nend\nnode b\n"), vec!["E0004", "W0203"]);
+    }
+
+    #[test]
     fn module_qualified_classes_map_to_prefixed_styles() {
         let (g, d) = run(
-            "style nn_block color=#CC79A7\nnode a : nn.block\n",
+            "style nn_block color=#CC79A7\nnn.block\n  a\nend\n",
         );
         assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
         assert_eq!(g.nodes[0].color.as_deref(), Some("#CC79A7"));
@@ -1544,7 +1580,7 @@ mod tests {
     #[test]
     fn themes_and_node_colors() {
         let (g, d) = run(
-            "theme dark background=#000 palette=\"#f00, #0f0\"\nfont 7pt family=\"DejaVu Sans\"\nstyle s fill=#fff\nnode a  : s text=#123\n",
+            "theme dark background=#000 palette=\"#f00, #0f0\"\nfont 7pt family=\"DejaVu Sans\"\nstyle s fill=#fff\ns\n  node a text=#123\nend\n",
         );
         assert!(
             d.is_empty(),
@@ -1574,7 +1610,7 @@ mod tests {
     #[test]
     fn edge_colors_and_groups() {
         let (g, d) = run(
-            "style hot color=#f00 shape=circle\nnode a\nnode b\nnode c\na -> b  : hot\na -> c color=#00f\ngroup \"G\" b, c color=#0f0\n",
+            "style hot color=#f00 shape=circle\nnode a\nnode b\nnode c\nhot\n  a -> b\nend\na -> c color=#00f\ngroup \"G\" b, c color=#0f0\n",
         );
         assert!(
             d.is_empty(),
@@ -1590,7 +1626,7 @@ mod tests {
         );
         assert_eq!(codes("node a\nnode b\na -> b width=2pt\n"), vec!["E0005"]);
         let (g, d) = run(
-            "style is head=triangle\nnode a\nnode b\na -> b  : is\na -- b tail=diamond line=dotted\n",
+            "style is head=triangle\nnode a\nnode b\nis\n  a -> b\nend\na -- b tail=diamond line=dotted\n",
         );
         assert!(d.is_empty());
         assert_eq!(
@@ -1625,7 +1661,7 @@ mod tests {
     #[test]
     fn keys_collect_entries() {
         let (g, d) =
-            run("node a\nstyle s color=#f00\nkey \"X\"  : s line=dashed\nkey \"Y\" shape=circle\n");
+            run("node a\nstyle s color=#f00\ns\n  key \"X\" line=dashed\nend\nkey \"Y\" shape=circle\n");
         assert!(d.is_empty());
         assert_eq!(g.key.len(), 2);
         assert_eq!(g.key[0].line, Some(Dash::Dashed));
@@ -1655,7 +1691,7 @@ mod tests {
             codes("node a\npage 594x420mm portrait margin=1cm\n"),
             Vec::<&str>::new()
         );
-        assert_eq!(codes("node a  : nope\nstyle x\n"), vec!["E0004", "W0203"]);
+        assert_eq!(codes("nope\n  node a\nend\nstyle x\n"), vec!["E0004", "W0203"]);
     }
 
     #[test]

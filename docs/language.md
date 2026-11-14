@@ -26,7 +26,8 @@ Includes are expanded before macro processing. Included paths are resolved relat
 Source          = { Newline | Statement, Newline } ;
 
 Statement       = Title | Root | Layout | Page | Font | Theme | Style
-                | Node | Body | Cells | Edge | Group | Key | Constraint | Include ;
+                | Node | Body | Cells | Edge | Group | Key | Constraint | Include
+                | StyleBlock ;
 
 Title           = "title", String ;
 Root            = "root", Name ;
@@ -35,14 +36,15 @@ Page            = "page", Value, { Name }, { Attribute } ;
 Font            = "font", Value, { Attribute } ;
 Theme           = "theme", [ Name ], { Attribute } ;
 Style           = "style", Name, { Attribute } ;
-Node            = "node", Name, [ String ], { Class | Attribute } ;
+StyleBlock      = QualName, Newline, { Statement, Newline }, "end" ;
+Node            = [ "node" ], Name, [ String ], { Attribute } ;
 Body            = BodyLine ;
 Cells           = CellRow ;
-Group           = "group", [ String ], NameList, { Class | Attribute } ;
-Key             = "key", String, { Class | Attribute } ;
+Group           = "group", [ String ], NameList, { Attribute } ;
+Key             = "key", String, { Attribute } ;
 Include         = "include", String ;
 
-Edge            = Name, EdgeHop, { EdgeHop }, { Class | Attribute } ;
+Edge            = Name, EdgeHop, { EdgeHop }, { Attribute } ;
 EdgeHop         = EdgeOperator, TargetList, [ String ] ;
 EdgeOperator    = "->" | "--" | "..>" | ".." ;
 TargetList      = Name, { [ "," ], Name } ;
@@ -54,7 +56,6 @@ RelationChain   = Name, Name, Name, { Name, Name } ;
 Alignment       = "align", Name, "(", NameList, ")" ;
 Position        = Name, "at", Name ;
 
-Class           = ":", QualName ;
 Attribute       = Name, "=", Value ;
 Value           = Atom, [ "..", Atom ] ;
 Atom            = Name | Number | Color | String ;
@@ -95,15 +96,20 @@ Whitespace separates tokens. Spaces and tabs may appear between tokens. Whitespa
 
 ### Node declarations and body lines
 
-`node ID ["title"]` declares a node. When title is omitted, identifier is used as title. Style references and attributes may follow declaration in any order. A style reference uses `: NAME` and names a previously declared style. Repeat `:` to apply multiple styles. Module classes use qualified names such as `nn.block`, mapping to module-prefixed style `nn_block`.
+`node ID ["title"] [attributes]` declares a node. When title is omitted, identifier is used as title.
+
+A line holding only a style name opens a style block, and `end` closes it. Every node, edge, group, and key inside the block takes that style, so a style is written once for many lines. Module styles use qualified names: `nn.block` opens a block of module-prefixed style `nn_block`. Blocks nest, and inner styles apply after outer ones. Inside a block a node line may drop `node`: `ID ["title"] [attributes]`. A lone name inside a block is a node unless it is a declared style, so a node and a style may share a name; a lone undeclared name outside any block is E0004. A block may hold `for`, `if`, and `use`, and may sit inside them; it must close in the same macro body it opens in. The older `: NAME` suffix is an error.
 
 A body line begins with `|` in first non-whitespace position. It appends text to most recently declared node. Multiple body lines may follow one declaration. A body line without preceding node is invalid.
 
 Spaces after the one following `|` indent the line in box and frameless nodes, as in pseudocode; wrapped continuation lines keep that indent. In any node text, `**` toggles bold, so `**if** x **then**` sets the keywords in bold.
 
 ```fitd
-node leaf "Leaf" : plant shape=box color=#2E7D32
-| converts light into stored energy
+plant
+  leaf "Leaf" color=#2E7D32
+  | converts light into stored energy
+  root "Root"
+end
 ```
 
 ### Figure rows
@@ -112,15 +118,15 @@ A figure row begins with `~` in first non-whitespace position. It appends one ro
 
 Cells are whitespace-separated. Each cell is `[SHADE][LABEL][*SPAN]`:
 
-| Cell | Meaning |
-| --- | --- |
-| `#` | Solid cell |
-| `%NN` | Cell shaded at NN percent of the accent color (`%0`..`%100`) |
-| `.` | Outlined cell |
-| `_` | Gap: column advances, nothing is drawn |
-| `NAME` or `"two words"` | Outlined cell carrying that label |
-| `#NAME` or `%60"two words"` | Shaded cell carrying that label |
-| `#NAME*3` | Cell spanning three columns |
+| Cell                        | Meaning                                                      |
+| --------------------------- | ------------------------------------------------------------ |
+| `#`                         | Solid cell                                                   |
+| `%NN`                       | Cell shaded at NN percent of the accent color (`%0`..`%100`) |
+| `.`                         | Outlined cell                                                |
+| `_`                         | Gap: column advances, nothing is drawn                       |
+| `NAME` or `"two words"`     | Outlined cell carrying that label                            |
+| `#NAME` or `%60"two words"` | Shaded cell carrying that label                              |
+| `#NAME*3`                   | Cell spanning three columns                                  |
 
 A `*N` suffix is recognized only when digits end the cell, so a label such as `a*t` is kept intact. Labels on shaded cells are drawn in the page background color once shading reaches 55 percent, and in the text color below it.
 
@@ -174,30 +180,34 @@ pre ..> enc "init"
 
 An edge statement begins with one or more source node identifiers, separated by commas, and contains one or more hops. Each hop contains operator, target list, and optional quoted label. All hops in one statement may be followed by shared classes and attributes.
 
-| Operator | Direction | Link type |
-| --- | --- | --- |
-| `->` | Directed | Flow edge |
-| `--` | Undirected | Flow edge |
-| `..>` | Directed | Cross-link |
-| `..` | Undirected | Cross-link |
+| Operator | Direction  | Link type  |
+| -------- | ---------- | ---------- |
+| `->`     | Directed   | Flow edge  |
+| `--`     | Undirected | Flow edge  |
+| `..>`    | Directed   | Cross-link |
+| `..`     | Undirected | Cross-link |
 
 Each target in a hop becomes a source for next hop. Thus `a -> b, c -> d` creates edges from `a` to `b` and `c`, then from both `b` and `c` to `d`. A source list fans in: `a, b -> c` creates `a -> c` and `b -> c`, each with the hop's label.
 
 ```fitd
-a -> b, c "produces" -- d : important color=#1565C0
+important
+  a -> b, c "produces" -- d color=#1565C0
+end
 ```
 
 Edges and edge styles take `color`, `head`, `tail`, and `line`. `head` marks the target end and `tail` the source end, each one of `arrow`, `triangle` (hollow), `diamond`, `odiamond` (hollow diamond), `crow` (crow's foot), or `none`. A directed edge defaults to `head=arrow`, an undirected one to none; `tail` defaults to none. `line=solid|dashed|dotted` sets the dash pattern; `..>` and `..` default to dashed. Marks sit inside the arrow clearance, so they never change the layout.
 
 ```fitd
 style is head=triangle
-circle -> shape : is
+is
+  circle -> shape
+end
 canvas -- shape tail=diamond line=dotted
 ```
 
 ### Groups
 
-`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn`. A `: NAME` after the members sets the frame color from that style, so a group, its nodes, and its `key` entry can share one style.
+`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn`. A group inside a style block takes its frame color from that style, so a group, its nodes, and its `key` entry can share one block.
 
 `times=N` (2 to 99) marks the framed subgraph as repeated N times: the frame is drawn dashed and `Nx` is prefixed to its title, which is the conventional notation for a repeated stack of layers. A value outside the range, or a non-numeric one, produces E0006.
 
@@ -207,7 +217,7 @@ group "Layers" attn, ff times=2 color=#3949AB
 
 ### Keys
 
-`key "LABEL" [: NAME] [attributes]` adds one legend entry. Entries are drawn in centered rows along the bottom of the page, wrapping when a row is full; the solver lays out the diagram in the space above. Swatches take `color`, `fill`, and `shape` from classes and attributes, as nodes do. `line=solid|dashed|dotted` draws a line swatch for edges instead of a node swatch, and `head=` adds a mark at its right end. A key whose classes are used only by groups draws an open frame swatch. `page ... keysize=20pt` sets the swatch and text size (default 0.85 of the chosen body font); line thickness scales with it. In split output, keys repeat on every page.
+`key "LABEL" [attributes]` adds one legend entry. Entries are drawn in centered rows along the bottom of the page, wrapping when a row is full; the solver lays out the diagram in the space above. Swatches take `color`, `fill`, and `shape` from classes and attributes, as nodes do. `line=solid|dashed|dotted` draws a line swatch for edges instead of a node swatch, and `head=` adds a mark at its right end. A key whose classes are used only by groups draws an open frame swatch. `page ... keysize=20pt` sets the swatch and text size (default 0.85 of the chosen body font); line thickness scales with it. In split output, keys repeat on every page.
 
 ```fitd
 key "Investment" line=solid color=#4FC3E0
@@ -225,15 +235,17 @@ layout lanes order=source
 style pt shape=none
 node c "Client"
 node s "Server"
-node c1 "" : pt lane=c
-node s1 "" : pt lane=s
+pt
+  c1 "" lane=c
+  s1 "" lane=s
+end
 c1 -> s1 "GET /orders"
 require align row(c1, s1)
 ```
 
 The `seq` module wraps this as `seq.actor`, `seq.msg`, and `seq.reply`.
 
-`layout venn` draws a Venn diagram. It takes no attributes. Each group is a set circle, drawn in its `: NAME` color or the next palette color with its title outside the circle. Groups may share nodes in any way, and every node sits in the region of exactly the sets that list it; a node in no group sits outside all circles. Nodes default to `shape=none`. Two sets sit side by side and three sit in a triangle, with the overlap sized for the most crowded region. A fourth set gives E0010:
+`layout venn` draws a Venn diagram. It takes no attributes. Each group is a set circle, drawn in its style block's color or the next palette color with its title outside the circle. Groups may share nodes in any way, and every node sits in the region of exactly the sets that list it; a node in no group sits outside all circles. Nodes default to `shape=none`. Two sets sit side by side and three sit in a triangle, with the overlap sized for the most crowded region. A fourth set gives E0010:
 
 ```fitd
 layout venn
@@ -264,7 +276,7 @@ A ratio `W:H` such as `16:9`, `4:3`, or `1.414:1` fixes only the page shape. fit
 
 ### Themes and styles
 
-`theme [PRESET] [attributes]` selects theme and applies overrides. Presets are `paper`, `light`, `dark`, and `mono`; default preset is `paper`. `style NAME attributes` declares reusable node or edge attributes. A declaration may use multiple classes; class attributes are applied in order.
+`theme [PRESET] [attributes]` selects theme and applies overrides. Presets are `paper`, `light`, `dark`, and `mono`; default preset is `paper`. `style NAME attributes` declares reusable node or edge attributes. A declaration may use multiple classes; class attributes are applied in order. A style name cannot be a statement or macro keyword (`node`, `group`, `for`, ...), since a line holding only that name opens a style block; such a name is E0015.
 
 On nodes, edges, and groups, `color`, `fill`, and `text` specify border, fill, and text colors where supported. `shape` accepts `box`, `circle`, `diamond`, or `none` for nodes and styles, and `stack` accepts 1 to 8 copies for nodes and styles. `shape=none` draws the text and figure with no frame or fill, for margin annotations and lane labels; such a node still participates in layout, edges, and constraints. Attribute support depends on statement kind; unknown or ill-typed attributes produce diagnostics.
 
@@ -273,7 +285,9 @@ On nodes, edges, and groups, `color`, `fill`, and `text` specify border, fill, a
 ```fitd
 theme light background=#FFFFFF text=#24292F
 style plant shape=box color=#2E7D32
-node leaf "Leaf" : plant
+plant
+  leaf "Leaf"
+end
 ```
 
 ### Constraints
@@ -308,23 +322,23 @@ b, c -> d
 
 `include "PATH"` inserts source file before macro expansion and parsing. Path is resolved relative to including file. Include cycles and missing files produce diagnostics.
 
-A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name(args)` on a line of its own; `use` is not needed. Styles are global and keep the module prefix; use `: nn.layer` for style `nn_layer`.
+A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name(args)` on a line of its own; `use` is not needed. Styles are global and keep the module prefix; open a block with `nn.layer` for style `nn_layer`.
 
-| Module | Contents |
-| --- | --- |
-| `nn` | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus classes such as `: nn.block` and `: nn.data` |
-| `flow` | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow.key()` |
-| `palette` | Okabe-Ito color-blind-safe classes `c1`..`c8` |
-| `grid` | Figure-row grids: `grid.head`, `grid.row`, `grid.title_row` (tables), `grid.heat`, `grid.shade` (heat maps, confusion matrices), `grid.bar` (unit bar charts), `grid.task`, `grid.scale` (Gantt), `grid.layers` (layer stacks), `grid.quad` (2x2 matrices) |
-| `arch` | Architecture and data flow: `arch.client`, `arch.service`, `arch.store`, `arch.queue`, `arch.ext`, `arch.layers`, the `arch_zone` group style, `arch.key()` |
-| `uml` | UML class and state diagrams: `uml.class`, `uml.iface`, `uml.state`, `uml.start`, `uml.final`, relations `uml.is` (hollow triangle), `uml.has` (diamond), `uml.uses` (dashed), `uml.key()` |
-| `er` | Entity-relationship diagrams: `er.entity`, `er.weak`, `er.rel` with cardinality labels and crow's feet, `er.relation` diamonds |
-| `tree` | Syntax trees, decision trees, org charts: `tree.cat`, `tree.word`, `tree.q`, `tree.leaf`, `tree.unit`, `tree.kids` |
-| `time` | Timelines: `time.event`, `time.mile`, `time.chain` |
-| `seq` | UML sequence diagrams for `layout lanes`: `seq.actor`, `seq.msg`, `seq.reply` (dashed) |
-| `venn` | Venn diagrams for `layout venn`: `venn.two`, `venn.three`, `venn.items`, `venn.set`, set styles `venn_a`..`venn_c` |
-| `algo` | Algorithm and pseudocode blocks: `algo.block` with `;`-separated, indentable lines and `**` keywords |
-| `model` | Research models: `model.iv`, `model.dv`, `model.med`, `model.mod`, `model.ctl`, `model.hyp`, `model.key()` |
+| Module    | Contents                                                                                                                                                                                                                                                   |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nn`      | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus classes such as `: nn.block` and `: nn.data`                                                                  |
+| `flow`    | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow.key()`                                                                                                                                                               |
+| `palette` | Okabe-Ito color-blind-safe classes `c1`..`c8`                                                                                                                                                                                                              |
+| `grid`    | Figure-row grids: `grid.head`, `grid.row`, `grid.title_row` (tables), `grid.heat`, `grid.shade` (heat maps, confusion matrices), `grid.bar` (unit bar charts), `grid.task`, `grid.scale` (Gantt), `grid.layers` (layer stacks), `grid.quad` (2x2 matrices) |
+| `arch`    | Architecture and data flow: `arch.client`, `arch.service`, `arch.store`, `arch.queue`, `arch.ext`, `arch.layers`, the `arch_zone` group style, `arch.key()`                                                                                                |
+| `uml`     | UML class and state diagrams: `uml.class`, `uml.iface`, `uml.state`, `uml.start`, `uml.final`, relations `uml.is` (hollow triangle), `uml.has` (diamond), `uml.uses` (dashed), `uml.key()`                                                                 |
+| `er`      | Entity-relationship diagrams: `er.entity`, `er.weak`, `er.rel` with cardinality labels and crow's feet, `er.relation` diamonds                                                                                                                             |
+| `tree`    | Syntax trees, decision trees, org charts: `tree.cat`, `tree.word`, `tree.q`, `tree.leaf`, `tree.unit`, `tree.kids`                                                                                                                                         |
+| `time`    | Timelines: `time.event`, `time.mile`, `time.chain`                                                                                                                                                                                                         |
+| `seq`     | UML sequence diagrams for `layout lanes`: `seq.actor`, `seq.msg`, `seq.reply` (dashed)                                                                                                                                                                     |
+| `venn`    | Venn diagrams for `layout venn`: `venn.two`, `venn.three`, `venn.items`, `venn.set`, set styles `venn_a`..`venn_c`                                                                                                                                         |
+| `algo`    | Algorithm and pseudocode blocks: `algo.block` with `;`-separated, indentable lines and `**` keywords                                                                                                                                                       |
+| `model`   | Research models: `model.iv`, `model.dv`, `model.med`, `model.mod`, `model.ctl`, `model.hyp`, `model.key()`                                                                                                                                                 |
 
 [examples/gallery](../examples/gallery/) has one diagram per common academic figure type, each built on these modules.
 
@@ -332,12 +346,14 @@ A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bu
 include "nn"
 nn.input("x", "Tokens", "B x L")
 nn.layer("e", "Encoder", "d 64", 2)
-node block "Block" : nn.block
+nn.block
+  block "Block"
+end
 nn.mask("m", "Causal mask", 4, 1)
 x -> e -> m
 ```
 
-`include "user/LIB"` reads `LIB.fitd` from the including file's directory and treats it as a library: its templates are called as `LIB.name(args)`, the same way as bundled modules, and inside the library they can be called unqualified with `use name(args)`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and use `: LIB.box` for style `LIB_box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
+`include "user/LIB"` reads `LIB.fitd` from the including file's directory and treats it as a library: its templates are called as `LIB.name(args)`, the same way as bundled modules, and inside the library they can be called unqualified with `use name(args)`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and open a block with `LIB.box` for style `LIB_box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
 
 ```fitd
 include "user/runbook"
@@ -356,9 +372,9 @@ Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for no
 
 ```fitd
 def row(cells)
-for i in 1..count(cells, ";")
-| ${part(cells, ";", i)}
-end
+  for i in 1..count(cells, ";")
+  | ${part(cells, ";", i)}
+  end
 end
 ```
 
@@ -374,6 +390,6 @@ end
 
 ![Diagnostic code families and individual codes](language/08-diagnostics.png)
 
-Node identifiers must be declared with `node` before being referenced by edges, groups, or constraints. Node and style declarations must be unique. Styles must exist when referenced. Layouts, relation operators, positions, attributes, and attribute values are validated according to statement context.
+Node identifiers must be declared, with `node` or a style name, before being referenced by edges, groups, or constraints. Node and style declarations must be unique. Styles must exist when referenced. Layouts, relation operators, positions, attributes, and attribute values are validated according to statement context.
 
 Diagnostic codes use three ranges: E00xx for front-end errors, E01xx for layout errors, and W02xx for warnings. Warnings do not block output. `fitd explain CODE` prints detailed explanation for a diagnostic code. Source locations are retained through includes and macro expansion where possible.

@@ -32,11 +32,11 @@ If the user wants the source kept, write it to `NAME.fitd` and build with `fitd 
 
 - Concept map or mind map (one topic branching out): the default, `layout radial`. Pick the center with `root=ID`; otherwise fitd picks it.
 - Process, pipeline, timeline, decision flow: `layout layered dir=down` or `dir=right`. Long flows wrap into bands; `bands=1` forbids wrapping. Trees (org chart, syntax tree): add `order=source` to keep children in edge order.
-- `->` edges build the hierarchy or flow. `..>` draws a dashed cross link that does not change the structure. Use cross links for "relates to" connections. Hops chain on one line: `a -> b -> c, d` is `a -> b`, `b -> c`, `b -> d`, and `a, b -> c` fans in; `node a row=1 col=2` puts nodes on a grid (squares, 2x2 matrices); a trailing `: NAME` or `color=` applies to every edge in it. `--` and `..` are the same without an arrowhead, for relations with no direction.
+- `->` edges build the hierarchy or flow. `..>` draws a dashed cross link that does not change the structure. Use cross links for "relates to" connections. Hops chain on one line: `a -> b -> c, d` is `a -> b`, `b -> c`, `b -> d`, and `a, b -> c` fans in; `node a row=1 col=2` puts nodes on a grid (squares, 2x2 matrices); a trailing `color=` applies to every edge in it. `--` and `..` are the same without an arrowhead, for relations with no direction.
 
 ## Repetition
 
-When many nodes share one shape (numbered steps, one box per service, layers, recursion trees), write a loop or a template instead of copying lines: `for i in 1..n` or `for i, x in a, b, c` ... `end`, `def NAME(args)` ... `end` with `use NAME(...)`, and `${expr}` inside any line. Errors on generated lines are reported at the template line.
+When many nodes or edges share one style, write the style once as a block: `style step color=#0072B2`, then a line `step`, the lines (`lint "Lint"`, `test "Test"`, `a -> b`), then `end`. Node lines inside a block drop `node`; module styles open blocks too (`nn.block`). Outside blocks, keep `node` for unstyled nodes. When many nodes share one shape (numbered steps, one box per service, layers, recursion trees), write a loop or a template instead of copying lines: `for i in 1..n` or `for i, x in a, b, c` ... `end`, `def NAME(args)` ... `end` with `use NAME(...)`, and `${expr}` inside any line. Errors on generated lines are reported at the template line.
 
 ## Start minimal
 

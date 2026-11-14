@@ -17,7 +17,9 @@ end
 
 def set_acc(title, style, acc, ids, i)
 if i > count(ids, ",")
-group "${title}" ${acc} : ${style}
+${style}
+  group "${title}" ${acc}
+end
 else if part(ids, ",", i) == ""
 use set_acc(title, style, acc, ids, i + 1)
 else if acc == ""

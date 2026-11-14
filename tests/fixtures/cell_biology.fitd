@@ -7,39 +7,49 @@ style process color=#2E7D32
 style output color=#6A1B9A
 style molecule color=#1565C0 shape=circle
 
-node glucose "Glucose"  : molecule
-node glycolysis "Glycolysis"  : process
-| cytosol; glucose -> pyruvate
-| net 2 ATP and 2 NADH per glucose
-node pyruvate "Pyruvate oxidation"  : process
-| mitochondrion; pyruvate -> acetyl-CoA
-| releases CO2 and produces NADH
-node krebs "Citric acid cycle"  : process
-| mitochondrial matrix
-| CO2, NADH, FADH2, and a small ATP yield
-node carriers "Electron carriers"  : process
-| NADH and FADH2 carry high-energy electrons
-| oxidation transfers energy to the membrane
-node etc "Electron transport chain"  : process
-| inner mitochondrial membrane
-| electron flow powers proton pumping
-node gradient "Proton gradient"  : process
-| stored electrochemical potential
-| high H+ outside the matrix
-node atp "ATP synthase"  : output fill=#6A1B9A
-| chemiosmosis makes ATP
-| proton flow drives phosphorylation of ADP
-node oxygen "Oxygen"  : molecule
-node water "Water"  : molecule
-node yield "Energy yield"  : output
-| about 30-32 ATP per glucose in eukaryotes
-| yield varies with shuttle and membrane leak
-node anaerobic "Fermentation"  : output
-| regenerates NAD+ without an electron chain
-| lower ATP yield; accepts organic electrons
-node regulation "Regulation"  : output
-| ATP and NADH inhibit early steps
-| ADP signals energy demand
+molecule
+  glucose "Glucose"
+end
+process
+  glycolysis "Glycolysis"
+  | cytosol; glucose -> pyruvate
+  | net 2 ATP and 2 NADH per glucose
+  pyruvate "Pyruvate oxidation"
+  | mitochondrion; pyruvate -> acetyl-CoA
+  | releases CO2 and produces NADH
+  krebs "Citric acid cycle"
+  | mitochondrial matrix
+  | CO2, NADH, FADH2, and a small ATP yield
+  carriers "Electron carriers"
+  | NADH and FADH2 carry high-energy electrons
+  | oxidation transfers energy to the membrane
+  etc "Electron transport chain"
+  | inner mitochondrial membrane
+  | electron flow powers proton pumping
+  gradient "Proton gradient"
+  | stored electrochemical potential
+  | high H+ outside the matrix
+end
+output
+  atp "ATP synthase" fill=#6A1B9A
+  | chemiosmosis makes ATP
+  | proton flow drives phosphorylation of ADP
+end
+molecule
+  oxygen "Oxygen"
+  water "Water"
+end
+output
+  yield "Energy yield"
+  | about 30-32 ATP per glucose in eukaryotes
+  | yield varies with shuttle and membrane leak
+  anaerobic "Fermentation"
+  | regenerates NAD+ without an electron chain
+  | lower ATP yield; accepts organic electrons
+  regulation "Regulation"
+  | ATP and NADH inhibit early steps
+  | ADP signals energy demand
+end
 
 glucose -> glycolysis -> pyruvate "2 pyruvate" -> krebs
 glycolysis -> carriers

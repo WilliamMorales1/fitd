@@ -12,45 +12,57 @@ node ex "examples/* : fitd"
 | every one: -> and ..> edges, edge labels, node bodies, style
 | fonts: all give a range, debugging fixes one size
 
-node radial "Radial maps"  : radial
-node down "Layered, dir=down"  : down
-node right "Layered, dir=right"  : right
+radial
+  node radial "Radial maps"
+end
+down
+  node down "Layered, dir=down"
+end
+right
+  node right "Layered, dir=right"
+end
 ex -> radial, down, right
 
-node coffee "coffee.fitd"  : radial
-| theme palette=, fill=, text=, landscape page
-| undirected -- and .., group in radial layout
-| left-of, align row, at, prefer ... weight=
-node group_theory "group_theory.fitd"  : radial
-| no layout or theme: radial is the default
-| root statement, \n in titles, math markup
+radial
+  coffee "coffee.fitd"
+  | theme palette=, fill=, text=, landscape page
+  | undirected -- and .., group in radial layout
+  | left-of, align row, at, prefer ... weight=
+  group_theory "group_theory.fitd"
+  | no layout or theme: radial is the default
+  | root statement, \n in titles, math markup
+end
 radial -> coffee, group_theory
 
-node compiler "compiler.fitd"  : down
-| theme dark with color overrides, shape=circle
-| edge  : style, group, near ... within=
-| align row, left-of gap=, prefer ... weight=
-node debugging "debugging.fitd"  : down
-| theme mono, one fixed font size, bands=1
-| shape=box and circle, \n in titles
-| right-of, below, align top
-node fib_calls "fib_calls.fitd"  : down
-| macros: recursive def and use, if, $${expr} in names
+down
+  compiler "compiler.fitd"
+  | theme dark with color overrides, shape=circle
+  | edge  : style, group, near ... within=
+  | align row, left-of gap=, prefer ... weight=
+  debugging "debugging.fitd"
+  | theme mono, one fixed font size, bands=1
+  | shape=box and circle, \n in titles
+  | right-of, below, align top
+  fib_calls "fib_calls.fitd"
+  | macros: recursive def and use, if, $${expr} in names
+end
 down -> compiler, debugging, fib_calls
 
-node release_pipeline "release_pipeline.fitd"  : right
-| bands=2, include of shared styles, arrow chains
-| theme color overrides, group, edge color=
-| chained left-of, align column, near ... within=
-node neural_net "neural_net.fitd"  : right
-| macros: for over a range, names(...)
-| group of generated nodes; W0206 by design
-node semester "semester.fitd"  : right
-| macros: for over a list with an index
-| if / else if / else, bands=3
-node fitd_language "fitd_language.fitd"  : right
-| fitd described in fitd: one of each kind of statement
-| settings, include, edge forms, nested groups
-| require and prefer, near, at, align
-| macros: for, if, def/use, names(), $${expr} escape
+right
+  release_pipeline "release_pipeline.fitd"
+  | bands=2, include of shared styles, arrow chains
+  | theme color overrides, group, edge color=
+  | chained left-of, align column, near ... within=
+  neural_net "neural_net.fitd"
+  | macros: for over a range, names(...)
+  | group of generated nodes; W0206 by design
+  semester "semester.fitd"
+  | macros: for over a list with an index
+  | if / else if / else, bands=3
+  fitd_language "fitd_language.fitd"
+  | fitd described in fitd: one of each kind of statement
+  | settings, include, edge forms, nested groups
+  | require and prefer, near, at, align
+  | macros: for, if, def/use, names(), $${expr} escape
+end
 right -> release_pipeline, neural_net, semester, fitd_language

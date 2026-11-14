@@ -7,7 +7,9 @@ style seq_reply head=arrow line=dashed
 
 # seq.actor(id, name): a participant heading its dashed lifeline.
 def actor(id, name)
-node ${id} "${name}"  : seq_actor
+seq_actor
+  node ${id} "${name}"
+end
 end
 
 # seq.msg(step, a, b, text): a call from a to b, below every earlier message.
@@ -21,8 +23,12 @@ use arrow(step, a, b, text, "seq_reply")
 end
 
 def arrow(step, a, b, text, kind)
-node ${step}_from ""  : seq_point lane=${a}
-node ${step}_to ""  : seq_point lane=${b}
-${step}_from -> ${step}_to "${text}" : ${kind}
+seq_point
+  node ${step}_from "" lane=${a}
+  node ${step}_to "" lane=${b}
+end
+${kind}
+  ${step}_from -> ${step}_to "${text}"
+end
 require align row(${step}_from, ${step}_to)
 end

@@ -3,10 +3,18 @@ include "flow"
 layout layered
 page 3:4
 font 9pt..28pt
-node req "Request"  : io
-node auth "Signed in?"  : decide
-node login "Log in"  : step
-node serve "Serve page"  : done
+io
+  req "Request"
+end
+decide
+  auth "Signed in?"
+end
+step
+  login "Log in"
+end
+done
+  serve "Serve page"
+end
 req -> auth
 auth -> serve "yes"
 auth -> login "no"

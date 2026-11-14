@@ -8,13 +8,19 @@ theme mono
 style ask shape=box
 style done shape=circle fill=#222222
 
-node fail "Test fails"  : done
-node repro "Reproduces\nlocally?"  : ask
+done
+  fail "Test fails"
+end
+ask
+  repro "Reproduces\nlocally?"
+end
 node flaky "Flaky test"
 | timing, order, shared state
 node quarantine "Quarantine"
 | ticket, owner, deadline
-node recent "Started after\na recent change?"  : ask
+ask
+  recent "Started after\na recent change?"
+end
 node bisect "Bisect"
 | git bisect run
 node read "Read the failure"
@@ -22,7 +28,9 @@ node read "Read the failure"
 node minimal "Shrink the case"
 | smallest input that fails
 node fix "Fix and add\na regression test"
-node green "Green"  : done
+done
+  green "Green"
+end
 
 fail -> repro -> flaky "no"
 repro -> recent "yes"

@@ -7,27 +7,37 @@ style model_ctl color=#888888 shape=box
 
 # model.iv(id, name): an independent variable.
 def iv(id, name)
-node ${id} "${name}"  : model_iv
+model_iv
+  node ${id} "${name}"
+end
 end
 
 # model.dv(id, name): a dependent variable.
 def dv(id, name)
-node ${id} "${name}"  : model_dv
+model_dv
+  node ${id} "${name}"
+end
 end
 
 # model.med(id, name): a mediator.
 def med(id, name)
-node ${id} "${name}"  : model_med
+model_med
+  node ${id} "${name}"
+end
 end
 
 # model.mod(id, name): a moderator; point it at the path it changes with model.hyp.
 def mod(id, name)
-node ${id} "${name}"  : model_mod
+model_mod
+  node ${id} "${name}"
+end
 end
 
 # model.ctl(id, name): a control variable.
 def ctl(id, name)
-node ${id} "${name}"  : model_ctl
+model_ctl
+  node ${id} "${name}"
+end
 end
 
 # model.hyp(a, b, n, sign): hypothesis Hn that a affects b; sign is "+", "-", or "".

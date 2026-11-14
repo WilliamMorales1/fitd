@@ -6,30 +6,48 @@ page 300x180mm margin=8mm
 font 6pt..30pt wrap=10em
 theme light background=#FAFAF7 text=#212121 edge=#37474F link=#8E24AA label=#4E342E
 
-node repo "Repository"  : store
-node commit "Commit"  : step
-| signed, linked to an issue
-node lint "Lint and format"  : step
-| style is not a review topic
-node unit "Unit tests"  : step
-| fast, run on every push
-node build "Build"  : step
-| reproducible, pinned toolchain
-node review "Code review"  : manual
-| one approval, two for core
-node integ "Integration tests"  : step
-| real database and queue
-node gate "Release gate"  : gate
-| all checks green
-| changelog entry present
-node artifact "Artifact store"  : store
-node stage "Staging deploy"  : step
-| production-shaped data
-node canary "Canary"  : step
-| 5% of traffic for an hour
-node prod "Production"  : gate
-node rollback "Rollback"  : manual
-| one command, rehearsed monthly
+store
+  repo "Repository"
+end
+step
+  commit "Commit"
+  | signed, linked to an issue
+  lint "Lint and format"
+  | style is not a review topic
+  unit "Unit tests"
+  | fast, run on every push
+  build "Build"
+  | reproducible, pinned toolchain
+end
+manual
+  review "Code review"
+  | one approval, two for core
+end
+step
+  integ "Integration tests"
+  | real database and queue
+end
+gate
+  gate "Release gate"
+  | all checks green
+  | changelog entry present
+end
+store
+  artifact "Artifact store"
+end
+step
+  stage "Staging deploy"
+  | production-shaped data
+  canary "Canary"
+  | 5% of traffic for an hour
+end
+gate
+  prod "Production"
+end
+manual
+  rollback "Rollback"
+  | one command, rehearsed monthly
+end
 node monitor "Monitoring"
 | error rate, latency, saturation
 

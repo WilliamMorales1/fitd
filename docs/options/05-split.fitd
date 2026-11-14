@@ -4,18 +4,26 @@ page 320x180mm margin=1cm
 
 style src color=#0969DA
 style shared color=#BC4C00
-style page color=#1A7F37
+style sheet color=#1A7F37
 
-node map "map.fitd"  : src
-| the original, too big for one page
-| fitd split map.fitd [-o DIR], default map-pages/
-node shared "map-shared.fitd"  : shared
-| layout, page, font, theme, styles
-node over "map.fitd (overview)"  : page
-| root plus one stub per branch
+src
+  map "map.fitd"
+  | the original, too big for one page
+  | fitd split map.fitd [-o DIR], default map-pages/
+end
+shared
+  node shared "map-shared.fitd"
+  | layout, page, font, theme, styles
+end
+sheet
+  over "map.fitd (overview)"
+  | root plus one stub per branch
+end
 for b in a, b, c
-  node p${b} "map-${b} : fitd"  : page
-  | branch ${b}, rooted at its top node
+  sheet
+    p${b} "map-${b} : fitd"
+    | branch ${b}, rooted at its top node
+  end
   map -> p${b} -> shared
 end
 map -> over -> shared "include"

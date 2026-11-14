@@ -8,32 +8,44 @@ style arch_zone color=#888888
 
 # arch.client(id, name): a user-facing client.
 def client(id, name)
-node ${id} "${name}"  : arch_client
+arch_client
+  node ${id} "${name}"
+end
 end
 
 # arch.service(id, name): a service or process.
 def service(id, name)
-node ${id} "${name}"  : arch_service
+arch_service
+  node ${id} "${name}"
+end
 end
 
 # arch.store(id, name): a database, cache, or file store.
 def store(id, name)
-node ${id} "${name}"  : arch_store
+arch_store
+  node ${id} "${name}"
+end
 end
 
 # arch.queue(id, name): a queue, topic, or stream.
 def queue(id, name)
-node ${id} "${name}"  : arch_queue
+arch_queue
+  node ${id} "${name}"
+end
 end
 
 # arch.ext(id, name): a system outside the boundary.
 def ext(id, name)
-node ${id} "${name}"  : arch_ext
+arch_ext
+  node ${id} "${name}"
+end
 end
 
 # arch.layers(id, title, names): a layer stack, top layer first, names split on `;`.
 def layers(id, title, names)
-node ${id} "${title}"  : arch_service
+arch_service
+  node ${id} "${title}"
+end
 for i in 1..count(names, ";")
 ~ #"${part(names, ";", i)}"*4
 end

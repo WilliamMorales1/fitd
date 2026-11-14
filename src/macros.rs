@@ -615,6 +615,8 @@ struct Builder<'a> {
     i: usize,
     defs: HashMap<String, Def>,
     errs: Vec<(usize, Diag)>,
+    styles: std::collections::HashSet<String>,
+    open: usize,
 }
 
 enum Stop {
@@ -628,11 +630,35 @@ impl Builder<'_> {
         self.errs.push((line, Diag::error("E0002", msg)));
     }
 
+    /// opens_block reports whether line `at` opens a style block: a lone declared style, or any lone name outside a block.
+    fn opens_block(&self, at: usize) -> bool {
+        let line = self.lines[at];
+        let t = line[..comment_start(line)].trim();
+        let word = |w: &str| {
+            w.starts_with(|c: char| c.is_alphabetic() || c == '_')
+                && w.chars().all(|c| c.is_alphanumeric() || c == '_')
+        };
+        // A lone name built from `${}` may expand to a style; the parser opens it only outside a block too.
+        if t.contains("${") && !t.contains(char::is_whitespace) && !t.contains(['"', '(', '-', '<', '>', '=', ',']) {
+            return self.open == 0;
+        }
+        let ok = match t.split_once('.') {
+            Some((m, n)) => word(m) && word(n),
+            None => word(t) && !crate::parse::KEYWORDS.contains(&t),
+        };
+        ok && (self.open == 0 || self.styles.contains(&t.replacen('.', "_", 1)))
+    }
+
     fn block(&mut self, top: bool) -> (Vec<Item>, Stop, usize) {
         let mut items = Vec::new();
+        // Style blocks pass through to the parser, but their `end` must not close a macro.
+        let base = self.open;
         while self.i < self.lines.len() {
             let at = self.i;
             self.i += 1;
+            if self.opens_block(at) {
+                self.open += 1;
+            }
             let line = match classify(self.lines[at]) {
                 Ok(l) => l,
                 Err(m) => {
@@ -647,13 +673,26 @@ impl Builder<'_> {
             };
             let kind = match line {
                 Line::Item(k) => k,
+                Line::End if self.open > base => {
+                    self.open -= 1;
+                    Kind::Plain
+                }
                 Line::End | Line::Else | Line::ElseIf(_) if top => {
                     self.err(at, "`end` or `else` with no open `for`, `if`, or `def`");
                     Kind::Skip
                 }
-                Line::End => return (items, Stop::End, at),
-                Line::Else => return (items, Stop::Else(None), at),
-                Line::ElseIf(e) => return (items, Stop::Else(Some(e)), at),
+                Line::End => {
+                    self.open = base;
+                    return (items, Stop::End, at);
+                }
+                Line::Else => {
+                    self.open = base;
+                    return (items, Stop::Else(None), at);
+                }
+                Line::ElseIf(e) => {
+                    self.open = base;
+                    return (items, Stop::Else(Some(e)), at);
+                }
                 Line::For(var, it) => {
                     let (body, stop, _) = self.block(false);
                     self.close(at, &stop, "for");
@@ -713,6 +752,7 @@ impl Builder<'_> {
                 kind,
             });
         }
+        self.open = base;
         (items, Stop::Eof, self.lines.len())
     }
 
@@ -1159,6 +1199,13 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
         i: 0,
         defs: HashMap::new(),
         errs: Vec::new(),
+        styles: lines
+            .iter()
+            .filter_map(|l| l.trim_start().strip_prefix("style "))
+            .filter_map(|r| r.split_whitespace().next())
+            .map(str::to_string)
+            .collect(),
+        open: 0,
     };
     let (items, _, _) = b.block(true);
     let mut x = Expander {

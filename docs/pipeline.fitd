@@ -4,7 +4,9 @@ page 297x210mm margin=1cm
 
 style io color=#009E73 shape=circle
 
-node src "Source  : fitd"  : io
+io
+  src "Source : fitd"
+end
 node parse "Parser"
 node csp "CSP search"
 | largest font that fits
@@ -12,7 +14,9 @@ node bnb "Branch and bound"
 node core "QuickXplain"
 | minimal unsat core
 node checker "Checker" color=#F85149
-node out "SVG, PNG, TikZ"  : io
+io
+  out "SVG, PNG, TikZ"
+end
 
 src -> parse -> csp -> bnb, core
 bnb -> checker -> out

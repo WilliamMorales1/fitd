@@ -8,13 +8,17 @@ style er_link color=#444444
 
 # er.entity(id, name, attrs): an entity with its attributes, keys first.
 def entity(id, name, attrs)
-node ${id} "${name}"  : er_entity
+er_entity
+  node ${id} "${name}"
+end
 use lines(attrs)
 end
 
 # er.weak(id, name, attrs): a weak entity, identified through its owner.
 def weak(id, name, attrs)
-node ${id} "${name}"  : er_weak
+er_weak
+  node ${id} "${name}"
+end
 use lines(attrs)
 end
 
@@ -25,7 +29,9 @@ end
 
 # er.relation(id, name, a, b, card): a named diamond joining a and b, card such as "1:N".
 def relation(id, name, a, b, card)
-node ${id} "${name}"  : er_relation
+er_relation
+  node ${id} "${name}"
+end
 use edge(a, id, part(card, ":", 1), part(card, ":", 1), "1")
 use edge(id, b, part(card, ":", 2), "1", part(card, ":", 2))
 end
@@ -34,15 +40,23 @@ end
 def edge(a, b, label, ta, hb)
 if ta == "1"
 if hb == "1"
-${a} -- ${b} "${label}"  : er_link
+er_link
+  ${a} -- ${b} "${label}"
+end
 else
-${a} -- ${b} "${label}"  : er_link head=crow
+er_link
+  ${a} -- ${b} "${label}" head=crow
+end
 end
 else
 if hb == "1"
-${a} -- ${b} "${label}"  : er_link tail=crow
+er_link
+  ${a} -- ${b} "${label}" tail=crow
+end
 else
-${a} -- ${b} "${label}"  : er_link head=crow tail=crow
+er_link
+  ${a} -- ${b} "${label}" head=crow tail=crow
+end
 end
 end
 end

@@ -255,7 +255,7 @@ fn layered_example_meets_required_constraints() {
 #[test]
 fn groups_frame_members_and_edges_take_colors() {
     let src = tmp("group.fitd");
-    std::fs::write(&src, "layout layered\npage a4\nstyle hot color=#C62828\nnode a\nnode b\nnode c\nnode d\na -> b  : hot\nb -> c, d\nc ..> a color=#2E7D32\ngroup \"Pair\" c, d color=#1565C0\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\nstyle hot color=#C62828\nnode a\nnode b\nnode c\nnode d\nhot\n  a -> b\nend\nb -> c, d\nc ..> a color=#2E7D32\ngroup \"Pair\" c, d color=#1565C0\n").unwrap();
     let (svg, tex) = (tmp("group.svg"), tmp("group.tex"));
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
@@ -279,7 +279,7 @@ fn groups_frame_members_and_edges_take_colors() {
     );
     assert!(std::fs::read_to_string(&tex).unwrap().contains("Pair"));
     // A class gives the frame its color, so a group and its key entry share one style.
-    std::fs::write(&src, "layout layered\npage a4\nstyle d1 color=#E69F00\nnode a\nnode b\na -> b\ngroup \"D1\" a, b  : d1\nkey \"design\"  : d1\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\nstyle d1 color=#E69F00\nnode a\nnode b\na -> b\nd1\n  group \"D1\" a, b\n  key \"design\"\nend\n").unwrap();
     let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
     assert!(ok && log.contains(" 0 errors, 0 warnings"), "{log}");
     let s = std::fs::read_to_string(&svg).unwrap();
@@ -680,7 +680,7 @@ fn stable_lock_keeps_nodes_in_place_after_adding_a_leaf() {
         let src = tmp(&format!("{name}-leaf.fitd"));
         let text = std::fs::read_to_string(format!("{dir}/{name}.fitd")).unwrap();
         assert!(
-            text.contains(&format!("node {last} ")),
+            text.contains(&format!("node {last} ")) || text.contains(&format!("  {last} \"")),
             "{name} has no node {last}"
         );
         std::fs::write(
@@ -1683,7 +1683,7 @@ fn library_modules_are_included_by_name() {
     let f = tmp("usestd.fitd");
     std::fs::write(
         &f,
-        "include \"nn\"\nnn.input(\"x\", \"Tokens\", \"B x L\")\nnn.layer(\"e\", \"Encoder\", \"d 64\", 2)\nnn.mask(\"m\", \"Causal\", 4, 1)\nnode b \"Block\" : nn.block\nx -> e -> m\n",
+        "include \"nn\"\nnn.input(\"x\", \"Tokens\", \"B x L\")\nnn.layer(\"e\", \"Encoder\", \"d 64\", 2)\nnn.mask(\"m\", \"Causal\", 4, 1)\nnn.block\n  b \"Block\"\nend\nx -> e -> m\n",
     )
     .unwrap();
     let o = tmp("usestd.svg");

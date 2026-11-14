@@ -5,14 +5,18 @@ style time_era color=#56B4E9
 
 # time.event(id, date, text): an event titled with its date.
 def event(id, date, text)
-node ${id} "${date}"  : time_event
-| ${text}
+time_event
+  node ${id} "${date}"
+  | ${text}
+end
 end
 
 # time.mile(id, date, text): a milestone, drawn in the accent colour.
 def mile(id, date, text)
-node ${id} "${date}"  : time_mile
-| ${text}
+time_mile
+  node ${id} "${date}"
+  | ${text}
+end
 end
 
 # time.chain(ids): joins the `;`-separated events in order.

@@ -135,19 +135,7 @@ Surveys 1, 3, 4, and 6 above classify figure types only. Survey 2 (Viziometrics)
 
 Only open work belongs here: planned changes, known problems, and caveats. Delete a plan once it is done, and move anything it left out into Known gaps. The plans are ordered to avoid redoing work. Each plan gives the change, where it goes, and when it is done.
 
-- Style keywords (10) come first. They build on the `: NAME` and qualified `nn.block` class forms.
 - Dependency arcs and Sankey (8) are low priority and stay last.
-
-### 10. Style names as node keywords
-
-Most class references repeat one style on every node (`node lint "Lint" : step`, 13 times in `release_pipeline.fitd`).
-
-- Change: a declared style name can start a node declaration. `STYLE NAME ["title"] { Class | Attribute }` means `node NAME ["title"] : STYLE ...`. Module styles use the qualified form: `nn.block enc "Encoder"`.
-- Parsing: a statement that starts with a style name is a node when the next token is a name. An edge has an operator next, and a template call `MOD.name(` has a paren, so neither is ambiguous. A node and a style may share a name (`radial -> coffee` is an edge, `radial coffee "..."` is a node).
-- Extra classes and attributes follow as on `node`: `step gate "Gate" : manual color=#C62828`. Body lines attach as usual.
-- Diagnostics: a style named after a keyword (`node`, `group`, `key`, `style`, `layout`, ...) gets a new E00xx. An undeclared name followed by a name gives an error that suggests `node`.
-- `node` stays valid. Keep it for unstyled nodes.
-- Done when: grammar, `docs/language.md`, `src/guide.txt` (within its cap), LSP (completion, hover, go-to-definition on the leading style), the skill, and the stdlib docs use the new form; examples and gallery files that repeat a class use it; e2e tests cover the edge, call, and node cases and the keyword-clash error.
 
 ### Known gaps in finished work
 
@@ -161,6 +149,8 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
+- Style blocks: `fitd split` writes `node` on every line inside a block. A macro-interpolated lone name (`${kind}`) opens a block only outside other blocks; inside one it is a node.
+- Editor grammars: tree-sitter cannot tell a lone node inside a block from a nested block opener, so both parse as `block_statement`. It also rejects `~` figure rows, comma fan-in (`a, b -> c`), and nodes named like statement keywords (`font -> csp`).
 
 ### 8. Dependency arcs and Sankey widths (low priority)
 

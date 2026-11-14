@@ -6,22 +6,30 @@ style runbook_ok color=#009E73
 
 # runbook.alert(id, name, source): a page that starts an incident
 def alert(id, name, source)
-node ${id} "${name}"  : runbook_alert
-| from ${source}
+runbook_alert
+  node ${id} "${name}"
+  | from ${source}
+end
 end
 
 # runbook.check(id, question): a yes/no question the responder answers
 def check(id, question)
-node ${id} "${question}"  : runbook_check
+runbook_check
+  node ${id} "${question}"
+end
 end
 
 # runbook.act(id, name, owner): a step and who does it
 def act(id, name, owner)
-node ${id} "${name}"  : runbook_act
-| ${owner}
+runbook_act
+  node ${id} "${name}"
+  | ${owner}
+end
 end
 
 # runbook.resolved(id): the end state
 def resolved(id)
-node ${id} "Resolved"  : runbook_ok
+runbook_ok
+  node ${id} "Resolved"
+end
 end

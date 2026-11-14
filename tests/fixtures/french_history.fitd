@@ -29,41 +29,53 @@ node strasbourg "Serments de Strasbourg (842)"
 node dialectes "Ancien français"
 | oïl, oc, franco-provençal
 | cas sujet et cas régime
-node francien "Île-de-France (XIIe s.)"  : selection
-| roi, Cour, démographie, littérature
-| le francien gagne en prestige
+selection
+  francien "Île-de-France (XIIe s.)"
+  | roi, Cour, démographie, littérature
+  | le francien gagne en prestige
+end
 
 node relatin "Relatinisation"
 | doublets : chose / cause, frêle / fragile
 | orthographe étymologique (temps)
-node villers "Villers-Cotterêts (1539)"  : elaboration
-| français, langue de l'administration
-| et de la justice, à la place du latin
-node palsgrave "Palsgrave, Estienne"  : codification
-| 1530 : grammaire pour étrangers
-| 1539 : premier dictionnaire
-node dubellay "Du Bellay (1549)"  : elaboration
-| Défense et illustration de la langue
-| enrichir : emprunts, néologismes
+elaboration
+  villers "Villers-Cotterêts (1539)"
+  | français, langue de l'administration
+  | et de la justice, à la place du latin
+end
+codification
+  palsgrave "Palsgrave, Estienne"
+  | 1530 : grammaire pour étrangers
+  | 1539 : premier dictionnaire
+end
+elaboration
+  dubellay "Du Bellay (1549)"
+  | Défense et illustration de la langue
+  | enrichir : emprunts, néologismes
+end
 node italien "Emprunts à l'italien"
 | guerres d'Italie, Catherine de Médicis
 | balcon, soldat, banque, sonnet
 
-node malherbe "Malherbe"  : codification
-| clarté, pureté, précision
-| contre archaïsmes et emprunts
-node academie "Académie française (1635)"  : codification
-| Richelieu ; prescriptive
-| premier dictionnaire en 1694
-node vaugelas "Vaugelas (1647)"  : codification
-| le bon usage : la plus saine
-| partie de la Cour et des auteurs
-node revolution "Révolution (1789)"  : diffusion
-| une nation, une langue
-| abbé Grégoire : anéantir les patois
-node ferry "Lois Ferry"  : diffusion
-| école gratuite, obligatoire, laïque
-| uniquement en français standard
+codification
+  malherbe "Malherbe"
+  | clarté, pureté, précision
+  | contre archaïsmes et emprunts
+  academie "Académie française (1635)"
+  | Richelieu ; prescriptive
+  | premier dictionnaire en 1694
+  vaugelas "Vaugelas (1647)"
+  | le bon usage : la plus saine
+  | partie de la Cour et des auteurs
+end
+diffusion
+  revolution "Révolution (1789)"
+  | une nation, une langue
+  | abbé Grégoire : anéantir les patois
+  ferry "Lois Ferry"
+  | école gratuite, obligatoire, laïque
+  | uniquement en français standard
+end
 node francophonie "Francophonie"
 | plusieurs normes : Québec, Belgique,
 | Suisse, Afrique

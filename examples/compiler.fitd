@@ -9,21 +9,25 @@ style stage color=#42A5F5
 style check color=#EF5350
 style io color=#26A69A shape=circle
 
-node src "Source  : fitd"  : io
-| one statement per line
-node lex "Lexer"  : stage
-| tokens with byte spans
-| newlines delimit statements
-node parse "Parser"  : stage
-| recursive descent
-| skips a bad line, keeps going
-node sema "Semantic analysis"  : stage
-| names, styles, units
-| ordering cycles (E0008)
-| two passes allow forward references
-node plan "Strategy"  : stage
-| radial or layered candidates
-| real font metrics determine box sizes
+io
+  src "Source : fitd"
+  | one statement per line
+end
+stage
+  lex "Lexer"
+  | tokens with byte spans
+  | newlines delimit statements
+  parse "Parser"
+  | recursive descent
+  | skips a bad line, keeps going
+  sema "Semantic analysis"
+  | names, styles, units
+  | ordering cycles (E0008)
+  | two passes allow forward references
+  plan "Strategy"
+  | radial or layered candidates
+  | real font metrics determine box sizes
+end
 node csp "CSP search"
 | FC-CBJ, binary search on font
 | candidate positions satisfy hard constraints
@@ -33,31 +37,43 @@ node bnb "Branch and bound"
 node core "QuickXplain"
 | minimal unsat core (E0110)
 | isolates a conflicting subset of `require`s
-node checker "Checker"  : check
-| recomputes every constraint
-| overlap, crossings, clipping, and overflow
+check
+  checker "Checker"
+  | recomputes every constraint
+  | overlap, crossings, clipping, and overflow
+end
 node emit "Emitter"
 | absolute positions; no downstream reflow
-node measure "Text measurement"  : stage
-| font files are shared by layout and rendering
-| wrapping changes node geometry
-node quality "Layout polish"  : stage
-| annealing reduces crossings and edge clutter
-| never violates a hard constraint
-node diagnostics "Diagnostics"  : check
-| source spans point to the failing statement
-| explain CODE prints the long form
-node output "SVG, PNG, TikZ"  : io
-node failure "Failure paths"  : check
-| parse errors are reported and skipped
-| unsatisfiable requirements stop output
+stage
+  measure "Text measurement"
+  | font files are shared by layout and rendering
+  | wrapping changes node geometry
+  quality "Layout polish"
+  | annealing reduces crossings and edge clutter
+  | never violates a hard constraint
+end
+check
+  diagnostics "Diagnostics"
+  | source spans point to the failing statement
+  | explain CODE prints the long form
+end
+io
+  output "SVG, PNG, TikZ"
+end
+check
+  failure "Failure paths"
+  | parse errors are reported and skipped
+  | unsatisfiable requirements stop output
+end
 
 src -> lex -> parse -> sema -> plan -> measure -> quality
 plan -> csp -> bnb, core
 quality -> csp
 bnb -> checker -> diagnostics -> emit -> output
 core ..> sema "points back at source"
-failure ..> diagnostics "reported"  : check
+check
+  failure ..> diagnostics "reported"
+end
 
 group "Front end" lex, parse, sema
 group "Solver" csp, bnb, core color=#AB47BC

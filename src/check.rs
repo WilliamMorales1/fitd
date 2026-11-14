@@ -66,6 +66,10 @@ pub const EXPLAIN: &[(&str, &str)] = &[
         "An `~ image \"PATH\"` row names a file that cannot be read or is not a PNG or JPEG. Paths are relative to the main file, not to an included one.",
     ),
     (
+        "E0015",
+        "A `style` is named after a statement or macro keyword such as `node`, `group`, or `for`. A line holding only a style name opens a style block, so the name cannot share a statement word. Rename the style.",
+    ),
+    (
         "E0101",
         "Two nodes claim overlapping regions. Each node owns its box exclusively, like a mutable borrow.",
     ),
