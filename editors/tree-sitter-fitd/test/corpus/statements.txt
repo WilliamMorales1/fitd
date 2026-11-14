@@ -12,7 +12,7 @@ node lex "Lexer" color=#fff
 | tokens with byte spans # not a comment
 lex -> parse, sema "label"
 core ..> sema
-group "Front end" lex, parse color=#1565C0
+group fe "Front end" lex, parse color=#1565C0
 require bnb left-of core gap=2em
 require a above b above c
 require align row(bnb, core)
@@ -74,6 +74,7 @@ include "parts/x.fitd"
     operator: (edge_operator)
     to: (name))
   (group_statement
+    id: (name)
     title: (string)
     to: (name)
     to: (name)

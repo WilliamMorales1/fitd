@@ -150,8 +150,10 @@ pub struct Drawn {
     pub t: f64,
     pub label_size: (f64, f64),
     pub aim: P,
-    /// Group the link points at: set when `a` links to every member, so one arrow meets its frame.
+    /// Group the edge points at: set when it names the group, or when `a` links to every member, so one arrow meets its frame.
     pub frame: Option<Relation>,
+    /// Group the edge leaves from, when it names one.
+    pub from: Option<Relation>,
 }
 
 impl Drawn {
@@ -168,7 +170,30 @@ impl Drawn {
             label_size: (0.0, 0.0),
             aim: (0.0, 0.0),
             frame: None,
+            from: None,
         }
+    }
+
+    /// on takes the group frames that the edge `e` names at its ends, flipped when this edge runs `b` to `a`.
+    pub fn on(mut self, g: &Graph, e: &crate::graph::Edge) -> Drawn {
+        let rel = |k: Option<usize>| k.map(|k| g.constraints[k].rel.clone());
+        let (fa, fb) = (rel(e.groups[0]), rel(e.groups[1]));
+        (self.from, self.frame) = if (self.a, self.b) == (e.b, e.a) && e.a != e.b { (fb, fa) } else { (fa, fb) };
+        self
+    }
+
+    /// on_pair is `on` for the group edge joining this edge's two nodes, when there is one.
+    pub fn on_pair(self, g: &Graph) -> Drawn {
+        let pair = |e: &&crate::graph::Edge| (e.a, e.b) == (self.a, self.b) || (e.a, e.b) == (self.b, self.a);
+        match g.edges.iter().filter(|e| e.groups.iter().any(Option::is_some)).find(pair) {
+            Some(e) => self.on(g, e),
+            None => self,
+        }
+    }
+
+    /// framed reports whether an end of this edge meets a group frame instead of a node.
+    pub fn framed(&self) -> bool {
+        self.frame.is_some() || self.from.is_some()
     }
 }
 
@@ -207,32 +232,66 @@ impl Layout {
         )
     }
 
-    /// target_frame is the frame a group link ends on.
+    /// target_frame is the frame a group edge ends on.
     pub fn target_frame(&self, e: &Drawn) -> Option<Rect> {
         e.frame
             .as_ref()
             .map(|rel| frame(rel, &|v| self.rect(v), self.body))
     }
 
+    /// source_frame is the frame a group edge starts from.
+    pub fn source_frame(&self, e: &Drawn) -> Option<Rect> {
+        e.from
+            .as_ref()
+            .map(|rel| frame(rel, &|v| self.rect(v), self.body))
+    }
+
+    /// ends gives the points an edge is aimed between: frame centers for routed links, else node centers.
+    ///
+    /// A straight edge keeps its stand-in member's center, so the solver's clearance check covers the drawn part.
     pub fn ends(&self, e: &Drawn) -> (P, P) {
-        let pb = match self.target_frame(e) {
-            Some(f) => f.center(),
-            None => (self.pos[e.b].0 + e.aim.0, self.pos[e.b].1 + e.aim.1),
+        let link = e.style == EdgeStyle::Link;
+        let pa = match self.source_frame(e) {
+            Some(f) if link => f.center(),
+            _ => self.pos[e.a],
         };
-        (self.pos[e.a], pb)
+        let pb = match self.target_frame(e) {
+            Some(f) if link => f.center(),
+            _ => (self.pos[e.b].0 + e.aim.0, self.pos[e.b].1 + e.aim.1),
+        };
+        (pa, pb)
     }
 
     pub fn path(&self, e: &Drawn) -> Vec<P> {
         let (pa, pb) = self.ends(e);
-        let f = self.target_frame(e);
-        let in_b = |p: P| match &f {
-            Some(f) => f.contains(p),
-            None => self.inside(e.b, p),
-        };
+        let (fa, fb) = (self.source_frame(e), self.target_frame(e));
+        let in_a = |p: P| fa.map_or_else(|| self.inside(e.a, p), |f| f.contains(p));
+        let in_b = |p: P| fb.map_or_else(|| self.inside(e.b, p), |f| f.contains(p));
         match &e.via {
-            Some(way) => trim(way, &|p| self.inside(e.a, p), &in_b),
-            None => curve(pa, &|p| self.inside(e.a, p), pb, &in_b, e.bow),
+            Some(way) => trim(way, &in_a, &in_b),
+            None => curve(pa, &in_a, pb, &in_b, e.bow),
         }
+    }
+
+    /// segment gives a straight edge clipped where it leaves its start and meets its end.
+    pub fn segment(&self, e: &Drawn) -> (P, P) {
+        let (pa, pb) = self.ends(e);
+        let (fa, fb) = (self.source_frame(e), self.target_frame(e));
+        let in_a = |p: P| fa.map_or_else(|| self.inside(e.a, p), |f| f.contains(p));
+        let in_b = |p: P| fb.map_or_else(|| self.inside(e.b, p), |f| f.contains(p));
+        let lerp = |t: f64| (pa.0 + t * (pb.0 - pa.0), pa.1 + t * (pb.1 - pa.1));
+        let exit = |inside: &dyn Fn(P) -> bool, mut inn: f64, mut out: f64| {
+            for _ in 0..40 {
+                let mid = (inn + out) / 2.0;
+                if inside(lerp(mid)) {
+                    inn = mid
+                } else {
+                    out = mid
+                }
+            }
+            out
+        };
+        (lerp(exit(&in_a, 0.0, 1.0)), lerp(exit(&in_b, 1.0, 0.0)))
     }
 
     pub fn label_rect(&self, e: &Drawn) -> Option<Rect> {
@@ -721,7 +780,7 @@ fn spread_arrivals(lay: &mut Layout, page: &Rect) {
     let along = |p: P| if down { -p.1 } else { p.0 };
     let across = |p: P| if down { p.0 } else { p.1 };
     let n = lay.pos.len();
-    let straight = |e: &Drawn| e.style == EdgeStyle::Arrow;
+    let straight = |e: &Drawn| e.style == EdgeStyle::Arrow && !e.framed();
     for v in 0..n {
         let mut ins: Vec<usize> = (0..lay.edges.len())
             .filter(|&k| {

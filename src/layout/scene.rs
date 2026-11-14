@@ -14,8 +14,14 @@ pub(super) struct Route {
     pub(super) opts: Vec<(usize, f64)>,
     pub(super) label: Option<(f64, f64)>,
     pub(super) paths: Vec<Vec<P>>,
-    /// Group whose frame the link ends on, with its members.
-    pub(super) frame: Option<(Relation, Vec<usize>)>,
+    /// Group whose frame the link ends on.
+    pub(super) frame: Option<Relation>,
+    /// Group whose frame the link starts from.
+    pub(super) from: Option<Relation>,
+    /// Members of either frame, which the link may pass over.
+    pub(super) members: Vec<usize>,
+    /// Set for a link, which aims at frame centers; a straight edge aims at its stand-in members.
+    pub(super) link: bool,
 }
 
 impl Route {
@@ -206,21 +212,21 @@ impl Scene<'_> {
             let (w, h) = self.size[self.var[u]];
             inside_box(self.center(u, val), self.shapes[self.var[u]], w, h, p)
         };
-        let fr = r
-            .frame
-            .as_ref()
-            .map(|(rel, _)| frame(rel, &|v| self.node_rect(v, val), self.body));
-        let in_b = |p: P| fr.map_or_else(|| inside(r.b, p), |f| f.contains(p));
-        let pb = fr.map_or_else(|| self.center(r.b, val), |f| f.center());
+        let fr = |rel: &Option<Relation>| {
+            rel.as_ref()
+                .map(|rel| frame(rel, &|v| self.node_rect(v, val), self.body))
+        };
+        let (fa, fb) = (fr(&r.from), fr(&r.frame));
+        let in_a = |p: P| fa.map_or_else(|| inside(r.a, p), |f| f.contains(p));
+        let in_b = |p: P| fb.map_or_else(|| inside(r.b, p), |f| f.contains(p));
+        let aim = |f: Option<Rect>, v: usize| match f {
+            Some(f) if r.link => f.center(),
+            _ => self.center(v, val),
+        };
+        let (pa, pb) = (aim(fa, r.a), aim(fb, r.b));
         Cow::Owned(match r.opts[k].0.checked_sub(r.bows.len()) {
-            Some(j) => trim(&r.vias[j], &|p| inside(r.a, p), &in_b),
-            None => curve(
-                self.center(r.a, val),
-                &|p| inside(r.a, p),
-                pb,
-                &in_b,
-                r.bows[r.opts[k].0],
-            ),
+            Some(j) => trim(&r.vias[j], &in_a, &in_b),
+            None => curve(pa, &in_a, pb, &in_b, r.bows[r.opts[k].0]),
         })
     }
 
@@ -667,21 +673,21 @@ pub(super) fn build<'a>(
         }
         let bows: Vec<f64> = if link { BOWS.to_vec() } else { vec![0.0] };
         let mut vias = Vec::new();
-        let frame_of = e.frame.as_ref().map(|rel| {
-            let members: Vec<usize> = rel.nodes().collect();
-            (rel.clone(), members)
-        });
-        let ends_in = |u: usize| u == e.b || frame_of.as_ref().is_some_and(|f| f.1.contains(&u));
+        let members: Vec<usize> = [&e.from, &e.frame]
+            .into_iter()
+            .flatten()
+            .flat_map(|rel| rel.nodes())
+            .collect();
         if link && routing {
             let others: Vec<Rect> = (0..n)
-                .filter(|&u| u != e.a && !ends_in(u))
+                .filter(|&u| u != e.a && u != e.b && !members.contains(&u))
                 .map(|u| sc.rects[sc.var[u]][0])
                 .collect();
-            let target = match &frame_of {
-                Some((rel, _)) => frame(rel, &|v| sc.rects[sc.var[v]][0], b).center(),
-                None => sc.at[sc.var[e.b]][0],
+            let end = |rel: &Option<Relation>, v: usize| match rel {
+                Some(rel) => frame(rel, &|v| sc.rects[sc.var[v]][0], b).center(),
+                None => sc.at[sc.var[v]][0],
             };
-            vias = detours(sc.at[sc.var[e.a]][0], target, &others, &sc.page, 0.4 * b);
+            vias = detours(end(&e.from, e.a), end(&e.frame, e.b), &others, &sc.page, 0.4 * b);
         }
         let spots: &[f64] = if e.label.is_some() { &SPOTS } else { &[0.5] };
         let opts = (0..bows.len() + vias.len())
@@ -698,7 +704,10 @@ pub(super) fn build<'a>(
             opts,
             label,
             paths: Vec::new(),
-            frame: frame_of,
+            frame: e.frame.clone(),
+            from: e.from.clone(),
+            members,
+            link,
         });
         if routing {
             let i = sc.routes.len() - 1;
@@ -714,7 +723,7 @@ pub(super) fn build<'a>(
                             .filter(|&u| {
                                 u != r.a
                                     && u != r.b
-                                    && !r.frame.as_ref().is_some_and(|f| f.1.contains(&u))
+                                    && !r.members.contains(&u)
                                     && path.iter().any(|&p| {
                                         inside_box(
                                             sc.at[sc.var[u]][0],
@@ -744,9 +753,7 @@ pub(super) fn build<'a>(
         for &i in routes {
             let r = &sc.routes[i];
             scope.extend([sc.var[r.a], sc.var[r.b]]);
-            if let Some((_, members)) = &r.frame {
-                scope.extend(members.iter().map(|&u| sc.var[u]));
-            }
+            scope.extend(r.members.iter().map(|&u| sc.var[u]));
             scope.push(base + i);
         }
         let mut seen = Vec::new();
@@ -802,10 +809,7 @@ pub(super) fn build<'a>(
         if routing && links.contains(&i) {
             let (a, b2) = (sc.routes[i].a, sc.routes[i].b);
             push(&mut sc, &[], &[i], Kind::LinkPage(i), 0);
-            let members = sc.routes[i]
-                .frame
-                .as_ref()
-                .map_or(Vec::new(), |f| f.1.clone());
+            let members = sc.routes[i].members.clone();
             for u in (0..n).filter(|&u| u != a && u != b2 && !members.contains(&u)) {
                 push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, 0.0), 40);
                 push(&mut sc, &[u], &[i], Kind::LinkClear(i, u, CLEAR), 2);

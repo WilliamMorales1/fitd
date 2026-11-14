@@ -225,11 +225,14 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 }
             }
             StmtKind::Group {
-                title, items, attrs, ..
+                id, title, items, attrs, ..
             } => {
-                let title = title
-                    .as_ref()
-                    .map_or(String::new(), |t| format!(" {}", quoted(t)));
+                let title = match (id, title) {
+                    (Some(n), Some(t)) => format!(" {} {}", n.text, quoted(t)),
+                    (Some(n), None) => format!(" {} \"\"", n.text),
+                    (None, Some(t)) => format!(" {}", quoted(t)),
+                    (None, None) => String::new(),
+                };
                 for (p, part) in parts(items) {
                     let ids: Vec<&str> = part.iter().map(|n| n.text.as_str()).collect();
                     let line = format!("group{title} {}{}", ids.join(", "), attrs_of(attrs));

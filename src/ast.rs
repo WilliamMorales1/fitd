@@ -86,6 +86,8 @@ pub enum StmtKind {
         attrs: Vec<Attr>,
     },
     Group {
+        /// Set by `group ID "Title" ...`, so edges can name the group.
+        id: Option<Name>,
         title: Option<String>,
         items: Vec<Name>,
         classes: Vec<Name>,

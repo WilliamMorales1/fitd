@@ -119,6 +119,8 @@ pub struct Edge {
     /// Mark at `a`; unset means none.
     pub tail: Option<Head>,
     pub dash: Option<Dash>,
+    /// Index in `constraints` of the group each end names; `a` or `b` is then a member standing in for it.
+    pub groups: [Option<usize>; 2],
     pub span: Span,
 }
 

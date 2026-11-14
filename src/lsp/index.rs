@@ -433,11 +433,15 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
                 b.attrs("edge", attrs);
             }
             StmtKind::Group {
+                id,
                 title,
                 items,
                 classes: _,
                 attrs,
             } => {
+                if let Some(id) = id {
+                    b.occ(Kind::Node, id, true);
+                }
                 for n in items {
                     b.occ(Kind::Node, n, false);
                 }

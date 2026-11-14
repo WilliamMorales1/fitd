@@ -26,7 +26,7 @@ Syntax: one statement per line, # comment.
   theme paper|light|dark|mono
   style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle|diamond|none stack=N copies
         wrap=24em place=aside (layered: strip after flow, ..> to flow)
-  group "Title" a, b, c color=#hex times=N  # framed; times=N: dashed, titled `Nx`
+  group G "Title" a, b color=#hex times=N # G optional, edge end; times: dashed `Nx`
   require REL                   # must hold, else E0110
   prefer REL weight=2           # soft; W0205 if unmet
   include "a.fitd"|"user/L"|"uml" # L.f x; std: nn flow palette grid arch uml er tree time model seq venn algo

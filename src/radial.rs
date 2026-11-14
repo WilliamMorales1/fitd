@@ -269,12 +269,13 @@ pub fn plan(g: &Graph, t: &Tree, boxes: &[Boxed], cfg: &Config, b: f64, rot: f64
                 if t.depth[v] == 1 { 0.45 } else { 0.18 },
                 label(p, v),
             )
+            .on_pair(g)
         })
         .collect();
     drawn.extend(
         t.links
             .iter()
-            .map(|l| Drawn::new(l.a, l.b, EdgeStyle::Link, 0.1, l.label.clone())),
+            .map(|l| Drawn::new(l.a, l.b, EdgeStyle::Link, 0.1, l.label.clone()).on_pair(g)),
     );
     let member = |v: usize| {
         g.constraints

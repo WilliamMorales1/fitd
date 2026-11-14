@@ -41,6 +41,7 @@ code front E0012 "macro error: unknown variable or template, argument count, typ
 code front E0013 "macro expansion ran past --expand-budget steps"
 code front E0014 "image row names a missing file or one not PNG or JPEG"
 code front E0015 "style named after a keyword"
+code front E0016 "edge joins a group to itself, a member, or a nested group"
 
 code lay E0101 "checker: overlap"
 code lay E0102 "checker: edge through node"

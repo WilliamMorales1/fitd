@@ -70,24 +70,6 @@ fn paints(g: &Graph, t: &Tree, lay: &Layout, th: &Theme) -> Vec<Paint> {
         .collect()
 }
 
-fn clipped(lay: &Layout, e: &Drawn) -> (P, P) {
-    let (a, b) = (e.a, e.b);
-    let (pa, pb) = lay.ends(e);
-    let lerp = |t: f64| (pa.0 + t * (pb.0 - pa.0), pa.1 + t * (pb.1 - pa.1));
-    let exit = |v: usize, mut inside: f64, mut outside: f64| {
-        for _ in 0..40 {
-            let mid = (inside + outside) / 2.0;
-            if lay.inside(v, lerp(mid)) {
-                inside = mid
-            } else {
-                outside = mid
-            }
-        }
-        outside
-    };
-    (lerp(exit(a, 0.0, 1.0)), lerp(exit(b, 1.0, 0.0)))
-}
-
 /// rhombus gives the corners of a diamond centred on (cx, cy), top first in SVG order.
 fn rhombus(cx: f64, cy: f64, w: f64, h: f64) -> [P; 4] {
     [
@@ -118,7 +100,11 @@ fn edge_points(lay: &Layout, e: &Drawn) -> Vec<P> {
     match e.style {
         EdgeStyle::Link => lay.path(e),
         EdgeStyle::Arrow => {
-            let (s, t) = clipped(lay, e);
+            let (s, t) = lay.segment(e);
+            vec![s, t]
+        }
+        EdgeStyle::Line if e.framed() => {
+            let (s, t) = lay.segment(e);
             vec![s, t]
         }
         EdgeStyle::Line => vec![lay.pos[e.a], lay.pos[e.b]],

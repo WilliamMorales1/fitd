@@ -403,6 +403,8 @@ impl Parser<'_> {
                 }
             }
             "group" => {
+                let named = *self.peek() == Tok::Ident && matches!(self.peek_at(1), Tok::Str(_));
+                let id = if named { Some(self.name("a group name")?) } else { None };
                 let title = match self.peek().clone() {
                     Tok::Str(s) => {
                         self.bump();
@@ -413,6 +415,7 @@ impl Parser<'_> {
                 let items = self.targets()?;
                 let (classes, attrs) = (self.classes(), self.attrs()?);
                 StmtKind::Group {
+                    id,
                     title,
                     items,
                     classes,

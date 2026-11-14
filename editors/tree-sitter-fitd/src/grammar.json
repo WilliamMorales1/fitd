@@ -678,12 +678,33 @@
           "type": "CHOICE",
           "members": [
             {
-              "type": "FIELD",
-              "name": "title",
-              "content": {
-                "type": "SYMBOL",
-                "name": "string"
-              }
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "FIELD",
+                      "name": "id",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "name"
+                      }
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                },
+                {
+                  "type": "FIELD",
+                  "name": "title",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "string"
+                  }
+                }
+              ]
             },
             {
               "type": "BLANK"

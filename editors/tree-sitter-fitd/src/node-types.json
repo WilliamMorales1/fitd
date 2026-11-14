@@ -337,6 +337,16 @@
     "type": "group_statement",
     "named": true,
     "fields": {
+      "id": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "name",
+            "named": true
+          }
+        ]
+      },
       "title": {
         "multiple": false,
         "required": false,

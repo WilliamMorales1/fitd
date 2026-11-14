@@ -15,7 +15,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0002",
-        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes|venn`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [: NAME] [k=v]`, `| body`, `A -> B, C [\"label\"] [: NAME] [color=#hex]`, `A ..> B`, `group [\"Title\"] A, B`, `key \"Label\" [: NAME] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
+        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes|venn`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [: NAME] [k=v]`, `| body`, `A -> B, C [\"label\"] [: NAME] [color=#hex]`, `A ..> B`, `group [ID] [\"Title\"] A, B`, `key \"Label\" [: NAME] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
     ),
     (
         "E0003",
@@ -68,6 +68,10 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     (
         "E0015",
         "A `style` is named after a statement or macro keyword such as `node`, `group`, or `for`. A line holding only a style name opens a style block, so the name cannot share a statement word. Rename the style.",
+    ),
+    (
+        "E0016",
+        "An edge names a group (`group ID \"Title\" ...`) but joins it to itself, to one of its members, or to a group it nests in or holds; such an edge has no outside to cross. Group edges also need a layered or radial layout: `layout venn` and `layout lanes` draw groups as sets and lanes, which edges cannot name.",
     ),
     (
         "E0101",
@@ -193,14 +197,21 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
         }
     }
     let radial = lay.kind == LayoutKind::Radial;
-    let straight: Vec<(usize, usize, (P, P))> = lay
+    let members = |e: &Drawn| -> Vec<usize> {
+        [&e.from, &e.frame].into_iter().flatten().flat_map(|r| r.nodes()).collect()
+    };
+    let straight: Vec<(usize, usize, (P, P), Vec<usize>)> = lay
         .edges
         .iter()
         .filter(|e| e.style != EdgeStyle::Link)
-        .map(|e| (e.a, e.b, lay.ends(e)))
+        .map(|e| match e.framed() {
+            true => (e.a, e.b, lay.segment(e), members(e)),
+            false => (e.a, e.b, lay.ends(e), Vec::new()),
+        })
         .collect();
-    for &(p, v, (pp, pv)) in &straight {
-        for u in (0..n).filter(|&u| u != p && u != v) {
+    for (p, v, (pp, pv), inner) in &straight {
+        let (p, v, pp, pv) = (*p, *v, *pp, *pv);
+        for u in (0..n).filter(|&u| u != p && u != v && !inner.contains(&u)) {
             if segment_hits_rect(pp, pv, &lay.rect(u).inflate(-0.01)) {
                 push(
                     true,
@@ -221,8 +232,8 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
             );
         }
     }
-    for (i, &(p, v, (pp, pv))) in straight.iter().enumerate() {
-        for &(q, w, (pq, pw)) in &straight[i + 1..] {
+    for (i, &(p, v, (pp, pv), _)) in straight.iter().enumerate() {
+        for &(q, w, (pq, pw), _) in &straight[i + 1..] {
             if segments_cross(pp, pv, pq, pw) {
                 let (err, code) = if radial {
                     (true, "E0103")
@@ -283,8 +294,10 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
     }
     for e in lay.edges.iter().filter(|e| e.style == EdgeStyle::Link) {
         let path = lay.path(e);
-        if let Some(u) =
-            (0..n).find(|&u| u != e.a && u != e.b && path.iter().any(|&p| lay.inside(u, p)))
+        let inner = members(e);
+        if let Some(u) = (0..n).find(|&u| {
+            u != e.a && u != e.b && !inner.contains(&u) && path.iter().any(|&p| lay.inside(u, p))
+        })
         {
             push(
                 false,

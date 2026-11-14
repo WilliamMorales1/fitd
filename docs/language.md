@@ -42,7 +42,7 @@ NodeBlock       = ( Node | Name ), Newline, Indent, { Statement | ScopedEdge, Ne
 ScopedEdge      = EdgeHop, { EdgeHop }, { Attribute } ;
 Body            = BodyLine ;
 Cells           = CellRow ;
-Group           = "group", [ String ], NameList, { Attribute } ;
+Group           = "group", [ [ Name ], String ], NameList, { Attribute } ;
 Key             = "key", String, { Attribute } ;
 Include         = "include", String ;
 
@@ -225,6 +225,21 @@ canvas -- shape tail=diamond line=dotted
 ### Groups
 
 `group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn`. A group inside a style block takes its frame color from that style, so a group, its nodes, and its `key` entry can share one block.
+
+`group ID "title" members` also names the group, so edges can start or end at it: the edge meets the frame instead of a member. An empty title, `group ID "" members`, gives a named group with no title. A group ID shares the node namespace, so a node and a group cannot have the same ID (E0003). For layout, the edge stands in for the group with a member: the last member of the flow when the group is the source, the first when it is the target. An edge from a group to itself, to one of its members, or to a group nested with it is E0016, as is a group edge under `layout venn` or `layout lanes`.
+
+```fitd
+layout layered
+load "Load"
+  clean "Clean"
+train "Train"
+  tune "Tune"
+report "Report"
+group prep "Prep" load, clean
+group fit "Fit" train, tune
+prep -> fit "data"
+fit -> report
+```
 
 `times=N` (2 to 99) marks the framed subgraph as repeated N times: the frame is drawn dashed and `Nx` is prefixed to its title, which is the conventional notation for a repeated stack of layers. A value outside the range, or a non-numeric one, produces E0006.
 

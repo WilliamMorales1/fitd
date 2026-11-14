@@ -253,6 +253,7 @@ fn lifelines(nodes: &[Node], edges: &mut Vec<Edge>, diags: &mut Vec<Diag>) {
             head: Some(Head::None),
             tail: None,
             dash: Some(Dash::Dashed),
+            groups: [None, None],
             span: n.span,
         });
     }
@@ -513,6 +514,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     let mut styles: Styles = HashMap::new();
 
     let mut last_node = None;
+    let mut group_ids: HashMap<String, Span> = HashMap::new();
     for st in stmts {
         match &st.kind {
             StmtKind::Node { id, title, .. } => {
@@ -611,7 +613,22 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             }
             // Body rows after a one-node block still belong to that node.
             StmtKind::Open(_) => {}
+            StmtKind::Group { id: Some(id), .. } => {
+                if let Some(prev) = group_ids.insert(id.text.clone(), id.span) {
+                    let d = Diag::error("E0003", format!("group `{}` declared twice", id.text))
+                        .primary(id.span, "declared again here");
+                    s.diags.push(d.secondary(prev, "first declared here"));
+                }
+                last_node = None;
+            }
             _ => last_node = None,
+        }
+    }
+    for (name, span) in &group_ids {
+        if let Some(&v) = s.ids.get(name) {
+            let d = Diag::error("E0003", format!("`{name}` names both a node and a group"))
+                .primary(*span, "group named here");
+            s.diags.push(d.secondary(s.decl[v], "node declared here"));
         }
     }
 
@@ -619,6 +636,9 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     let (mut title, mut root, mut edges, mut constraints) = (None, None, Vec::new(), Vec::new());
     let mut seen_setting: HashMap<&str, Span> = HashMap::new();
     let mut grouped: Vec<(usize, Vec<Span>)> = Vec::new();
+    // Edges whose ends name groups, resolved once every group is known.
+    let mut pending: Vec<(usize, [Option<Name>; 2])> = Vec::new();
+    let mut group_items: HashMap<String, Vec<usize>> = HashMap::new();
     let mut cells: Vec<(usize, [Option<usize>; 2], Span)> = Vec::new();
     let mut key_entries = Vec::new();
     // Style names used by groups and by anything else, to tell frame keys apart.
@@ -912,9 +932,16 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                             .push(bad_attr(a, &["color", "head", "tail", "line"])),
                     }
                 }
-                let a = s.node(from);
+                let mut end = |n: &Name| match group_ids.contains_key(&n.text) && !s.ids.contains_key(&n.text) {
+                    true => Some((0, Some(n.clone()))),
+                    false => s.node(n).map(|v| (v, None)),
+                };
+                let a = end(from);
                 for t in to {
-                    if let (Some(a), Some(b)) = (a, s.node(t)) {
+                    if let (Some((a, ga)), Some((b, gb))) = (a.clone(), end(t)) {
+                        if ga.is_some() || gb.is_some() {
+                            pending.push((edges.len(), [ga, gb]));
+                        }
                         edges.push(Edge {
                             a,
                             b,
@@ -925,6 +952,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                             head: l.head,
                             tail: l.tail,
                             dash: l.dash,
+                            groups: [None, None],
                             span: from.span.to(t.span),
                         });
                     }
@@ -952,6 +980,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 });
             }
             StmtKind::Group {
+                id,
                 title,
                 items,
                 classes,
@@ -999,6 +1028,10 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     );
                     continue;
                 }
+                if let Some(id) = id {
+                    group_items.insert(id.text.clone(), ids.clone());
+                }
+                let title = title.filter(|t| !t.is_empty());
                 grouped.push((constraints.len(), items.iter().map(|n| n.span).collect()));
                 constraints.push(Constraint {
                     rel: Relation::Group {
@@ -1045,6 +1078,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 .primary(*span, "declared here"),
         );
     }
+    let framed = group_ends(&mut edges, &pending, &group_items, &set, &s.nodes, &mut s.diags);
     lifelines(&s.nodes, &mut edges, &mut s.diags);
     let sets = match set.venn {
         true => venn_sets(&mut constraints, &mut s.diags),
@@ -1053,6 +1087,15 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             Vec::new()
         }
     };
+    for (k, items) in framed {
+        let at = |end: &Option<Vec<usize>>| {
+            let want = end.as_ref()?;
+            constraints
+                .iter()
+                .position(|c| matches!(&c.rel, Relation::Group { items, .. } if items == want))
+        };
+        edges[k].groups = [at(&items[0]), at(&items[1])];
+    }
     constraints.extend(grid_cells(&cells, &s.nodes, &mut s.diags));
     s.diags.extend(contradictions(&constraints));
     for (v, n) in s.nodes.iter().enumerate().filter(|(_, n)| n.aside) {
@@ -1096,6 +1139,77 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
         g.canonicalize();
     }
     (g, s.diags)
+}
+
+/// group_ends points each edge end that names a group at a member standing in for it.
+///
+/// It drops edges whose group failed to declare and gives the member lists of the groups each kept edge names.
+fn group_ends(
+    edges: &mut Vec<Edge>,
+    pending: &[(usize, [Option<Name>; 2])],
+    groups: &HashMap<String, Vec<usize>>,
+    set: &Settings,
+    nodes: &[Node],
+    diags: &mut Vec<Diag>,
+) -> Vec<(usize, [Option<Vec<usize>>; 2])> {
+    let mut out = Vec::new();
+    let mut dead = Vec::new();
+    let flows: Vec<(usize, usize)> = edges.iter().filter(|e| e.kind == EdgeKind::Tree).map(|e| (e.a, e.b)).collect();
+    for (k, ends) in pending {
+        let span = edges[*k].span;
+        let items: Vec<Option<&Vec<usize>>> = ends.iter().map(|n| n.as_ref().and_then(|n| groups.get(&n.text))).collect();
+        if ends.iter().zip(&items).any(|(n, i)| n.is_some() && i.is_none()) {
+            dead.push(*k);
+            continue;
+        }
+        let layout = if set.venn { Some("venn") } else if set.lanes { Some("lanes") } else { None };
+        if let (Some(l), Some(n)) = (layout, ends.iter().flatten().next()) {
+            diags.push(
+                Diag::error("E0016", format!("an edge cannot end on group `{}` in `layout {l}`", n.text))
+                    .primary(n.span, "group")
+                    .help("its groups are not frames; link a member node instead"),
+            );
+            dead.push(*k);
+            continue;
+        }
+        let (a, b) = (edges[*k].a, edges[*k].b);
+        let set_a: Vec<usize> = items[0].cloned().unwrap_or(vec![a]);
+        let set_b: Vec<usize> = items[1].cloned().unwrap_or(vec![b]);
+        let (inner, outer, i) = if set_a.len() <= set_b.len() { (&set_a, &set_b, 1) } else { (&set_b, &set_a, 0) };
+        if inner.iter().any(|v| outer.contains(v)) {
+            let n = ends[i].as_ref().unwrap();
+            let what = match &ends[1 - i] {
+                Some(m) if m.text == n.text => "itself".to_string(),
+                Some(m) => format!("group `{}`, which shares its nodes", m.text),
+                None => format!("its member `{}`", nodes[inner[0]].id),
+            };
+            diags.push(
+                Diag::error("E0016", format!("an edge joins group `{}` to {what}", n.text))
+                    .primary(span, "edge"),
+            );
+            dead.push(*k);
+            continue;
+        }
+        // Leave from a member no other member flows on to, and arrive at one no member flows into.
+        let inside = |v: usize, from: bool, set: &[usize]| {
+            flows.iter().any(|&(p, q)| if from { p == v && set.contains(&q) } else { q == v && set.contains(&p) })
+        };
+        if let Some(m) = items[0] {
+            edges[*k].a = m.iter().rev().copied().find(|&v| !inside(v, true, m)).unwrap_or(m[m.len() - 1]);
+        }
+        if let Some(m) = items[1] {
+            edges[*k].b = m.iter().copied().find(|&v| !inside(v, false, m)).unwrap_or(m[0]);
+        }
+        out.push((*k, [items[0].cloned(), items[1].cloned()]));
+    }
+    for &k in dead.iter().rev() {
+        edges.remove(k);
+    }
+    // Removing an edge shifts the later ones down.
+    for (k, _) in &mut out {
+        *k -= dead.iter().filter(|&&d| d < *k).count();
+    }
+    out
 }
 
 /// grid_cells lowers `row=`/`col=` node attributes to hard alignment and order constraints.
@@ -1762,6 +1876,32 @@ mod tests {
             codes("node a\nnode b\nnode c\nrequire a left-of b sideways c\n"),
             vec!["E0009"]
         );
+    }
+
+    #[test]
+    fn group_edges_stand_in_members_and_name_frames() {
+        let (g, d) = run(
+            "node l\nnode c\nnode t\nnode u\nnode r\ngroup p \"Prep\" l, c\ngroup f \"\" t, u\nl -> c\nt -> u\np -> f \"x\"\nf -> r\n",
+        );
+        assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        let id = |v: usize| g.nodes[v].id.as_str();
+        let title = |c: Option<usize>| match &g.constraints[c.unwrap()].rel {
+            Relation::Group { title, .. } => title.clone(),
+            _ => panic!("not a group"),
+        };
+        let e = g.edges.iter().find(|e| e.label.as_deref() == Some("x")).unwrap();
+        assert_eq!((id(e.a), id(e.b)), ("c", "t"));
+        assert_eq!((title(e.groups[0]), title(e.groups[1])), (Some("Prep".into()), None));
+        let e = g.edges.iter().find(|e| id(e.b) == "r").unwrap();
+        assert_eq!((id(e.a), e.groups[1]), ("u", None));
+        let base = "node a\nnode b\nnode z\ngroup o \"O\" a, b\ngroup i \"I\" a\n";
+        assert_eq!(codes(&format!("{base}o -> a\n")), ["E0016"]);
+        assert_eq!(codes(&format!("{base}o -> o\n")), ["E0016"]);
+        assert_eq!(codes(&format!("{base}i -> o\n")), ["E0016"]);
+        assert!(codes(&format!("{base}z -> i\n")).is_empty());
+        assert_eq!(codes(&format!("layout venn\n{base}z -> i\n")), ["E0016"]);
+        assert_eq!(codes(&format!("{base}group o \"P\" z\n")), ["E0003"]);
+        assert_eq!(codes("node a\ngroup a \"A\" a\n"), ["E0003"]);
     }
 
     #[test]

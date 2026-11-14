@@ -535,17 +535,17 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         } else {
             EdgeStyle::Arrow
         };
-        edges.push(Drawn::new(e.a, e.b, style, 0.12, e.label.clone()));
+        edges.push(Drawn::new(e.a, e.b, style, 0.12, e.label.clone()).on(g, e));
     }
     for e in g
         .edges
         .iter()
         .filter(|e| e.kind == EdgeKind::Tree && side(e))
     {
-        edges.push(Drawn::new(e.a, e.b, EdgeStyle::Arrow, 0.1, e.label.clone()));
+        edges.push(Drawn::new(e.a, e.b, EdgeStyle::Arrow, 0.1, e.label.clone()).on(g, e));
     }
     for e in g.edges.iter().filter(|e| e.kind == EdgeKind::Link) {
-        edges.push(Drawn::new(e.a, e.b, EdgeStyle::Link, 0.1, e.label.clone()));
+        edges.push(Drawn::new(e.a, e.b, EdgeStyle::Link, 0.1, e.label.clone()).on(g, e));
     }
     let (mut order, rest): (Vec<usize>, Vec<usize>) =
         rows.concat().into_iter().partition(|&v| member(v));

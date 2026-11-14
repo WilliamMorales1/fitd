@@ -72,7 +72,7 @@ module.exports = grammar({
     // A hop's targets feed the next hop: `a -> b, c "x" -- d`.
     _source: $ => field('from', choice($.name, alias(choice(...KEYWORDS), $.name))),
     _hop: $ => seq(field('operator', $.edge_operator), $._targets, optional(field('label', $.string))),
-    group_statement: $ => seq('group', optional(field('title', $.string)), $._targets, repeat($.attribute)),
+    group_statement: $ => seq('group', optional(seq(optional(field('id', $.name)), field('title', $.string))), $._targets, repeat($.attribute)),
     constraint_statement: $ => seq(choice('require', 'prefer'), $._relation, repeat($.attribute)),
     include_statement: $ => seq('include', field('path', $.string)),
 
