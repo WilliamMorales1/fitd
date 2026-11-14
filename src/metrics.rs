@@ -214,15 +214,20 @@ impl Fonts {
                 let wanted = |f: &Font| f.family.eq_ignore_ascii_case(fam);
                 match locate(&format!("{fam}:weight=regular")).filter(wanted) {
                     Some(f) => fonts.regular.push(f),
+                    None if cfg!(feature = "embedded-fonts") => fonts.notes.push(format!(
+                        "font family `{fam}` not found by fc-match, so only the built-in DejaVu Sans is available"
+                    )),
                     None => {
                         return Err(format!(
                             "font family `{fam}` not found by fc-match (see `fc-list : family`)"
                         ));
                     }
                 }
-                fonts
-                    .bold
-                    .extend(locate(&format!("{fam}:weight=bold")).filter(wanted));
+                if !fonts.regular.is_empty() {
+                    fonts
+                        .bold
+                        .extend(locate(&format!("{fam}:weight=bold")).filter(wanted));
+                }
             }
             None => {}
         }
