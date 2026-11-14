@@ -4,7 +4,6 @@ page 16:9
 font 9pt..28pt
 grid
   plan "Thesis plan (months)"
-end
 grid.scale(1, 8)
 grid.task("Survey", 1, 2)
 grid.task("Build", 2, 4)

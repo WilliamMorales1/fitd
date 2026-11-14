@@ -11,7 +11,6 @@ cause
   p1 "on leave"
   p2 "no reviews"
   t1 "flaky CI"
-end
 p1 -> people
 p2 -> process
 t1 -> tools

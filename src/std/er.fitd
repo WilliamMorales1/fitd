@@ -10,7 +10,6 @@ style er_link color=#444444
 def entity(id, name, attrs)
 er_entity
   node ${id} "${name}"
-end
 use lines(attrs)
 end
 
@@ -18,7 +17,6 @@ end
 def weak(id, name, attrs)
 er_weak
   node ${id} "${name}"
-end
 use lines(attrs)
 end
 
@@ -31,7 +29,6 @@ end
 def relation(id, name, a, b, card)
 er_relation
   node ${id} "${name}"
-end
 use edge(a, id, part(card, ":", 1), part(card, ":", 1), "1")
 use edge(id, b, part(card, ":", 2), "1", part(card, ":", 2))
 end
@@ -42,21 +39,17 @@ if ta == "1"
 if hb == "1"
 er_link
   ${a} -- ${b} "${label}"
-end
 else
 er_link
   ${a} -- ${b} "${label}" head=crow
-end
 end
 else
 if hb == "1"
 er_link
   ${a} -- ${b} "${label}" tail=crow
-end
 else
 er_link
   ${a} -- ${b} "${label}" head=crow tail=crow
-end
 end
 end
 end

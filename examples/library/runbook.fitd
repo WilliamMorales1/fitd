@@ -10,13 +10,11 @@ runbook_alert
   node ${id} "${name}"
   | from ${source}
 end
-end
 
 # runbook.check(id, question): a yes/no question the responder answers
 def check(id, question)
 runbook_check
   node ${id} "${question}"
-end
 end
 
 # runbook.act(id, name, owner): a step and who does it
@@ -25,11 +23,9 @@ runbook_act
   node ${id} "${name}"
   | ${owner}
 end
-end
 
 # runbook.resolved(id): the end state
 def resolved(id)
 runbook_ok
   node ${id} "Resolved"
-end
 end

@@ -7,7 +7,7 @@ struct Parser<'a> {
     toks: Vec<Token>,
     pos: usize,
     styles: std::collections::HashSet<String>,
-    open: Vec<Name>,
+    open: Vec<(Name, usize)>,
 }
 
 type PResult<T> = Result<T, Diag>;
@@ -193,12 +193,18 @@ impl Parser<'_> {
 
     /// classes gives the styles of the open blocks, innermost last.
     fn classes(&self) -> Vec<Name> {
-        self.open.iter().filter(|c| self.is_style(&c.text)).cloned().collect()
+        self.open.iter().map(|(c, _)| c).filter(|c| self.is_style(&c.text)).cloned().collect()
     }
 
     /// is_style reports whether `name`, or `MOD_x` for `MOD.x`, is declared anywhere in the file.
     fn is_style(&self, name: &str) -> bool {
         self.styles.contains(&name.replacen('.', "_", 1))
+    }
+
+    /// col gives the indent of the current token's line in characters.
+    fn col(&self) -> usize {
+        let lo = self.span().lo;
+        lo - self.text[..lo].rfind('\n').map_or(0, |k| k + 1)
     }
 
     /// lone_name gives the token count of a line that holds only a name or `MOD.name`.
@@ -217,7 +223,7 @@ impl Parser<'_> {
     fn removed_class(&self) -> Diag {
         Diag::error("E0002", "`: NAME` no longer applies a style")
             .primary(self.span(), "not valid here")
-            .help("put the line inside a block: a line holding only the style name, the lines, then `end`")
+            .help("put the line inside a block: a line holding only the style name, then the lines indented under it")
     }
 
     fn rel(&mut self) -> PResult<Rel> {
@@ -267,20 +273,13 @@ impl Parser<'_> {
             return self.edge();
         }
         if self.lone_name().is_some() {
+            let col = self.col();
             let name = self.class_name()?;
             if self.open.is_empty() || self.is_style(&name.text) {
-                self.open.push(name.clone());
+                self.open.push((name.clone(), col));
                 return Ok(vec![StmtKind::Open(name)]);
             }
             self.pos -= 1;
-        }
-        if self.keyword_is(0, "end") && matches!(self.peek_at(1), Tok::Newline | Tok::Eof) {
-            if self.open.pop().is_none() {
-                return Err(Diag::error("E0002", "`end` without an open block")
-                    .primary(self.span(), "nothing to close"));
-            }
-            self.bump();
-            return Ok(vec![StmtKind::End]);
         }
         if !self.open.is_empty()
             && *self.peek() == Tok::Ident
@@ -440,6 +439,11 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
             break;
         }
         let lo = p.span().lo;
+        // Off-side rule: a line indented no deeper than a block's opener closes that block.
+        let col = p.col();
+        while p.open.last().is_some_and(|&(_, c)| c >= col) {
+            p.open.pop();
+        }
         match p.stmt() {
             Ok(kinds) if p.at_end() => {
                 let hi = p.toks[p.pos - 1].span.hi;
@@ -460,12 +464,6 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
         while !p.at_end() {
             p.bump();
         }
-    }
-    for name in p.open {
-        errs.push(
-            Diag::error("E0002", format!("style block `{}` has no `end`", name.text))
-                .primary(name.span, "opened here"),
-        );
     }
     (stmts, errs)
 }
@@ -501,14 +499,14 @@ mod tests {
 
     #[test]
     fn parses_every_statement() {
-        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\" color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\ngroup \"G\" b, c color=#123\nhub\n  a -> c \"x\" color=#f00\nend\n";
+        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\" color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\ngroup \"G\" b, c color=#123\nhub\n  a -> c \"x\" color=#f00\n";
         let (stmts, errs) = parse(src);
         assert!(
             errs.is_empty(),
             "{:?}",
             errs.iter().map(|d| &d.msg).collect::<Vec<_>>()
         );
-        assert_eq!(stmts.len(), 18);
+        assert_eq!(stmts.len(), 17);
         assert!(
             matches!(&stmts[14].kind, StmtKind::Group { title: Some(_), items, attrs, .. } if items.len() == 2 && attrs.len() == 1)
         );
@@ -553,9 +551,9 @@ mod tests {
 
     #[test]
     fn parses_arrow_chains() {
-        let (stmts, errs) = parse("style hub\nhub\na -> b, c \"x\" -- d color=#f00\nend\n");
+        let (stmts, errs) = parse("style hub\nhub\n  a -> b, c \"x\" -- d color=#f00\n");
         assert!(errs.is_empty());
-        assert_eq!(stmts.len(), 6);
+        assert_eq!(stmts.len(), 5);
         assert!(
             matches!(&stmts[2].kind, StmtKind::Edge { from, to, directed: true, label: Some(_), classes, .. } if from.text == "a" && to.len() == 2 && classes.len() == 1)
         );
@@ -567,7 +565,7 @@ mod tests {
 
     #[test]
     fn style_blocks_apply_to_lines() {
-        let src = "style step\nstyle nn_block\nstyle radial\nstep\n  a \"A\" color=#f00\n  nn.block\n    e\n  end\n  a -> e\nend\nnode radial\nradial -> a\n";
+        let src = "style step\nstyle nn_block\nstyle radial\nstep\n  a \"A\" color=#f00\n  nn.block\n    e\n  a -> e\nnode radial\nradial -> a\n";
         let (stmts, errs) = parse(src);
         assert!(errs.is_empty());
         let classes = |k: &StmtKind| match k {
@@ -591,7 +589,9 @@ mod tests {
     #[test]
     fn style_block_errors() {
         assert_eq!(parse("node a\nnode b\na -> b : x\n").1.len(), 1, "`: NAME` is gone");
-        assert_eq!(parse("style s\ns\nnode a\n").1.len(), 1, "no `end`");
+        let (stmts, errs) = parse("style s\ns\nnode a\n");
+        assert!(errs.is_empty());
+        assert!(matches!(&stmts[2].kind, StmtKind::Node { classes, .. } if classes.is_empty()), "dedent closes");
         assert_eq!(parse("node a\nend\n").1.len(), 1, "stray `end`");
     }
 

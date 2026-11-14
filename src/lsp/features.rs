@@ -427,8 +427,9 @@ pub fn folds(text: &str) -> Value {
         .filter_map(|l| l.trim().strip_prefix("style ")?.split_whitespace().next())
         .collect();
     let mut out = Vec::new();
-    // Each open block notes whether it is a style block, which decides what a lone name means.
-    let mut open: Vec<(usize, bool)> = Vec::new();
+    // Each open block notes whether it is a style block, which decides what a lone name means, and its indent.
+    let mut open: Vec<(usize, bool, usize)> = Vec::new();
+    let mut last = 0;
     let mut node: Option<usize> = None;
     let mut comment: Option<usize> = None;
     let mut push = |lo: usize, hi: usize, kind: Option<&str>| {
@@ -455,32 +456,47 @@ pub fn folds(text: &str) -> Value {
         } else if let Some(c) = comment.take() {
             push(c, i - 1, Some("comment"));
         }
+        if !t.is_empty() && !t.starts_with('#') {
+            let col = l.len() - l.trim_start().len();
+            while let Some(&(lo, true, c)) = open.last()
+                && c >= col
+            {
+                open.pop();
+                push(lo, last, None);
+            }
+            last = i;
+        }
         let rest = &t[w.len()..];
         let directive = !rest.starts_with('-') && !rest.trim_start().starts_with(['-', '.']);
         let lone = !w.is_empty() && (rest.is_empty() || rest.strip_prefix('.').is_some_and(|n| n.chars().all(|c| c.is_alphanumeric() || c == '_')));
         let style_open = open.iter().any(|o| o.1);
         match w.as_str() {
-            "for" | "if" | "def" if directive => open.push((i, false)),
+            "for" | "if" | "def" if directive => open.push((i, false, 0)),
             "end" if directive => {
-                if let Some((lo, _)) = open.pop() {
+                if let Some((lo, ..)) = open.pop() {
                     push(lo, i, None);
                 }
             }
             "else" if directive => {
-                if let Some((lo, _)) = open.pop() {
+                if let Some((lo, ..)) = open.pop() {
                     push(lo, i - 1, None);
                 }
-                open.push((i, false));
+                open.push((i, false, 0));
             }
             _ if lone
                 && !crate::parse::KEYWORDS.contains(&w.as_str())
                 && (!style_open || styles.contains(&t.replacen('.', "_", 1).as_str())) =>
             {
-                open.push((i, true))
+                open.push((i, true, l.len() - l.trim_start().len()))
             }
             // Any other line may own the body lines after it, as `node a` or `step a` does.
             _ if !w.is_empty() && !body && !t.starts_with('#') => node = Some(i),
             _ => {}
+        }
+    }
+    for (lo, style, _) in open.into_iter().rev() {
+        if style {
+            push(lo, last, None);
         }
     }
     let n = lines.len().saturating_sub(1);

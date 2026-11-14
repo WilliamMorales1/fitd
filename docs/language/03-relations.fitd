@@ -19,13 +19,11 @@ ord
   | the space between the boxes is at most within
   at "a at top-left|top|...|bottom-right|center"
   | a's center lies in that third of the page
-end
 al
   align "align top|bottom|left|right(a, b, ...)"
   | that edge is shared, within the grid tolerance
   rowcol "align row(...) / column(...)"
   | centers share y / x
-end
 node chain "Chains"
 | a left-of b left-of c means a left-of b and b left-of c
 | steps may mix: a above b near c
@@ -38,7 +36,6 @@ kind
   | so a set may fail on the grid although a hand-placed layout meets it
   pref "prefer weight=N"
   | soft; unmet total weight minimized after the font is fixed: W0205
-end
 
 rel -> leftof, above, near, at, align, rowcol, chain, req, pref
 chain ..> leftof

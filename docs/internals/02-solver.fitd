@@ -14,7 +14,6 @@ probe
   fits "Fits?"
   bnb "Branch and bound"
   | fewest unmet prefer weight
-end
 node trade "Trade-off"
 | top font, 5% and 10% smaller, polished in parallel
 | kept above 16pt per meter of page diagonal
@@ -23,12 +22,10 @@ node polish "Polish each"
 good
   best "Best merit"
   | readability plus font
-end
 fail
   none "Nothing fits"
   core "QuickXplain"
   | minimal set of requires: E0110
-end
 
 font -> csp -> fits -> bnb "range closed"
 fits -> none "fails at the floor"

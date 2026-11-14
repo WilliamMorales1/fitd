@@ -14,13 +14,10 @@ node ex "examples/* : fitd"
 
 radial
   node radial "Radial maps"
-end
 down
   node down "Layered, dir=down"
-end
 right
   node right "Layered, dir=right"
-end
 ex -> radial, down, right
 
 radial
@@ -31,7 +28,6 @@ radial
   group_theory "group_theory.fitd"
   | no layout or theme: radial is the default
   | root statement, \n in titles, math markup
-end
 radial -> coffee, group_theory
 
 down
@@ -45,7 +41,6 @@ down
   | right-of, below, align top
   fib_calls "fib_calls.fitd"
   | macros: recursive def and use, if, $${expr} in names
-end
 down -> compiler, debugging, fib_calls
 
 right
@@ -64,5 +59,4 @@ right
   | settings, include, edge forms, nested groups
   | require and prefer, near, at, align
   | macros: for, if, def/use, names(), $${expr} escape
-end
 right -> release_pipeline, neural_net, semester, fitd_language

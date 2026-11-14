@@ -8,7 +8,6 @@ obj
   b "B" row=1 col=2
   c "C" row=2 col=1
   d "D" row=2 col=2
-end
 a -> b "f"
 a -> c "g"
 b -> d "h"

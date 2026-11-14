@@ -10,17 +10,14 @@ style done shape=circle fill=#222222
 
 done
   fail "Test fails"
-end
 ask
   repro "Reproduces\nlocally?"
-end
 node flaky "Flaky test"
 | timing, order, shared state
 node quarantine "Quarantine"
 | ticket, owner, deadline
 ask
   recent "Started after\na recent change?"
-end
 node bisect "Bisect"
 | git bisect run
 node read "Read the failure"
@@ -30,7 +27,6 @@ node minimal "Shrink the case"
 node fix "Fix and add\na regression test"
 done
   green "Green"
-end
 
 fail -> repro -> flaky "no"
 repro -> recent "yes"

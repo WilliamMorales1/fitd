@@ -10,7 +10,6 @@ style hub color=#3E2723 fill=#3E2723 text=#FFE0B2
 hub
   coffee "Coffee"
   | seed of the Coffea cherry
-end
 
 node farm "Growing"
 | arabica above 1000 m
@@ -44,7 +43,6 @@ method
   | paper filter, 3-4 min
   press "French press"
   | full immersion, metal mesh
-end
 
 node taste "Tasting"
 node acidity "Acidity"

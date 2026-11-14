@@ -10,13 +10,11 @@ def iv(id, name)
 model_iv
   node ${id} "${name}"
 end
-end
 
 # model.dv(id, name): a dependent variable.
 def dv(id, name)
 model_dv
   node ${id} "${name}"
-end
 end
 
 # model.med(id, name): a mediator.
@@ -24,20 +22,17 @@ def med(id, name)
 model_med
   node ${id} "${name}"
 end
-end
 
 # model.mod(id, name): a moderator; point it at the path it changes with model.hyp.
 def mod(id, name)
 model_mod
   node ${id} "${name}"
 end
-end
 
 # model.ctl(id, name): a control variable.
 def ctl(id, name)
 model_ctl
   node ${id} "${name}"
-end
 end
 
 # model.hyp(a, b, n, sign): hypothesis Hn that a affects b; sign is "+", "-", or "".

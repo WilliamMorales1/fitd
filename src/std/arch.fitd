@@ -11,13 +11,11 @@ def client(id, name)
 arch_client
   node ${id} "${name}"
 end
-end
 
 # arch.service(id, name): a service or process.
 def service(id, name)
 arch_service
   node ${id} "${name}"
-end
 end
 
 # arch.store(id, name): a database, cache, or file store.
@@ -25,13 +23,11 @@ def store(id, name)
 arch_store
   node ${id} "${name}"
 end
-end
 
 # arch.queue(id, name): a queue, topic, or stream.
 def queue(id, name)
 arch_queue
   node ${id} "${name}"
-end
 end
 
 # arch.ext(id, name): a system outside the boundary.
@@ -39,13 +35,11 @@ def ext(id, name)
 arch_ext
   node ${id} "${name}"
 end
-end
 
 # arch.layers(id, title, names): a layer stack, top layer first, names split on `;`.
 def layers(id, title, names)
 arch_service
   node ${id} "${title}"
-end
 for i in 1..count(names, ";")
 ~ #"${part(names, ";", i)}"*4
 end

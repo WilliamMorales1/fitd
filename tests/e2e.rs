@@ -255,7 +255,7 @@ fn layered_example_meets_required_constraints() {
 #[test]
 fn groups_frame_members_and_edges_take_colors() {
     let src = tmp("group.fitd");
-    std::fs::write(&src, "layout layered\npage a4\nstyle hot color=#C62828\nnode a\nnode b\nnode c\nnode d\nhot\n  a -> b\nend\nb -> c, d\nc ..> a color=#2E7D32\ngroup \"Pair\" c, d color=#1565C0\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\nstyle hot color=#C62828\nnode a\nnode b\nnode c\nnode d\nhot\n  a -> b\nb -> c, d\nc ..> a color=#2E7D32\ngroup \"Pair\" c, d color=#1565C0\n").unwrap();
     let (svg, tex) = (tmp("group.svg"), tmp("group.tex"));
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
@@ -279,7 +279,7 @@ fn groups_frame_members_and_edges_take_colors() {
     );
     assert!(std::fs::read_to_string(&tex).unwrap().contains("Pair"));
     // A class gives the frame its color, so a group and its key entry share one style.
-    std::fs::write(&src, "layout layered\npage a4\nstyle d1 color=#E69F00\nnode a\nnode b\na -> b\nd1\n  group \"D1\" a, b\n  key \"design\"\nend\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\nstyle d1 color=#E69F00\nnode a\nnode b\na -> b\nd1\n  group \"D1\" a, b\n  key \"design\"\n").unwrap();
     let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
     assert!(ok && log.contains(" 0 errors, 0 warnings"), "{log}");
     let s = std::fs::read_to_string(&svg).unwrap();
@@ -844,7 +844,7 @@ fn guide_examples_build_from_stdin() {
             .trim_start_matches('\n')
             .lines()
             .take_while(|l| !l.is_empty())
-            .map(|l| l.trim_start().to_string() + "\n")
+            .map(|l| l.strip_prefix("  ").unwrap_or(l).to_string() + "\n")
             .collect();
         let svg = tmp(&format!("guide-{}.svg", name.len()));
         let mut child = Command::new(env!("CARGO_BIN_EXE_fitd"))
@@ -1561,7 +1561,7 @@ fn macros_expand_loops_templates_and_recursion() {
     ]);
     // A generated line reports at the template line, in the file that holds the template.
     assert!(
-        !ok && log.contains("parts/t.fitd:3:8: error[E0001]: unknown node `ghost`"),
+        !ok && log.contains("parts/t.fitd:3:6: error[E0001]: unknown node `ghost`"),
         "{log}"
     );
     assert!(
@@ -1683,7 +1683,7 @@ fn library_modules_are_included_by_name() {
     let f = tmp("usestd.fitd");
     std::fs::write(
         &f,
-        "include \"nn\"\nnn.input(\"x\", \"Tokens\", \"B x L\")\nnn.layer(\"e\", \"Encoder\", \"d 64\", 2)\nnn.mask(\"m\", \"Causal\", 4, 1)\nnn.block\n  b \"Block\"\nend\nx -> e -> m\n",
+        "include \"nn\"\nnn.input(\"x\", \"Tokens\", \"B x L\")\nnn.layer(\"e\", \"Encoder\", \"d 64\", 2)\nnn.mask(\"m\", \"Causal\", 4, 1)\nnn.block\n  b \"Block\"\nx -> e -> m\n",
     )
     .unwrap();
     let o = tmp("usestd.svg");

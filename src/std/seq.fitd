@@ -10,7 +10,6 @@ def actor(id, name)
 seq_actor
   node ${id} "${name}"
 end
-end
 
 # seq.msg(step, a, b, text): a call from a to b, below every earlier message.
 def msg(step, a, b, text)
@@ -26,9 +25,7 @@ def arrow(step, a, b, text, kind)
 seq_point
   node ${step}_from "" lane=${a}
   node ${step}_to "" lane=${b}
-end
 ${kind}
   ${step}_from -> ${step}_to "${text}"
-end
 require align row(${step}_from, ${step}_to)
 end

@@ -10,7 +10,6 @@ highlight
   b "Step 1"
   c "Step 2"
   d "Step 3"
-end
 node e "End"
 
 a -> b -> c -> d -> e

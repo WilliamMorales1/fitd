@@ -8,7 +8,6 @@ theme light background=#FAFAF7 text=#212121 edge=#37474F link=#8E24AA label=#4E3
 
 store
   repo "Repository"
-end
 step
   commit "Commit"
   | signed, linked to an issue
@@ -18,36 +17,28 @@ step
   | fast, run on every push
   build "Build"
   | reproducible, pinned toolchain
-end
 manual
   review "Code review"
   | one approval, two for core
-end
 step
   integ "Integration tests"
   | real database and queue
-end
 gate
   gate "Release gate"
   | all checks green
   | changelog entry present
-end
 store
   artifact "Artifact store"
-end
 step
   stage "Staging deploy"
   | production-shaped data
   canary "Canary"
   | 5% of traffic for an hour
-end
 gate
   prod "Production"
-end
 manual
   rollback "Rollback"
   | one command, rehearsed monthly
-end
 node monitor "Monitoring"
 | error rate, latency, saturation
 

@@ -210,10 +210,8 @@ stage
   lex "Lexer"
   parse color=#fff
   lex -> parse
-end
 nn.block
   node enc
-end
 flow.key()
 
 --------------------------------------------------------------------------------
@@ -234,14 +232,12 @@ flow.key()
     from: (name)
     operator: (edge_operator)
     to: (name))
-  (end_statement)
   (block_statement
     style: (qualified_name
       (name)
       (name)))
   (node_statement
     id: (name))
-  (end_statement)
   (call_statement
     name: (qualified_name
       (name)

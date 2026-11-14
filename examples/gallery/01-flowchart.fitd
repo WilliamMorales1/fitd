@@ -5,16 +5,12 @@ page 3:4
 font 9pt..28pt
 io
   req "Request"
-end
 decide
   auth "Signed in?"
-end
 step
   login "Log in"
-end
 done
   serve "Serve page"
-end
 req -> auth
 auth -> serve "yes"
 auth -> login "no"

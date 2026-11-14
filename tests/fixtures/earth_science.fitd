@@ -22,17 +22,14 @@ reservoir
   ground "Groundwater"
   | water stored in pores and fractures
   | residence time can be centuries
-end
 atmosphere
   node atmosphere "Atmospheric vapor"
   | small reservoir with rapid turnover
   | transports water between regions
-end
 process
   evaporation "Evaporation"
   | liquid -> vapor using solar energy
   | latent heat leaves the surface
-end
 atmosphere
   condensation "Condensation"
   | vapor -> cloud droplets
@@ -40,7 +37,6 @@ atmosphere
   precipitation "Precipitation"
   | rain, snow, sleet, or hail
   | gravity returns water to the surface
-end
 process
   runoff "Runoff"
   | water flows over land to rivers
@@ -51,27 +47,22 @@ process
   transpiration "Transpiration"
   | plants release water vapor
   | stomata couple carbon and water exchange
-end
 reservoir
   storage "Surface storage"
   | lakes, wetlands, and soil moisture
   | buffers floods and droughts
-end
 impact
   human "Human withdrawals"
   | irrigation and pumping move water
   | use can exceed natural recharge
-end
 process
   balance "Water balance"
   | input - output = change in storage
   | basin budgets expose unsustainable use
-end
 impact
   climate "Climate feedback" fill=#FFEBEE
   | warming changes vapor capacity and ice melt
   | circulation shifts precipitation patterns
-end
 
 water -> ocean
 water -> ice
@@ -92,7 +83,6 @@ impact
   human ..> storage "withdrawal"
   climate ..> evaporation "warming"
   climate ..> ice "melting"
-end
 ocean ..> balance "reservoir"
 ground ..> balance "reservoir"
 

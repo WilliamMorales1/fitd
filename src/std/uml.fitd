@@ -12,7 +12,6 @@ style uml_uses line=dashed
 def class(id, name, members)
 uml_class
   node ${id} "${name}"
-end
 use lines(members)
 end
 
@@ -20,7 +19,6 @@ end
 def iface(id, name, members)
 uml_iface
   node ${id} "«interface» ${name}"
-end
 use lines(members)
 end
 
@@ -28,7 +26,6 @@ end
 def state(id, name, actions)
 uml_state
   node ${id} "${name}"
-end
 use lines(actions)
 end
 
@@ -37,13 +34,11 @@ def start(id)
 uml_mark
   node ${id} "start"
 end
-end
 
 # uml.final(id): the final state.
 def final(id)
 uml_mark
   node ${id} "end"
-end
 end
 
 # uml.is(a, b): a inherits from or implements b.
@@ -51,20 +46,17 @@ def is(a, b)
 uml_is
   ${a} -> ${b}
 end
-end
 
 # uml.has(a, b, mult): a is composed of b, with b's multiplicity such as "1..*".
 def has(a, b, mult)
 uml_has
   ${a} -- ${b} "${mult}"
 end
-end
 
 # uml.uses(a, b): a depends on b.
 def uses(a, b)
 uml_uses
   ${a} ..> ${b}
-end
 end
 
 # uml.key(): a legend for the three relation heads.

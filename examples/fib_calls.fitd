@@ -15,7 +15,6 @@ style n5 color=#BA68C8
 def fib(id, n)
   n${n}
     node ${id} "fib(${n})"
-  end
   if n >= 2
     use fib(id + "a", n - 1)
     use fib(id + "b", n - 2)

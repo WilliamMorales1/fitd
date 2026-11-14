@@ -7,7 +7,7 @@ Exit 0: written; errors on stderr.
 
 Syntax: one statement per line, # comment.
   node ID "Title" row=1 col=2   # ID: letters digits _ inner -; no title: ID
-  STYLE ... end                 # lines inside take STYLE (or nn.block), no `node`
+  STYLE                         # lines indented under take STYLE (or nn.block), no `node`
   | body line                   # under node; lead spaces indent; **bold**
   ~ # %60 . _ LBL "two words"   # figure row: # solid %NN shade . outline _ gap, else label
                                 #   LBL*3 spans 3 columns; rows grid up: strips, heatmaps
@@ -44,7 +44,6 @@ Concept map:
   in
     sun "Light"
     | photons hit chlorophyll
-  end
   node leaf "Leaf"
   node sugar "Glucose"
   leaf -> sun, sugar

@@ -45,7 +45,7 @@ pub const KEYWORDS: &[Keyword] = &[
         "style",
         "style ${1:name} color=#$2",
         "style NAME attributes",
-        "Declares a reusable class. A line holding only NAME (or `nn.block`) opens a block: nodes, edges, groups, and keys up to `end` take it, and node lines may drop `node`. Nested blocks apply outer first.",
+        "Declares a reusable class. A line holding only NAME (or `nn.block`) opens a block: nodes, edges, groups, and keys indented under it take it, and node lines may drop `node`. Nested blocks apply outer first.",
     ),
     (
         "node",

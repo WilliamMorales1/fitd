@@ -14,20 +14,16 @@ for w, topic in "Regular languages", "Lexers", "Grammars", "LL parsing", "LR par
   if topic == "Midterm" or topic == "Final exam"
     exam
       w${w} "${topic}"
-    end
   else if topic == "Break"
     rest
       w${w} "${topic}"
-    end
   else if w % 4 == 0
     project
       w${w} "${topic}"
       | project ${w / 4} due
-    end
   else
     week
       w${w} "${topic}"
-    end
   end
   | week ${w}
   if w > 1

@@ -119,7 +119,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 title = Some(own);
                 continue;
             }
-            StmtKind::Root(_) | StmtKind::Include(_) | StmtKind::Open(_) | StmtKind::End => {
+            StmtKind::Root(_) | StmtKind::Include(_) | StmtKind::Open(_) => {
                 continue;
             }
             StmtKind::Layout { kind, attrs } => {
@@ -335,20 +335,13 @@ fn blocks(lines: &[(Looks, String)]) -> String {
     for (looks, line) in lines {
         if let Some(want) = looks {
             let keep = open.iter().zip(want).take_while(|(a, b)| a == b).count();
-            for _ in keep..open.len() {
-                s += &format!("{}end\n", "  ".repeat(open.len() - 1));
-                open.pop();
-            }
+            open.truncate(keep);
             for c in &want[keep..] {
                 s += &format!("{}{c}\n", "  ".repeat(open.len()));
                 open.push(c.clone());
             }
         }
         s += &format!("{}{}\n", "  ".repeat(open.len()), line.trim_start());
-    }
-    while !open.is_empty() {
-        open.pop();
-        s += &format!("{}end\n", "  ".repeat(open.len()));
     }
     s
 }
@@ -359,7 +352,7 @@ mod tests {
 
     #[test]
     fn branches_get_pages_and_stubs_name_them() {
-        let text = "title \"Map\"\nlayout radial root=r\nstyle s color=#1565C0\nnode r \"Root\"\ns\n  node a \"A\"\n  | about a\nend\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\na1 ..> b1\nrequire a1 left-of a\nrequire a1 near b1\n";
+        let text = "title \"Map\"\nlayout radial root=r\nstyle s color=#1565C0\nnode r \"Root\"\ns\n  node a \"A\"\n  | about a\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\na1 ..> b1\nrequire a1 left-of a\nrequire a1 near b1\n";
         let out = split("m.fitd", text, "m").unwrap();
         let names: Vec<&str> = out.files.iter().map(|f| f.0.as_str()).collect();
         assert_eq!(names, ["m-shared.fitd", "m.fitd", "m-a.fitd", "m-b.fitd"]);
@@ -372,7 +365,7 @@ mod tests {
         let overview = get("m.fitd");
         assert!(
             overview.contains("title \"Map\"\nroot r\n")
-                && overview.contains("s\n  node a \"A\"\n  | see page m-a\nend\n")
+                && overview.contains("s\n  node a \"A\"\n  | see page m-a\n")
                 && overview.contains("r -> a, b"),
             "{overview}"
         );

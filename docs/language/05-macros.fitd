@@ -27,7 +27,6 @@ line
   interp "$${EXPR}"
   | replaced by the value anywhere in a line, strings and bodies too,
   | but not in # comments; $$${ is a literal $${
-end
 node kw "Keywords"
 | recognized only at the start of a line, never before an edge
 | operator, so a node named end still works in end -> start
@@ -46,7 +45,6 @@ expr
   | a template sees its own parameters and loop variables,
   | plus those set at the top level
   | a loop variable keeps its last value after the loop
-end
 
 safe
   budget "Termination"
@@ -62,7 +60,6 @@ safe
   | an error repeated by every call is reported once
   | a line that fails to expand writes nothing,
   | so a following | body may report E0002
-end
 
 mac -> forr, forl, iff, deff, kw, expr, budget, diag
 deff -> use

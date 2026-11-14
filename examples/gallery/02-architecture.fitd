@@ -15,5 +15,4 @@ work -> db
 work -> pay
 arch_zone
   group "Cloud" api, q, work, db
-end
 arch.key()

@@ -4,7 +4,6 @@ page 1:1
 font 9pt..28pt
 grid
   cm "Predicted vs true"
-end
 grid.head("cat; dog; fox")
 grid.heat("cat", "90 6 4")
 grid.heat("dog", "8 85 7")

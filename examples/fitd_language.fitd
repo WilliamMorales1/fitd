@@ -9,12 +9,10 @@ theme light palette="#1565C0 #2E7D32 #EF6C00" edge=#455A64 link=#8E24AA label=#3
 io
   src "Source\n.fitd"
   | one statement per line
-end
 macro
   expand "Macros"
   | for, if, def, use, $${names}
   | write $${expr} to show it literally
-end
 stage
   parse "Parser"
   sema "Analysis"
@@ -22,11 +20,9 @@ stage
   | radial or layered
   solve "Solver"
   | largest font that fits
-end
 io
   emit "Output"
   | svg, png, pdf, tikz
-end
 src -> expand -> parse -> sema -> lay -> solve -> emit "one format per -o"
 expand ..> sema "errors point at the template line" color=#C62828
 
@@ -35,15 +31,12 @@ for i, s in "node", "edge", "setting"
   if s == "node"
     stage
       st${i} "node and | body"
-    end
   else if s == "edge"
     stage
       st${i} "-> -- ..> .."
-    end
   else
     setting
       st${i} "title, page, font, theme"
-    end
   end
   parse -> st${i}
 end
@@ -54,7 +47,6 @@ def rel(id, text, note)
   rule
     node ${id} "${text}"
     | ${note}
-  end
   sema -> ${id}
 end
 use rel("ord", "left-of, above, near, at", "gap=, within=")
@@ -63,14 +55,12 @@ rule
   req "require"
   prf "prefer"
   | weight=2
-end
 sema -- req, prf
 
 # The solver probes fonts from the top; a recursive template writes the probes.
 def probe(n)
   note
     probe${n} "font probe ${n}"
-  end
   if n > 1
     use probe(n - 1)
     probe${n} -> probe${n - 1}

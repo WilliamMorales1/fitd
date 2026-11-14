@@ -10,20 +10,16 @@ src
   map "map.fitd"
   | the original, too big for one page
   | fitd split map.fitd [-o DIR], default map-pages/
-end
 shared
   node shared "map-shared.fitd"
   | layout, page, font, theme, styles
-end
 sheet
   over "map.fitd (overview)"
   | root plus one stub per branch
-end
 for b in a, b, c
   sheet
     p${b} "map-${b} : fitd"
     | branch ${b}, rooted at its top node
-  end
   map -> p${b} -> shared
 end
 map -> over -> shared "include"

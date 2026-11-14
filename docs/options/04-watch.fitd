@@ -9,14 +9,12 @@ node save "Save"
 fast
   draft "Draft build"
   | at once, coarse font search
-end
 node wait "1.5 s quiet"
 slow
   full "Full build"
   | trade-off and full polish
   out "Output replaced"
   | atomically, never half a file
-end
 
 save -> draft -> wait -> full -> out
 draft ..> out "first"

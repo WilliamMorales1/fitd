@@ -9,14 +9,12 @@ time_event
   node ${id} "${date}"
   | ${text}
 end
-end
 
 # time.mile(id, date, text): a milestone, drawn in the accent colour.
 def mile(id, date, text)
 time_mile
   node ${id} "${date}"
   | ${text}
-end
 end
 
 # time.chain(ids): joins the `;`-separated events in order.

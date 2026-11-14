@@ -615,8 +615,6 @@ struct Builder<'a> {
     i: usize,
     defs: HashMap<String, Def>,
     errs: Vec<(usize, Diag)>,
-    styles: std::collections::HashSet<String>,
-    open: usize,
 }
 
 enum Stop {
@@ -630,35 +628,11 @@ impl Builder<'_> {
         self.errs.push((line, Diag::error("E0002", msg)));
     }
 
-    /// opens_block reports whether line `at` opens a style block: a lone declared style, or any lone name outside a block.
-    fn opens_block(&self, at: usize) -> bool {
-        let line = self.lines[at];
-        let t = line[..comment_start(line)].trim();
-        let word = |w: &str| {
-            w.starts_with(|c: char| c.is_alphabetic() || c == '_')
-                && w.chars().all(|c| c.is_alphanumeric() || c == '_')
-        };
-        // A lone name built from `${}` may expand to a style; the parser opens it only outside a block too.
-        if t.contains("${") && !t.contains(char::is_whitespace) && !t.contains(['"', '(', '-', '<', '>', '=', ',']) {
-            return self.open == 0;
-        }
-        let ok = match t.split_once('.') {
-            Some((m, n)) => word(m) && word(n),
-            None => word(t) && !crate::parse::KEYWORDS.contains(&t),
-        };
-        ok && (self.open == 0 || self.styles.contains(&t.replacen('.', "_", 1)))
-    }
-
     fn block(&mut self, top: bool) -> (Vec<Item>, Stop, usize) {
         let mut items = Vec::new();
-        // Style blocks pass through to the parser, but their `end` must not close a macro.
-        let base = self.open;
         while self.i < self.lines.len() {
             let at = self.i;
             self.i += 1;
-            if self.opens_block(at) {
-                self.open += 1;
-            }
             let line = match classify(self.lines[at]) {
                 Ok(l) => l,
                 Err(m) => {
@@ -673,26 +647,13 @@ impl Builder<'_> {
             };
             let kind = match line {
                 Line::Item(k) => k,
-                Line::End if self.open > base => {
-                    self.open -= 1;
-                    Kind::Plain
-                }
                 Line::End | Line::Else | Line::ElseIf(_) if top => {
                     self.err(at, "`end` or `else` with no open `for`, `if`, or `def`");
                     Kind::Skip
                 }
-                Line::End => {
-                    self.open = base;
-                    return (items, Stop::End, at);
-                }
-                Line::Else => {
-                    self.open = base;
-                    return (items, Stop::Else(None), at);
-                }
-                Line::ElseIf(e) => {
-                    self.open = base;
-                    return (items, Stop::Else(Some(e)), at);
-                }
+                Line::End => return (items, Stop::End, at),
+                Line::Else => return (items, Stop::Else(None), at),
+                Line::ElseIf(e) => return (items, Stop::Else(Some(e)), at),
                 Line::For(var, it) => {
                     let (body, stop, _) = self.block(false);
                     self.close(at, &stop, "for");
@@ -752,7 +713,6 @@ impl Builder<'_> {
                 kind,
             });
         }
-        self.open = base;
         (items, Stop::Eof, self.lines.len())
     }
 
@@ -779,12 +739,25 @@ struct Expander<'a> {
     budget: u64,
     out_of_budget: bool,
     errs: Vec<(usize, Diag)>,
+    /// shift re-bases expanded lines: drop the first indent of a body, add the indent of its directive.
+    shift: (usize, usize),
+}
+
+fn indent(s: &str) -> usize {
+    s.len() - s.trim_start().len()
 }
 
 type Run<T> = Result<T, ()>;
 
 impl Expander<'_> {
     fn emit(&mut self, line: usize, s: &str, hidden: bool) {
+        let owned;
+        let s = if self.shift == (0, 0) || s.trim().is_empty() {
+            s
+        } else {
+            owned = format!("{}{}", " ".repeat(self.at(s)), s.trim_start());
+            &owned
+        };
         self.text += s;
         self.text.push('\n');
         if hidden {
@@ -794,6 +767,27 @@ impl Expander<'_> {
         }
         self.parse.push('\n');
         self.origin.push(line);
+    }
+
+    /// at gives the indent line `s` gets once expanded.
+    fn at(&self, s: &str) -> usize {
+        self.shift.1 + indent(s).saturating_sub(self.shift.0)
+    }
+
+    /// nest runs `body` re-based under the directive on line `at`, as if its lines stood at that indent.
+    fn nest(&mut self, at: usize, body: &[Item]) -> Run<()> {
+        let first = body
+            .iter()
+            .map(|it| self.lines[it.lo])
+            .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
+            .map(indent)
+            .min()
+            .unwrap_or(0);
+        let old = self.shift;
+        self.shift = (first, self.at(self.lines[at]));
+        let r = self.run(body, false);
+        self.shift = old;
+        r
     }
 
     fn raw(&mut self, item: &Item) {
@@ -1088,7 +1082,7 @@ impl Expander<'_> {
                         frame.insert(i.clone(), Val::Int(k as i64 + 1));
                     }
                     frame.insert(var.last().unwrap().clone(), v);
-                    self.run(body, false)?;
+                    self.nest(at, body)?;
                 }
             }
             Kind::If(arms) => {
@@ -1098,7 +1092,7 @@ impl Expander<'_> {
                         None => true,
                     };
                     if go {
-                        return self.run(body, false);
+                        return self.nest(at, body);
                     }
                 }
             }
@@ -1150,7 +1144,7 @@ impl Expander<'_> {
                 }
                 self.frames.push(frame);
                 self.calls.push((name.clone(), at));
-                let r = self.run(&def.body, false);
+                let r = self.nest(at, &def.body);
                 self.calls.pop();
                 self.frames.pop();
                 r?;
@@ -1199,13 +1193,6 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
         i: 0,
         defs: HashMap::new(),
         errs: Vec::new(),
-        styles: lines
-            .iter()
-            .filter_map(|l| l.trim_start().strip_prefix("style "))
-            .filter_map(|r| r.split_whitespace().next())
-            .map(str::to_string)
-            .collect(),
-        open: 0,
     };
     let (items, _, _) = b.block(true);
     let mut x = Expander {
@@ -1222,6 +1209,7 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
         budget,
         out_of_budget: false,
         errs: Vec::new(),
+        shift: (0, 0),
     };
     let _ = x.run(&items, true);
     let mut segs: Vec<Seg> = Vec::new();

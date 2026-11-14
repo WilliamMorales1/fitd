@@ -335,7 +335,7 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
                 }
                 continue;
             }
-            StmtKind::Title(_) | StmtKind::End => {}
+            StmtKind::Title(_) => {}
             StmtKind::Open(c) => b.classes(std::slice::from_ref(c)),
             StmtKind::Root(n) => b.occ(Kind::Node, n, false),
             StmtKind::Layout { kind, attrs } => {

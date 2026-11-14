@@ -36,7 +36,7 @@ Page            = "page", Value, { Name }, { Attribute } ;
 Font            = "font", Value, { Attribute } ;
 Theme           = "theme", [ Name ], { Attribute } ;
 Style           = "style", Name, { Attribute } ;
-StyleBlock      = QualName, Newline, { Statement, Newline }, "end" ;
+StyleBlock      = QualName, Newline, Indent, { Statement, Newline }, Dedent ;
 Node            = [ "node" ], Name, [ String ], { Attribute } ;
 Body            = BodyLine ;
 Cells           = CellRow ;
@@ -98,7 +98,7 @@ Whitespace separates tokens. Spaces and tabs may appear between tokens. Whitespa
 
 `node ID ["title"] [attributes]` declares a node. When title is omitted, identifier is used as title.
 
-A line holding only a style name opens a style block, and `end` closes it. Every node, edge, group, and key inside the block takes that style, so a style is written once for many lines. Module styles use qualified names: `nn.block` opens a block of module-prefixed style `nn_block`. Blocks nest, and inner styles apply after outer ones. Inside a block a node line may drop `node`: `ID ["title"] [attributes]`. A lone name inside a block is a node unless it is a declared style, so a node and a style may share a name; a lone undeclared name outside any block is E0004. A block may hold `for`, `if`, and `use`, and may sit inside them; it must close in the same macro body it opens in. The older `: NAME` suffix is an error.
+A line holding only a style name opens a style block. The lines indented deeper than it form the block, and the first line indented no deeper closes it (the off-side rule), so a block needs no `end`. Every node, edge, group, and key inside the block takes that style, so a style is written once for many lines. Module styles use qualified names: `nn.block` opens a block of module-prefixed style `nn_block`. Blocks nest, and inner styles apply after outer ones. Inside a block a node line may drop `node`: `ID ["title"] [attributes]`. A lone name inside a block is a node unless it is a declared style, so a node and a style may share a name; a lone undeclared name outside any block is E0004. A block may hold `for`, `if`, and `use`, and may sit inside them. Macro bodies expand at the indent of their directive or call, so a template body opens and closes blocks relative to where it is used. The older `: NAME` suffix is an error.
 
 A body line begins with `|` in first non-whitespace position. It appends text to most recently declared node. Multiple body lines may follow one declaration. A body line without preceding node is invalid.
 
@@ -109,7 +109,6 @@ plant
   leaf "Leaf" color=#2E7D32
   | converts light into stored energy
   root "Root"
-end
 ```
 
 ### Figure rows
@@ -192,7 +191,6 @@ Each target in a hop becomes a source for next hop. Thus `a -> b, c -> d` create
 ```fitd
 important
   a -> b, c "produces" -- d color=#1565C0
-end
 ```
 
 Edges and edge styles take `color`, `head`, `tail`, and `line`. `head` marks the target end and `tail` the source end, each one of `arrow`, `triangle` (hollow), `diamond`, `odiamond` (hollow diamond), `crow` (crow's foot), or `none`. A directed edge defaults to `head=arrow`, an undirected one to none; `tail` defaults to none. `line=solid|dashed|dotted` sets the dash pattern; `..>` and `..` default to dashed. Marks sit inside the arrow clearance, so they never change the layout.
@@ -201,7 +199,6 @@ Edges and edge styles take `color`, `head`, `tail`, and `line`. `head` marks the
 style is head=triangle
 is
   circle -> shape
-end
 canvas -- shape tail=diamond line=dotted
 ```
 
@@ -238,7 +235,6 @@ node s "Server"
 pt
   c1 "" lane=c
   s1 "" lane=s
-end
 c1 -> s1 "GET /orders"
 require align row(c1, s1)
 ```
@@ -287,7 +283,6 @@ theme light background=#FFFFFF text=#24292F
 style plant shape=box color=#2E7D32
 plant
   leaf "Leaf"
-end
 ```
 
 ### Constraints
@@ -348,7 +343,6 @@ nn.input("x", "Tokens", "B x L")
 nn.layer("e", "Encoder", "d 64", 2)
 nn.block
   block "Block"
-end
 nn.mask("m", "Causal mask", 4, 1)
 x -> e -> m
 ```
@@ -366,7 +360,7 @@ deploy -> rollback "yes"
 
 ![Macro directives, expressions, scope, and expansion limits](language/05-macros.png)
 
-Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, module template calls `MOD.name(...)`, and `${expression}` interpolation. Directives use indentation for readability; block boundaries are marked by `end`. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
+Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, module template calls `MOD.name(...)`, and `${expression}` interpolation. Macro blocks close with `end`. Their bodies expand at the indent of the directive or call line, keeping deeper indents, so style blocks inside them nest as written. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
 
 Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for node lists. `count(s, sep)` gives the number of fields in `s`; `part(s, sep, i)` gives field `i`, counted from 1, without trailing spaces or the one space after the separator. Further leading spaces stay, so a `|` body line built from a field keeps its indent. A whitespace separator splits on runs of whitespace, and an empty string has no fields, so templates can take lists as one string:
 

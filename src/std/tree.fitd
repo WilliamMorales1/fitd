@@ -10,13 +10,11 @@ def cat(id, label)
 tree_cat
   node ${id} "${label}"
 end
-end
 
 # tree.word(id, word): a leaf word of a syntax tree.
 def word(id, word)
 tree_word
   node ${id} "${word}"
-end
 end
 
 # tree.q(id, question): a decision-tree test; label its edges with the answers.
@@ -24,13 +22,11 @@ def q(id, question)
 tree_q
   node ${id} "${question}"
 end
-end
 
 # tree.leaf(id, outcome): a decision-tree outcome.
 def leaf(id, outcome)
 tree_leaf
   node ${id} "${outcome}"
-end
 end
 
 # tree.unit(id, name, role): an org-chart box naming a person or team and its role.
@@ -38,7 +34,6 @@ def unit(id, name, role)
 tree_unit
   node ${id} "${name}"
   | ${role}
-end
 end
 
 # tree.kids(parent, kids): edges from parent to each of the `;`-separated kids, in order.

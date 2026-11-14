@@ -6,7 +6,6 @@ style algo_block color=#0072B2 shape=box wrap=40em
 def block(id, title, lines)
 algo_block
   node ${id} "${title}"
-end
 for i in 1..count(lines, ";")
 | ${part(lines, ";", i)}
 end

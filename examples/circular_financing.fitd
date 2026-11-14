@@ -15,7 +15,6 @@ hub
   | Blue Owl 80%, Meta 20%
   meta "Meta (Laidley LLC)"
   | ~$50B+ total pledge
-end
 party
   owl "Blue Owl Capital"
   spv "Bond SPV"
@@ -28,11 +27,9 @@ party
   | disputed risk
   state "State of Louisiana, LED"
   parish "Richland Parish"
-end
 small
   ins "Insurers"
   | coverage only to ~$4B
-end
 
 owl -> jv "~$23B equity (Blue Owl share)" color=#4FC3E0
 meta -> jv "~$5.8B equity, covers overruns above 105%; got ~$3B distribution" color=#4FC3E0

@@ -10,7 +10,6 @@ def stage(i, name, file, kind)
   ${kind}
     node s${i} "${name}"
     | ${file}
-  end
   if i > 1
     s${i - 1} -> s${i}
   end

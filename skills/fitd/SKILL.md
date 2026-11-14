@@ -36,7 +36,7 @@ If the user wants the source kept, write it to `NAME.fitd` and build with `fitd 
 
 ## Repetition
 
-When many nodes or edges share one style, write the style once as a block: `style step color=#0072B2`, then a line `step`, the lines (`lint "Lint"`, `test "Test"`, `a -> b`), then `end`. Node lines inside a block drop `node`; module styles open blocks too (`nn.block`). Outside blocks, keep `node` for unstyled nodes. When many nodes share one shape (numbered steps, one box per service, layers, recursion trees), write a loop or a template instead of copying lines: `for i in 1..n` or `for i, x in a, b, c` ... `end`, `def NAME(args)` ... `end` with `use NAME(...)`, and `${expr}` inside any line. Errors on generated lines are reported at the template line.
+When many nodes or edges share one style, write the style once as a block: `style step color=#0072B2`, then a line `step` and the lines indented under it (`lint "Lint"`, `test "Test"`, `a -> b`); the first line indented no deeper closes the block, with no `end`. Node lines inside a block drop `node`; module styles open blocks too (`nn.block`). Outside blocks, keep `node` for unstyled nodes. When many nodes share one shape (numbered steps, one box per service, layers, recursion trees), write a loop or a template instead of copying lines: `for i in 1..n` or `for i, x in a, b, c` ... `end`, `def NAME(args)` ... `end` with `use NAME(...)`, and `${expr}` inside any line. Errors on generated lines are reported at the template line.
 
 ## Start minimal
 

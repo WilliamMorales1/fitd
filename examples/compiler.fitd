@@ -12,7 +12,6 @@ style io color=#26A69A shape=circle
 io
   src "Source : fitd"
   | one statement per line
-end
 stage
   lex "Lexer"
   | tokens with byte spans
@@ -27,7 +26,6 @@ stage
   plan "Strategy"
   | radial or layered candidates
   | real font metrics determine box sizes
-end
 node csp "CSP search"
 | FC-CBJ, binary search on font
 | candidate positions satisfy hard constraints
@@ -41,7 +39,6 @@ check
   checker "Checker"
   | recomputes every constraint
   | overlap, crossings, clipping, and overflow
-end
 node emit "Emitter"
 | absolute positions; no downstream reflow
 stage
@@ -51,20 +48,16 @@ stage
   quality "Layout polish"
   | annealing reduces crossings and edge clutter
   | never violates a hard constraint
-end
 check
   diagnostics "Diagnostics"
   | source spans point to the failing statement
   | explain CODE prints the long form
-end
 io
   output "SVG, PNG, TikZ"
-end
 check
   failure "Failure paths"
   | parse errors are reported and skipped
   | unsatisfiable requirements stop output
-end
 
 src -> lex -> parse -> sema -> plan -> measure -> quality
 plan -> csp -> bnb, core
@@ -73,7 +66,6 @@ bnb -> checker -> diagnostics -> emit -> output
 core ..> sema "points back at source"
 check
   failure ..> diagnostics "reported"
-end
 
 group "Front end" lex, parse, sema
 group "Solver" csp, bnb, core color=#AB47BC

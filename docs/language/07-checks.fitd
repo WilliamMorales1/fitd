@@ -19,7 +19,6 @@ stat
   | gaps are non-negative
   | BFS over (node, used-an-ordering) states, so the reported
   | cycle is short and every constraint on it gets a label
-end
 
 search
   grid "E0110: search fails"
@@ -35,7 +34,6 @@ search
   help "Help printed"
   | remove one, turn it into prefer, or use a larger page;
   | the default 7pt floor can be lowered with font
-end
 
 after
   check "Checker"
@@ -43,7 +41,6 @@ after
   | re-derives overlap, edges through nodes, crossings,
   | off page, text overflow, font size: E0101-E0107
   | any error stops output; --force writes it anyway
-end
 
 src -> classes, grid, check
 classes -> cycle

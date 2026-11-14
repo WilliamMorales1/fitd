@@ -601,13 +601,13 @@ mod tests {
 
     #[test]
     fn definitions_and_completions_follow_names() {
-        let text = "style hot color=#C62828\nhot\n  node a\nend\nnode b\na -> b\nrequire a left-of \n";
+        let text = "style hot color=#C62828\nhot\n  node a\nnode b\na -> b\nrequire a left-of \n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str, k: usize| position(text, text.match_indices(s).nth(k).unwrap().0);
         assert_eq!(
             features::definition(&d, &at("b", 1))["range"]["start"],
-            json!({ "line": 4, "character": 5 })
+            json!({ "line": 3, "character": 5 })
         );
         assert_eq!(
             features::definition(&d, &at("hot", 1))["range"]["start"],
@@ -648,7 +648,7 @@ mod tests {
         std::fs::create_dir_all(dir.join("parts")).unwrap();
         std::fs::write(
             dir.join("parts/more.fitd"),
-            "style hot color=#EF5350\nhot\n  far \"Far\"\nend\nfar -> ghost\n",
+            "style hot color=#EF5350\nhot\n  far \"Far\"\nfar -> ghost\n",
         )
         .unwrap();
         let main = dir.join("main.fitd");
@@ -683,7 +683,7 @@ mod tests {
         assert!(
             inc.len() == 1
                 && inc[0]["code"] == "E0001"
-                && inc[0]["range"]["start"] == json!({ "line": 4, "character": 7 }),
+                && inc[0]["range"]["start"] == json!({ "line": 3, "character": 7 }),
             "{inc:?}"
         );
     }
@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn modern_requests_answer() {
-        let text = "style hot color=#C62828\n# Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nhot\n  node a \"A\"\nend\nnode b\na -> b\nuse pair(c, d)\n";
+        let text = "style hot color=#C62828\n# Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nhot\n  node a \"A\"\nnode b\na -> b\nuse pair(c, d)\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str| position(text, text.rfind(s).unwrap());
@@ -758,7 +758,7 @@ mod tests {
         let r = features::rename(&d, &at("b\n"), "bee").unwrap();
         assert_eq!(r["changes"]["file:///x.fitd"].as_array().unwrap().len(), 2);
         assert!(features::rename(&d, &at("b\n"), "1x").is_err());
-        let sig = features::signature_help(&d, &json!({ "line": 11, "character": 10 }));
+        let sig = features::signature_help(&d, &json!({ "line": 10, "character": 10 }));
         assert_eq!(sig["signatures"][0]["label"], "pair(x, y)");
         assert_eq!(sig["activeParameter"], 0);
         let hints = features::inlay_hints(
@@ -786,7 +786,7 @@ mod tests {
 
     #[test]
     fn module_classes_answer_by_qualified_name() {
-        let text = "style nn_block color=#CC79A7\nnn.block\n  a\nend\n";
+        let text = "style nn_block color=#CC79A7\nnn.block\n  a\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = position(text, text.find("nn.block").unwrap() + 3);
@@ -798,7 +798,7 @@ mod tests {
 
     #[test]
     fn style_blocks_answer_like_classes() {
-        let text = "style step color=#0072B2\nstyle nn_block color=#CC79A7\nstep\n  a \"A\"\n  | body\n  nn.block\n    e\n  end\n  b \nend\n\n";
+        let text = "style step color=#0072B2\nstyle nn_block color=#CC79A7\nstep\n  a \"A\"\n  | body\n  nn.block\n    e\n  b \n\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str| position(text, text.find(s).unwrap() + 1);
@@ -820,11 +820,11 @@ mod tests {
                 .map(|v| v["label"].as_str().unwrap().to_string())
                 .collect()
         };
-        let start = labels(10, 0);
+        let start = labels(8, 0);
         assert!(start.iter().any(|l| l == "step") && start.iter().any(|l| l == "nn.block"), "{start:?}");
-        assert!(labels(8, 4).iter().any(|l| l == "color"));
+        assert!(labels(7, 4).iter().any(|l| l == "color"));
         let folds = features::folds(text);
-        for (lo, hi) in [(3, 4), (5, 7), (2, 9)] {
+        for (lo, hi) in [(3, 4), (5, 6), (2, 7)] {
             assert!(folds.as_array().unwrap().contains(&json!({ "startLine": lo, "endLine": hi })), "{folds}");
         }
     }

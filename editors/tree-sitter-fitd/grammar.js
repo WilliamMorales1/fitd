@@ -54,7 +54,7 @@ module.exports = grammar({
       seq('node', field('id', $.name), optional(field('title', $.string)), repeat($.attribute)),
       seq(field('id', $.name), choice(seq(field('title', $.string), repeat($.attribute)), repeat1($.attribute))),
     ),
-    // A lone name opens a style block up to `end`; inside a block an undeclared one is a node, which only sema knows.
+    // A lone name opens a style block over the lines indented under it; inside a block an undeclared one is a node, which only sema knows.
     block_statement: $ => field('style', $.qualified_name),
     body: _ => token(seq('|', /[^\n]*/)),
     edge_statement: $ => seq(
@@ -69,7 +69,7 @@ module.exports = grammar({
     constraint_statement: $ => seq(choice('require', 'prefer'), $._relation, repeat($.attribute)),
     include_statement: $ => seq('include', field('path', $.string)),
 
-    // Macro lines stay flat, one per line like every statement; nesting is left to `end`.
+    // Statements stay flat, one per line; nesting is left to `end` for macros and indentation for style blocks.
     for_statement: $ => seq('for', field('var', $.name), optional(seq(',', field('var', $.name))), 'in', field('items', $.expression)),
     if_statement: $ => seq('if', field('condition', $.expression)),
     else_statement: $ => seq('else', optional(seq('if', field('condition', $.expression)))),

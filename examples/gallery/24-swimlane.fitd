@@ -4,21 +4,16 @@ layout lanes
 page 4:3
 io
   order "Place order"
-end
 step
   pay "Take payment"
-end
 decide
   stock "In stock?"
-end
 step
   ship "Pack and ship"
   refund "Refund"
   receipt "Send receipt"
-end
 done
   done "Receive parcel"
-end
 order -> pay
 pay -> stock
 stock -> ship "yes"

@@ -14,7 +14,6 @@ nn_data
   node ${id} "${name}"
   ~ #"${dims}"*4
 end
-end
 
 # nn.layer(id, name, dims, times): one block drawn as `times` stacked copies.
 def layer(id, name, dims, times)
@@ -22,13 +21,11 @@ nn_block
   node ${id} "${name}" stack=${times}
   ~ #"${dims}"*4
 end
-end
 
 # nn.step(id, name): an operator with no parameters (pool, concat, softmax).
 def step(id, name)
 nn_step
   node ${id} "${name}"
-end
 end
 
 # nn.out(id, name, dims): the model output.
@@ -37,13 +34,11 @@ nn_result
   node ${id} "${name}"
   ~ #"${dims}"*4
 end
-end
 
 # nn.mask(id, name, n, causal): an n x n attention mask; causal=1 hides the future.
 def mask(id, name, n, causal)
 nn_block
   node ${id} "${name}"
-end
 use mask_rows(n, causal)
 end
 
@@ -74,11 +69,9 @@ def note(id, text)
 nn_note
   node ${id} "${text}"
 end
-end
 
 # nn.add(id): the small circled `+` that marks a residual or merge point.
 def add(id)
 nn_op
   node ${id} "+" shape=circle
-end
 end

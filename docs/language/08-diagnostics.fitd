@@ -13,14 +13,11 @@ node diag "Diagnostics"
 
 front
   node front "E00xx: front end"
-end
 solve
   lay "E01xx: layout"
-end
 warn
   node warn "W02xx: warnings"
   | never block output
-end
 diag -> front, lay, warn
 
 def code(parent, c, text)
