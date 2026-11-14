@@ -40,7 +40,6 @@ for i, s in "node", "edge", "setting"
   end
   parse -> st${i}
 end
-lay .. al "reads"
 
 # Relations: one template call per family.
 def rel(id, text, note)
@@ -51,6 +50,7 @@ def rel(id, text, note)
 end
 use rel("ord", "left-of, above, near, at", "gap=, within=")
 use rel("al", "align", "row, column, top, left")
+lay .. al "reads"
 rule
   req "require"
   prf "prefer"

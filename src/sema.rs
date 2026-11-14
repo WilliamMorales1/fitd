@@ -1082,7 +1082,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 .primary(Span::new(0, 0), "expected at least one `node`"),
         );
     }
-    let g = Graph {
+    let mut g = Graph {
         key: key_entries,
         title,
         root,
@@ -1092,6 +1092,9 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
         sets,
         settings: set,
     };
+    if !g.settings.source_order {
+        g.canonicalize();
+    }
     (g, s.diags)
 }
 
@@ -1561,8 +1564,9 @@ mod tests {
         let (g, d) = run("style radial color=#CC79A7\nradial\n  coffee \"Coffee\"\nnode radial\nradial -> coffee\n");
         assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
         assert_eq!(g.nodes.len(), 2);
-        assert_eq!(g.nodes[0].color.as_deref(), Some("#CC79A7"));
-        assert_eq!(g.nodes[1].color, None);
+        let color = |id: &str| g.nodes.iter().find(|n| n.id == id).unwrap().color.clone();
+        assert_eq!(color("coffee").as_deref(), Some("#CC79A7"));
+        assert_eq!(color("radial"), None);
         assert_eq!(codes("style node color=#f00\nnode a\n"), vec!["E0015"]);
         assert_eq!(codes("style for color=#f00\nnode a\n"), vec!["E0015"]);
         assert_eq!(codes("style step\nstp\n  a\nnode b\n"), vec!["E0004", "W0203"]);

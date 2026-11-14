@@ -28,6 +28,27 @@ fn edge_source_lists_fan_in() {
 }
 
 #[test]
+fn moving_declarations_keeps_the_layout() {
+    let head = "layout layered\nstyle a color=#0072B2\nstyle b color=#D55E00\n";
+    let bodies = [
+        "a\n  x \"X\"\n  y \"Y\"\nb\n  z \"Z\"\nx -> z -> y\n",
+        "b\n  z \"Z\"\na\n  y \"Y\"\n  x \"X\"\nx -> z -> y\n",
+    ];
+    let svgs: Vec<String> = bodies
+        .iter()
+        .enumerate()
+        .map(|(i, body)| {
+            let (src, out) = (tmp(&format!("move{i}.fitd")), tmp(&format!("move{i}.svg")));
+            std::fs::write(&src, format!("{head}{body}")).unwrap();
+            let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", out.to_str().unwrap()]);
+            assert!(ok, "{log}");
+            std::fs::read_to_string(out).unwrap()
+        })
+        .collect();
+    assert_eq!(svgs[0], svgs[1]);
+}
+
+#[test]
 fn unconnected_grid_nodes_stack_in_layered() {
     let src = tmp("grid.fitd");
     std::fs::write(

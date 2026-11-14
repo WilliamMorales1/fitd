@@ -308,6 +308,58 @@ pub struct Graph {
     pub settings: Settings,
 }
 
+impl Graph {
+    /// canonicalize renumbers nodes in the order edges first mention them, then the unlinked ones, so moving declarations leaves the layout unchanged.
+    pub fn canonicalize(&mut self) {
+        let n = self.nodes.len();
+        let mut order = Vec::with_capacity(n);
+        let mut rank = vec![usize::MAX; n];
+        let ends = self.edges.iter().flat_map(|e| [e.a, e.b]);
+        for v in ends.chain(0..n) {
+            if rank[v] == usize::MAX {
+                rank[v] = order.len();
+                order.push(v);
+            }
+        }
+        if order.iter().enumerate().all(|(i, &v)| i == v) {
+            return;
+        }
+        let mut old: Vec<Option<Node>> = std::mem::take(&mut self.nodes).into_iter().map(Some).collect();
+        self.nodes = order.iter().map(|&v| old[v].take().unwrap()).collect();
+        let r = |v: &mut usize| *v = rank[*v];
+        for node in &mut self.nodes {
+            node.lane.as_mut().map(r);
+        }
+        self.root.as_mut().map(r);
+        for e in &mut self.edges {
+            r(&mut e.a);
+            r(&mut e.b);
+        }
+        for set in &mut self.sets {
+            set.items.iter_mut().for_each(r);
+        }
+        fn relation(rel: &mut Relation, r: &dyn Fn(&mut usize)) {
+            match rel {
+                Relation::LeftOf { a, b, .. }
+                | Relation::Above { a, b, .. }
+                | Relation::Near { a, b, .. } => {
+                    r(a);
+                    r(b);
+                }
+                Relation::Align { items, .. } => items.iter_mut().for_each(r),
+                Relation::At { a, .. } => r(a),
+                Relation::Group { items, inner, .. } => {
+                    items.iter_mut().for_each(r);
+                    inner.iter_mut().for_each(|i| relation(i, r));
+                }
+            }
+        }
+        for c in &mut self.constraints {
+            relation(&mut c.rel, &r);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Image;
