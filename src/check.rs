@@ -261,6 +261,7 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
             }
         }
     }
+    #[allow(clippy::needless_range_loop)]
     for v in 0..n {
         let b = &lay.boxes[v];
         for l in &b.lines {
