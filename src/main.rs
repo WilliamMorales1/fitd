@@ -535,6 +535,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         legible: legible(page_w, page_h, min_font.unwrap_or(font.0)),
         draft,
         key_h: 0.0,
+        pack_frames: false,
         anchor: anchor.map(|a| &*Box::leak(Box::new(a))),
     };
 

@@ -21,13 +21,13 @@ use explain::quickxplain;
 use measure::measure_all;
 use path::{BOWS, SPOTS, detours, inside_box, trim};
 use polish::{POLISH_MOVES, SOFT_PENALTY, polish};
-use relations::{FRAME_CLEAR, aligned};
+use relations::aligned;
 use scene::{Scene, build};
 
 pub use measure::{label_size, line_height};
 pub use path::{curve, label_rect, paths_meet};
 pub use polish::Readable;
-pub use relations::{FRAME_PAD, TITLE_BAND, TITLE_SIZE, frame, frame_clear, relation_holds};
+pub use relations::{FRAME_CLEAR, FRAME_PAD, TITLE_BAND, TITLE_SIZE, frame, frame_clear, relation_holds};
 pub use stable::Anchor;
 
 pub fn measure_groups(g: &mut Graph, fonts: &Fonts) {
@@ -64,6 +64,8 @@ pub struct Config {
     pub legible: f64,
     pub draft: bool,
     pub key_h: f64,
+    /// pack_frames lays layered group frames out as blocks; `solve` retries with it when the plain layout fails.
+    pub pack_frames: bool,
     pub anchor: Option<&'static Anchor>,
 }
 
@@ -548,6 +550,17 @@ pub fn merit(g: &Graph, t: &Tree, cfg: &Config, lay: &Layout) -> f64 {
 }
 
 pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout, Failure> {
+    let first = solve_once(g, t, fonts, cfg);
+    let framed = matches!(g.settings.layout, Some(LayoutKind::Layered(_)))
+        && !g.settings.lanes
+        && g.constraints.iter().any(|c| matches!(c.rel, Relation::Group { .. }));
+    if first.is_ok() || !framed || cfg.pack_frames {
+        return first;
+    }
+    solve_once(g, t, fonts, &Config { pack_frames: true, ..*cfg }).or(first)
+}
+
+fn solve_once(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout, Failure> {
     let mut stats = Stats::default();
     let hard: Vec<usize> = (0..g.constraints.len())
         .filter(|&i| g.constraints[i].hard)

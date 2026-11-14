@@ -2303,3 +2303,79 @@ fn algorithm_lines_keep_indent_and_bold_keywords() {
             .contains("{\\bfseries Qkw}")
     );
 }
+
+#[test]
+fn layered_frames_between_unrelated_pieces_get_their_own_columns() {
+    let mut src = String::from("layout layered dir=down\npage a2 landscape\n");
+    for g in ["a", "b"] {
+        src += &format!("{g}1 \"{g} root\"\n{g}2 \"{g} left\"\n{g}3 \"{g} right\"\n{g}4 \"{g} leaf\"\n");
+    }
+    for i in 0..8 {
+        src += &format!("p{i} \"Part {i}\"\nq{i} \"Piece {i}\"\nr{i} \"Bit {i}\"\n");
+    }
+    src += "group ga \"Group A\" a1, a2, a3, a4\ngroup gb \"Group B\" b1, b2, b3, b4\n";
+    for g in ["a", "b"] {
+        src += &format!("{g}1 -> {g}2, {g}3\n{g}2 -> {g}4\n");
+    }
+    for i in 0..8 {
+        src += &format!("p{i} -> q{i}\np{i} -> r{i}\n");
+    }
+    let path = tmp("two-frames.fitd");
+    std::fs::write(&path, src).unwrap();
+    let (ok, log) = fitd(&[
+        path.to_str().unwrap(),
+        "-o",
+        tmp("two-frames.svg").to_str().unwrap(),
+    ]);
+    assert!(ok && log.contains(" 0 errors"), "{log}");
+}
+
+#[test]
+fn packed_frames_spread_fans_and_skip_clearance_inside_group_ends() {
+    let src = "layout layered dir=down
+r \"Radio\"
+d \"Devices\"
+x \"Gamepad\"
+y \"Mouse\"
+z \"Keyboard\"
+bm \"Boot manager\"
+k \"Kernel\"
+i \"Init system\"
+p \"Processes\"
+t \"Top procs\"
+u \"Uptime\"
+la \"Load avg\"
+cu \"CPU usage\"
+lm \"Login manager\"
+de \"Desktop env\"
+th \"GTK theme\"
+ic \"Icons\"
+fo \"Font\"
+cr \"Cursor\"
+wm \"Window manager\"
+wt \"WM theme\"
+wp \"Wallpaper\"
+group bt \"Bluetooth\" r, d, x, y, z
+group boot \"Boot + kernel\" bm, k, i, p, t, u, la, cu
+group desk \"Desktop session\" lm, de, th, ic, fo, cr, wm, wt, wp
+boot -> desk \"starts\"
+r -> d
+d -> x, y, z
+bm -> k
+k -> i, u, la
+la -> cu
+i -> p
+p -> t
+lm -> de
+de -> wm, th, ic, fo, cr
+wm -> wt, wp
+";
+    let path = tmp("three-frames.fitd");
+    std::fs::write(&path, src).unwrap();
+    let (ok, log) = fitd(&[
+        path.to_str().unwrap(),
+        "-o",
+        tmp("three-frames.svg").to_str().unwrap(),
+    ]);
+    assert!(ok && log.contains(" 0 errors"), "{log}");
+}

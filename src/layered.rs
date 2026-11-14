@@ -1,7 +1,8 @@
 use crate::geom::Rect;
 use crate::graph::{Dir, EdgeKind, Graph, Relation, Side};
 use crate::layout::{
-    Boxed, Cand, Config, Drawn, EdgeStyle, FRAME_PAD, Kind, Plan, TITLE_BAND, label_size,
+    Boxed, Cand, Config, Drawn, EdgeStyle, FRAME_CLEAR, FRAME_PAD, Kind, Plan, TITLE_BAND,
+    label_size,
 };
 use crate::metrics::Fonts;
 
@@ -59,7 +60,54 @@ fn layers(n: usize, dag: &[(usize, usize)]) -> Vec<usize> {
     layer
 }
 
-fn order(n: usize, layer: &[usize], dag: &[(usize, usize)], source: bool) -> Vec<Vec<usize>> {
+fn cmp_keys(a: &[(f64, usize)], b: &[(f64, usize)]) -> std::cmp::Ordering {
+    for (x, y) in a.iter().zip(b) {
+        let o = x.0.total_cmp(&y.0).then(x.1.cmp(&y.1));
+        if o.is_ne() {
+            return o;
+        }
+    }
+    a.len().cmp(&b.len())
+}
+
+/// cluster reorders each row so a group's members sit together, and groups keep one order in every row.
+///
+/// A frame spans every layer its members reach, so members split by another node, or two groups that swap sides between layers, would put non-members inside a frame.
+fn cluster(rows: &mut [Vec<usize>], rank: &[f64], groups: &[Vec<usize>]) {
+    if groups.is_empty() {
+        return;
+    }
+    let gkey: Vec<f64> = groups
+        .iter()
+        .map(|m| m.iter().map(|&v| rank[v]).sum::<f64>() / m.len().max(1) as f64)
+        .collect();
+    let mut outer_first: Vec<usize> = (0..groups.len()).collect();
+    outer_first.sort_by_key(|&k| std::cmp::Reverse(groups[k].len()));
+    for row in rows.iter_mut() {
+        let mut keyed: Vec<(Vec<(f64, usize)>, usize)> = row
+            .iter()
+            .map(|&v| {
+                let mut k: Vec<(f64, usize)> = outer_first
+                    .iter()
+                    .filter(|&&g| groups[g].contains(&v))
+                    .map(|&g| (gkey[g], g))
+                    .collect();
+                k.push((rank[v], usize::MAX));
+                (k, v)
+            })
+            .collect();
+        keyed.sort_by(|a, b| cmp_keys(&a.0, &b.0));
+        *row = keyed.into_iter().map(|(_, v)| v).collect();
+    }
+}
+
+fn order(
+    n: usize,
+    layer: &[usize],
+    dag: &[(usize, usize)],
+    source: bool,
+    groups: &[Vec<usize>],
+) -> Vec<Vec<usize>> {
     let depth = layer.iter().max().map_or(0, |m| m + 1);
     let mut rows: Vec<Vec<usize>> = vec![Vec::new(); depth];
     for v in 0..n {
@@ -73,6 +121,8 @@ fn order(n: usize, layer: &[usize], dag: &[(usize, usize)], source: bool) -> Vec
             }
         }
     };
+    set_rank(&rows, &mut rank);
+    cluster(&mut rows, &rank, groups);
     set_rank(&rows, &mut rank);
     if source {
         // One downward pass: each node follows its parents, and siblings keep edge order.
@@ -91,6 +141,8 @@ fn order(n: usize, layer: &[usize], dag: &[(usize, usize)], source: bool) -> Vec
                 rows[l].iter().map(|&v| (key(v), v)).collect();
             keyed.sort_by(|a, b| a.0.0.total_cmp(&b.0.0).then(a.0.1.cmp(&b.0.1)));
             rows[l] = keyed.into_iter().map(|(_, v)| v).collect();
+            set_rank(&rows, &mut rank);
+            cluster(&mut rows[l..=l], &rank, groups);
             set_rank(&rows, &mut rank);
         }
         return rows;
@@ -121,6 +173,8 @@ fn order(n: usize, layer: &[usize], dag: &[(usize, usize)], source: bool) -> Vec
             let mut keyed: Vec<(f64, usize)> = rows[l].iter().map(|&v| (key(v), v)).collect();
             keyed.sort_by(|a, b| a.0.total_cmp(&b.0));
             rows[l] = keyed.into_iter().map(|(_, v)| v).collect();
+            set_rank(&rows, &mut rank);
+            cluster(&mut rows[l..=l], &rank, groups);
             set_rank(&rows, &mut rank);
         }
     }
@@ -214,6 +268,198 @@ pub(crate) fn layering(g: &Graph, dir: Dir) -> Layering {
     }
 }
 
+/// Frame is one group's share of the cross axis in `pack`: its members, the title width it needs, and how far its title pushes members in from the low edge.
+struct Frame {
+    items: Vec<usize>,
+    min: f64,
+    title: f64,
+}
+
+/// pack places `members` along the cross axis from 0 and returns the width used.
+///
+/// Each child frame is one block that covers every row its members reach, so no other node lands inside it; rows that share no block pack independently.
+struct Pack<'a> {
+    frames: &'a [Frame],
+    rows: &'a [Vec<usize>],
+    layer: &'a [usize],
+    width: &'a dyn Fn(usize) -> f64,
+    adj: &'a [Vec<usize>],
+    gap: f64,
+    pad: f64,
+    /// Cross width the top level may spread over.
+    room: f64,
+}
+
+fn pack(members: &[usize], p: &Pack, pos: &mut [f64], top: bool) -> f64 {
+    let Pack {
+        frames,
+        rows,
+        layer,
+        width,
+        gap,
+        pad,
+        ..
+    } = *p;
+    let inside =
+        |f: &Frame| f.items.len() < members.len() && f.items.iter().all(|v| members.contains(v));
+    let kids: Vec<usize> = (0..frames.len())
+        .filter(|&i| inside(&frames[i]))
+        .filter(|&i| {
+            !(0..frames.len()).any(|j| {
+                j != i
+                    && inside(&frames[j])
+                    && frames[j].items.len() > frames[i].items.len()
+                    && frames[i].items.iter().all(|v| frames[j].items.contains(v))
+            })
+        })
+        .collect();
+    // Unit u < kids.len() is a frame; otherwise it is node `members[u - kids.len()]` on its own.
+    let unit_of = |v: usize| {
+        kids.iter()
+            .position(|&i| frames[i].items.contains(&v))
+            .unwrap_or_else(|| kids.len() + members.iter().position(|&m| m == v).unwrap())
+    };
+    let units = kids.len() + members.len();
+    let mut span = vec![(usize::MAX, 0); units];
+    let mut key = vec![(0.0, 0usize); units];
+    let mut after: Vec<Vec<usize>> = vec![Vec::new(); units];
+    let mut used = vec![false; units];
+    for row in rows {
+        let mut prev: Option<usize> = None;
+        for (i, &v) in row.iter().enumerate().filter(|(_, v)| members.contains(v)) {
+            let u = unit_of(v);
+            used[u] = true;
+            span[u] = (span[u].0.min(layer[v]), span[u].1.max(layer[v]));
+            key[u] = (key[u].0 + (i as f64 + 0.5) / row.len() as f64, key[u].1 + 1);
+            if let Some(p) = prev.filter(|&p| p != u) {
+                after[p].push(u);
+            }
+            prev = Some(u);
+        }
+    }
+    let mut indeg = vec![0usize; units];
+    for &u in after.iter().flatten() {
+        indeg[u] += 1;
+    }
+    let mut seq = Vec::new();
+    let mut done = vec![false; units];
+    for _ in 0..units {
+        let pick = (0..units)
+            .filter(|&u| used[u] && !done[u])
+            .min_by(|&a, &b| {
+                (indeg[a] > 0)
+                    .cmp(&(indeg[b] > 0))
+                    .then((key[a].0 / key[a].1 as f64).total_cmp(&(key[b].0 / key[b].1 as f64)))
+            });
+        let Some(u) = pick else { break };
+        done[u] = true;
+        seq.push(u);
+        for &w in &after[u] {
+            indeg[w] = indeg[w].saturating_sub(1);
+        }
+    }
+    let depth = rows.len();
+    let mut cursor = vec![0.0f64; depth];
+    let mut xs = vec![0.0f64; units];
+    let mut ws = vec![0.0f64; units];
+    for &u in &seq {
+        let (lo, hi) = span[u];
+        let x = cursor[lo..=hi].iter().copied().fold(0.0, f64::max);
+        let w = if u < kids.len() {
+            let f = &frames[kids[u]];
+            let inner = pack(&f.items, p, pos, false);
+            let w = (inner + 2.0 * pad + f.title).max(f.min);
+            let shift = x + (w - inner - f.title) / 2.0 + f.title;
+            for &v in &f.items {
+                pos[v] += shift;
+            }
+            w
+        } else {
+            let v = members[u - kids.len()];
+            pos[v] = x + width(v) / 2.0;
+            width(v)
+        };
+        (xs[u], ws[u]) = (x, w);
+        for c in &mut cursor[lo..=hi] {
+            *c = x + w + gap;
+        }
+    }
+    let items = |u: usize| -> Vec<usize> {
+        if u < kids.len() {
+            frames[kids[u]].items.clone()
+        } else {
+            vec![members[u - kids.len()]]
+        }
+    };
+    let hi0 = seq.iter().map(|&u| xs[u] + ws[u]).fold(0.0, f64::max);
+    let moved = |u: usize, x: f64, xs: &mut [f64], pos: &mut [f64]| {
+        for v in items(u) {
+            pos[v] += x - xs[u];
+        }
+        xs[u] = x;
+    };
+    // Left packing pulls children away from parents; a few barycenter passes in both directions, ending left to right so blocks never overlap.
+    for pass in 0..if top { 9 } else { 0 } {
+        let want = |u: usize, xs: &[f64], pos: &[f64]| {
+            let mine = items(u);
+            let pulls: Vec<f64> = mine
+                .iter()
+                .flat_map(|&v| {
+                    p.adj[v]
+                        .iter()
+                        .filter(|w| !mine.contains(w))
+                        .map(move |&w| pos[w] - pos[v])
+                })
+                .collect();
+            if pulls.is_empty() {
+                xs[u]
+            } else {
+                xs[u] + pulls.iter().sum::<f64>() / pulls.len() as f64
+            }
+        };
+        if pass % 2 == 0 {
+            let mut cursor = vec![0.0; depth];
+            for &u in &seq {
+                let (lo, hi) = span[u];
+                let x = cursor[lo..=hi]
+                    .iter()
+                    .copied()
+                    .fold(want(u, &xs, pos), f64::max);
+                moved(u, x, &mut xs, pos);
+                for c in &mut cursor[lo..=hi] {
+                    *c = x + ws[u] + gap;
+                }
+            }
+        } else {
+            let mut cursor = vec![p.room.max(hi0); depth];
+            for &u in seq.iter().rev() {
+                let (lo, hi) = span[u];
+                let x = cursor[lo..=hi]
+                    .iter()
+                    .map(|c| c - ws[u])
+                    .fold(want(u, &xs, pos), f64::min);
+                moved(u, x, &mut xs, pos);
+                for c in &mut cursor[lo..=hi] {
+                    *c = x - gap;
+                }
+            }
+        }
+    }
+    let lo = seq.iter().map(|&u| xs[u]).fold(f64::INFINITY, f64::min);
+    let hi = seq
+        .iter()
+        .map(|&u| xs[u] + ws[u])
+        .fold(f64::NEG_INFINITY, f64::max);
+    if seq.is_empty() {
+        return 0.0;
+    }
+    for &u in &seq {
+        let x = xs[u] - lo;
+        moved(u, x, &mut xs, pos);
+    }
+    hi - lo
+}
+
 pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir: Dir) -> Plan {
     let n = boxes.len();
     let page = cfg.page();
@@ -246,7 +492,7 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         tree,
         flat,
         back,
-        layer,
+        mut layer,
     } = layering(g, dir);
     let side = |e: &&crate::graph::Edge| strip_edge(g, e);
     let keep = |i: usize| !back[i] && !flat[i];
@@ -254,6 +500,25 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         .filter(|&i| keep(i))
         .map(|i| tree[i])
         .collect();
+    if cfg.pack_frames {
+        // A source on row 0 stretches its frame up over every row above its children, walling off columns other frames need.
+        let hard_after = |v: usize| {
+            g.constraints.iter().filter(|c| c.hard).filter_map(move |c| match (dir, &c.rel) {
+                (Dir::Down, Relation::Above { a, b, .. }) | (Dir::Right, Relation::LeftOf { a, b, .. }) if *a == v => Some(*b),
+                _ => None,
+            })
+        };
+        for v in 0..n {
+            let alone = rep[v] == v && (0..n).all(|u| u == v || rep[u] != v);
+            let fed = dag.iter().any(|&(_, c)| c == v)
+                || g.constraints.iter().filter(|c| c.hard).any(|c| matches!((dir, &c.rel),
+                    (Dir::Down, Relation::Above { b, .. }) | (Dir::Right, Relation::LeftOf { b, .. }) if *b == v));
+            let below = dag.iter().filter(|&&(a, _)| a == v).map(|&(_, c)| layer[c]).chain(hard_after(v).map(|c| layer[c])).min();
+            if let (true, false, Some(m)) = (alone, fed, below) {
+                layer[v] = layer[v].max(m.saturating_sub(1));
+            }
+        }
+    }
     let along: Vec<(usize, usize)> = (0..tree.len())
         .filter(|&i| flat[i])
         .map(|i| tree[i])
@@ -281,7 +546,20 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         .map(|w| w + 2.0 * b)
         .sum::<f64>();
     let cross_len = cross_len - strip_len;
-    let mut rows = order(n, &layer, &dag, g.settings.source_order);
+    let rels: Vec<&Relation> = g
+        .constraints
+        .iter()
+        .map(|c| &c.rel)
+        .filter(|r| matches!(r, Relation::Group { .. }))
+        .collect();
+    let groups: Vec<Vec<usize>> = rels
+        .iter()
+        .map(|r| match r {
+            Relation::Group { items, .. } => items.clone(),
+            _ => unreachable!(),
+        })
+        .collect();
+    let mut rows = order(n, &layer, &dag, g.settings.source_order, &groups);
     for r in &mut rows {
         r.retain(|&v| !detached[v]);
     }
@@ -300,6 +578,23 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
             let (w, h) = label_size(fonts, l, b);
             room[la] = room[la].max(if dir == Dir::Down { h } else { w } + 2.0 * b);
         }
+    }
+    // A frame's title and padding reach into the gap above and below its layers.
+    for (r, items) in rels.iter().zip(&groups).filter(|_| cfg.pack_frames) {
+        let ls = items.iter().filter(|&&v| !detached[v]).map(|&v| layer[v]);
+        let (Some(lo), Some(hi)) = (ls.clone().min(), ls.max()) else {
+            continue;
+        };
+        let d = r.depth() as f64;
+        let top = if dir == Dir::Down {
+            FRAME_PAD + TITLE_BAND
+        } else {
+            FRAME_PAD
+        };
+        if lo > 0 {
+            room[lo - 1] = room[lo - 1].max((d * top + FRAME_CLEAR + 0.5) * b);
+        }
+        room[hi] = room[hi].max((d * FRAME_PAD + FRAME_CLEAR + 0.5) * b);
     }
     let gaps = |r: &std::ops::Range<usize>| room[r.start..r.end - 1].iter().sum::<f64>();
     let span: Vec<f64> = rows
@@ -400,16 +695,86 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     } else {
         0.0
     };
+    let mut even = vec![0.0; n];
+    for (l, row) in rows.iter().enumerate() {
+        let (lo, hi) = slices[band[l]];
+        let (total, space) = spread(l);
+        let mut c = (lo + hi) / 2.0 - (total + space * row.len() as f64) / 2.0 + space / 2.0;
+        for &v in row {
+            even[v] = c + size(v).1 / 2.0 + close;
+            c += size(v).1 + space;
+        }
+    }
+    let packed: Option<Vec<f64>> = (cfg.pack_frames && !groups.is_empty()).then(|| {
+        let mut pos = vec![0.0; n];
+        let mut adj = vec![Vec::new(); n];
+        for &(a, c) in &dag {
+            adj[a].push(c);
+            adj[c].push(a);
+        }
+        for (r, &(lo, hi)) in bands.iter().zip(&slices) {
+            let members: Vec<usize> = rows[r.clone()].concat();
+            let frames: Vec<Frame> = rels
+                .iter()
+                .filter_map(|rel| {
+                    let Relation::Group {
+                        items,
+                        title,
+                        title_em,
+                        ..
+                    } = rel
+                    else {
+                        return None;
+                    };
+                    let items: Vec<usize> = items
+                        .iter()
+                        .copied()
+                        .filter(|v| members.contains(v))
+                        .collect();
+                    let titled = title.is_some();
+                    (!items.is_empty()).then(|| Frame {
+                        items,
+                        min: if titled && dir == Dir::Down {
+                            (title_em + 2.0 * FRAME_PAD) * b
+                        } else {
+                            0.0
+                        },
+                        title: if titled && dir == Dir::Right {
+                            TITLE_BAND * b
+                        } else {
+                            0.0
+                        },
+                    })
+                })
+                .collect();
+            let width = |v: usize| size(v).1;
+            let p = Pack {
+                frames: &frames,
+                rows: &rows,
+                layer: &layer,
+                width: &width,
+                adj: &adj,
+                gap: 2.0 * b,
+                pad: FRAME_PAD * b,
+                room: hi - lo,
+            };
+            let total = pack(&members, &p, &mut pos, true);
+            // Stretching centers about the middle widens every gap, so blocks stay apart while fans spread like the unpacked rows.
+            let (c0, c1) = members.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, z), &v| (a.min(pos[v]), z.max(pos[v])));
+            let span = c1 - c0;
+            let stretch = if span > 0.0 { ((0.8 * (hi - lo) - (total - span)) / span).max(1.0) } else { 1.0 };
+            for &v in &members {
+                pos[v] = (lo + hi) / 2.0 + (pos[v] - total / 2.0) * stretch;
+            }
+        }
+        pos
+    });
     let mut cands: Vec<Vec<Cand>> = (0..n).map(|_| Vec::new()).collect();
     for (l, row) in rows.iter().enumerate().filter(|_| feasible) {
         let (lo, hi) = slices[band[l]];
-        let (total, space) = spread(l);
-        let span = total + space * row.len() as f64;
-        let mut c = (lo + hi) / 2.0 - span / 2.0 + space / 2.0 + close;
         for &v in row {
             let (_, w) = size(v);
-            let ideal = c + w / 2.0;
-            c += w + space;
+            let ideal = packed.as_ref().map_or(even[v], |p| p[v] + close);
             let (i0, i1) = (
                 ((lo + w / 2.0) / step).ceil() as i64,
                 ((hi - w / 2.0) / step).floor() as i64,
@@ -510,9 +875,17 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
         }
     }
     let near = |l: usize, lo: usize, hi: usize| k > 1 || (l >= lo && l <= hi);
+    // An edge that ends on a group is drawn from the frame, so the stretch past its stand-in members needs no clearance.
+    let hidden = |a: usize, c: usize, u: usize| {
+        g.edges.iter().filter(|e| (e.a, e.b) == (a, c)).any(|e| {
+            e.groups.iter().flatten().any(|&ci| {
+                matches!(&g.constraints[ci].rel, Relation::Group { items, .. } if items.contains(&u))
+            })
+        })
+    };
     for (i, &(a, c)) in dag.iter().enumerate() {
         let (lo, hi) = (layer[a].min(layer[c]), layer[a].max(layer[c]));
-        for u in (0..n).filter(|&u| u != a && u != c && near(layer[u], lo, hi)) {
+        for u in (0..n).filter(|&u| u != a && u != c && near(layer[u], lo, hi) && !hidden(a, c, u)) {
             cons.push((vec![a, c, u], Kind::Clear(sep * 0.25), 0));
         }
         for &(p, q) in &dag[i + 1..] {
@@ -615,7 +988,7 @@ mod tests {
 
     #[test]
     fn barycenter_uncrosses_two_edges() {
-        let rows = order(4, &[0, 0, 1, 1], &[(0, 3), (1, 2)], false);
+        let rows = order(4, &[0, 0, 1, 1], &[(0, 3), (1, 2)], false, &[]);
         assert_eq!(rows[1], vec![3, 2]);
     }
 }
