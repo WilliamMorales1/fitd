@@ -90,7 +90,7 @@ require input left-of check gap=2em
 - [Language reference](docs/language.md): grammar, statements, macros, semantics, diagnostics.
 - [Options](docs/options.md): command-line options, themes, watch mode, split output.
 - [Internals](docs/internals.md): solver and implementation details, testing, benchmarks.
-- [Examples](examples/): source files demonstrating language features,.
+- [Examples](examples/README.md): every example with its image.
 - [Showcase](examples/showcase/): figures that combine several standard-library modules.
 - [Gallery](examples/gallery/): one diagram per common academic figure type, built on the standard library.
 - [Agent skill](skills/fitd/SKILL.md): instructions for generating diagrams with fitd.
@@ -106,7 +106,7 @@ Standard-library modules combine in one figure. [examples/showcase](examples/sho
 | [![Incident review: arch, time, flow](examples/showcase/out/01-incident-review.png)](examples/showcase/01-incident-review.fitd) | [![Model and confusion matrix: nn, grid](examples/showcase/out/02-model-confusion.png)](examples/showcase/02-model-confusion.fitd) |
 | [![Domain model: uml, arch](examples/showcase/out/03-domain-model.png)](examples/showcase/03-domain-model.fitd) | [![Bug triage: tree, flow](examples/showcase/out/04-triage.png)](examples/showcase/04-triage.fitd) |
 
-[examples/gallery](examples/gallery/out/) has one image per common academic figure type. [examples/out](examples/out/) has renders of the language examples: radial maps, layered flows, macros, and includes.
+[examples/README.md](examples/README.md) shows every example. [examples/gallery](examples/gallery/) has one image per common academic figure type. [examples/out](examples/out/) has renders of the language examples: radial maps, layered flows, macros, and includes.
 
 ## Features
 
