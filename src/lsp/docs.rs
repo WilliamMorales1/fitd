@@ -431,7 +431,11 @@ pub const WORDS: &[(&str, &str, &str)] = &[
         "radial",
         "Radial layout for mind maps around `root=ID`.",
     ),
-    ("theme", "paper", "Black on white with colorblind-safe tints, the default."),
+    (
+        "theme",
+        "paper",
+        "Black on white with colorblind-safe tints, the default.",
+    ),
     ("theme", "dark", "Dark preset."),
     ("theme", "light", "Light preset on white."),
     ("theme", "mono", "Monochrome preset for print."),

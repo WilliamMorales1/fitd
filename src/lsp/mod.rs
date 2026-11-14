@@ -621,8 +621,12 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert!(
-            labels(features::completion(&d, &json!({ "line": 1, "character": 0 }), false))
-                .contains(&"hot".to_string())
+            labels(features::completion(
+                &d,
+                &json!({ "line": 1, "character": 0 }),
+                false
+            ))
+            .contains(&"hot".to_string())
         );
         assert_eq!(
             labels(features::completion(
@@ -811,7 +815,13 @@ mod tests {
             json!({ "line": 1, "character": 6 })
         );
         let h = features::hover(&d, &at("step\n"), &[]);
-        assert!(h["contents"]["value"].as_str().unwrap().contains("style step"), "{h}");
+        assert!(
+            h["contents"]["value"]
+                .as_str()
+                .unwrap()
+                .contains("style step"),
+            "{h}"
+        );
         let labels = |line: u64, ch: u64| -> Vec<String> {
             features::completion(&d, &json!({ "line": line, "character": ch }), false)
                 .as_array()
@@ -821,11 +831,20 @@ mod tests {
                 .collect()
         };
         let start = labels(8, 0);
-        assert!(start.iter().any(|l| l == "step") && start.iter().any(|l| l == "nn.block"), "{start:?}");
+        assert!(
+            start.iter().any(|l| l == "step") && start.iter().any(|l| l == "nn.block"),
+            "{start:?}"
+        );
         assert!(labels(7, 4).iter().any(|l| l == "color"));
         let folds = features::folds(text);
         for (lo, hi) in [(3, 4), (5, 6), (2, 7)] {
-            assert!(folds.as_array().unwrap().contains(&json!({ "startLine": lo, "endLine": hi })), "{folds}");
+            assert!(
+                folds
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!({ "startLine": lo, "endLine": hi })),
+                "{folds}"
+            );
         }
     }
 
@@ -835,7 +854,13 @@ mod tests {
         let none = |_: &str| None;
         let d = doc("file:///m.fitd", "/m.fitd", text, &none);
         let h = features::hover(&d, &json!({ "line": 1, "character": 4 }), &[]);
-        assert!(h["contents"]["value"].as_str().unwrap().contains("nn.layer id"), "{h}");
+        assert!(
+            h["contents"]["value"]
+                .as_str()
+                .unwrap()
+                .contains("nn.layer id"),
+            "{h}"
+        );
         let sig = features::signature_help(&d, &json!({ "line": 1, "character": 12 }));
         assert_eq!(sig["signatures"][0]["label"], "nn.layer id name dims times");
         assert_eq!(sig["activeParameter"], 1);
@@ -846,12 +871,18 @@ mod tests {
             .iter()
             .map(|v| v["label"].as_str().unwrap())
             .collect();
-        assert!(labels.contains(&"input") && labels.contains(&"layer"), "{labels:?}");
+        assert!(
+            labels.contains(&"input") && labels.contains(&"layer"),
+            "{labels:?}"
+        );
         let rows = "include \"nn\"\nnn.layer\n  e Enc d 2\nnn.step s Pool\n";
         let d = doc("file:///r.fitd", "/r.fitd", rows, &none);
         for line in [1, 3] {
             let h = features::hover(&d, &json!({ "line": line, "character": 4 }), &[]);
-            assert!(h["contents"]["value"].as_str().unwrap().contains("nn."), "{h}");
+            assert!(
+                h["contents"]["value"].as_str().unwrap().contains("nn."),
+                "{h}"
+            );
         }
     }
 }

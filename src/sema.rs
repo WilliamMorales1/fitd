@@ -1,8 +1,8 @@
 use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
 use crate::graph::{
-    Cell, Constraint, Dash, Dir, Edge, EdgeKind, Graph, Head, Image, KeyEntry, LayoutKind, Length, Node,
-    Place, Relation, Settings, Shape, Side, VennSet,
+    Cell, Constraint, Dash, Dir, Edge, EdgeKind, Graph, Head, Image, KeyEntry, LayoutKind, Length,
+    Node, Place, Relation, Settings, Shape, Side, VennSet,
 };
 use crate::theme::{self, Overrides, Theme};
 use std::collections::HashMap;
@@ -829,10 +829,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 }
             }
             StmtKind::Node {
-                id,
-                classes,
-                attrs,
-                ..
+                id, classes, attrs, ..
             } => {
                 let Some(&v) = s.ids.get(&id.text) else {
                     continue;
@@ -858,7 +855,10 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                         Value::Num(t, _) if t.parse::<usize>().is_ok_and(|k| k > 0) => {
                             cell[(a.key.text == "col") as usize] = t.parse().ok();
                         }
-                        v => s.type_err(v, format!("expected a whole number `{}=1` or more", a.key.text)),
+                        v => s.type_err(
+                            v,
+                            format!("expected a whole number `{}=1` or more", a.key.text),
+                        ),
                     }
                 }
                 if cell.iter().any(Option::is_some) {
@@ -932,7 +932,9 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                             .push(bad_attr(a, &["color", "head", "tail", "line"])),
                     }
                 }
-                let mut end = |n: &Name| match group_ids.contains_key(&n.text) && !s.ids.contains_key(&n.text) {
+                let mut end = |n: &Name| match group_ids.contains_key(&n.text)
+                    && !s.ids.contains_key(&n.text)
+                {
                     true => Some((0, Some(n.clone()))),
                     false => s.node(n).map(|v| (v, None)),
                 };
@@ -1051,7 +1053,8 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 constraints.extend(constraint(&mut s, *hard, rel, attrs, st.span));
             }
             StmtKind::Open(c) => {
-                if !styles.contains_key(&c.text) && !styles.contains_key(&c.text.replace('.', "_")) {
+                if !styles.contains_key(&c.text) && !styles.contains_key(&c.text.replace('.', "_"))
+                {
                     let names: Vec<&str> = styles.keys().map(String::as_str).collect();
                     let d = Diag::error("E0004", format!("unknown style `{}`", c.text))
                         .primary(c.span, "not a statement or declared style");
@@ -1059,7 +1062,10 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                         Some(h) => d.help(h),
                         None => d,
                     };
-                    s.diags.push(d.note(format!("to declare an unstyled node, write `node {}`", c.text)));
+                    s.diags.push(d.note(format!(
+                        "to declare an unstyled node, write `node {}`",
+                        c.text
+                    )));
                 }
             }
             StmtKind::Body(_) | StmtKind::Cells(_) | StmtKind::Include(_) => {}
@@ -1078,7 +1084,14 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 .primary(*span, "declared here"),
         );
     }
-    let framed = group_ends(&mut edges, &pending, &group_items, &set, &s.nodes, &mut s.diags);
+    let framed = group_ends(
+        &mut edges,
+        &pending,
+        &group_items,
+        &set,
+        &s.nodes,
+        &mut s.diags,
+    );
     lifelines(&s.nodes, &mut edges, &mut s.diags);
     let sets = match set.venn {
         true => venn_sets(&mut constraints, &mut s.diags),
@@ -1154,20 +1167,40 @@ fn group_ends(
 ) -> Vec<(usize, [Option<Vec<usize>>; 2])> {
     let mut out = Vec::new();
     let mut dead = Vec::new();
-    let flows: Vec<(usize, usize)> = edges.iter().filter(|e| e.kind == EdgeKind::Tree).map(|e| (e.a, e.b)).collect();
+    let flows: Vec<(usize, usize)> = edges
+        .iter()
+        .filter(|e| e.kind == EdgeKind::Tree)
+        .map(|e| (e.a, e.b))
+        .collect();
     for (k, ends) in pending {
         let span = edges[*k].span;
-        let items: Vec<Option<&Vec<usize>>> = ends.iter().map(|n| n.as_ref().and_then(|n| groups.get(&n.text))).collect();
-        if ends.iter().zip(&items).any(|(n, i)| n.is_some() && i.is_none()) {
+        let items: Vec<Option<&Vec<usize>>> = ends
+            .iter()
+            .map(|n| n.as_ref().and_then(|n| groups.get(&n.text)))
+            .collect();
+        if ends
+            .iter()
+            .zip(&items)
+            .any(|(n, i)| n.is_some() && i.is_none())
+        {
             dead.push(*k);
             continue;
         }
-        let layout = if set.venn { Some("venn") } else if set.lanes { Some("lanes") } else { None };
+        let layout = if set.venn {
+            Some("venn")
+        } else if set.lanes {
+            Some("lanes")
+        } else {
+            None
+        };
         if let (Some(l), Some(n)) = (layout, ends.iter().flatten().next()) {
             diags.push(
-                Diag::error("E0016", format!("an edge cannot end on group `{}` in `layout {l}`", n.text))
-                    .primary(n.span, "group")
-                    .help("its groups are not frames; link a member node instead"),
+                Diag::error(
+                    "E0016",
+                    format!("an edge cannot end on group `{}` in `layout {l}`", n.text),
+                )
+                .primary(n.span, "group")
+                .help("its groups are not frames; link a member node instead"),
             );
             dead.push(*k);
             continue;
@@ -1175,7 +1208,11 @@ fn group_ends(
         let (a, b) = (edges[*k].a, edges[*k].b);
         let set_a: Vec<usize> = items[0].cloned().unwrap_or(vec![a]);
         let set_b: Vec<usize> = items[1].cloned().unwrap_or(vec![b]);
-        let (inner, outer, i) = if set_a.len() <= set_b.len() { (&set_a, &set_b, 1) } else { (&set_b, &set_a, 0) };
+        let (inner, outer, i) = if set_a.len() <= set_b.len() {
+            (&set_a, &set_b, 1)
+        } else {
+            (&set_b, &set_a, 0)
+        };
         if inner.iter().any(|v| outer.contains(v)) {
             let n = ends[i].as_ref().unwrap();
             let what = match &ends[1 - i] {
@@ -1184,21 +1221,39 @@ fn group_ends(
                 None => format!("its member `{}`", nodes[inner[0]].id),
             };
             diags.push(
-                Diag::error("E0016", format!("an edge joins group `{}` to {what}", n.text))
-                    .primary(span, "edge"),
+                Diag::error(
+                    "E0016",
+                    format!("an edge joins group `{}` to {what}", n.text),
+                )
+                .primary(span, "edge"),
             );
             dead.push(*k);
             continue;
         }
         // Leave from a member no other member flows on to, and arrive at one no member flows into.
         let inside = |v: usize, from: bool, set: &[usize]| {
-            flows.iter().any(|&(p, q)| if from { p == v && set.contains(&q) } else { q == v && set.contains(&p) })
+            flows.iter().any(|&(p, q)| {
+                if from {
+                    p == v && set.contains(&q)
+                } else {
+                    q == v && set.contains(&p)
+                }
+            })
         };
         if let Some(m) = items[0] {
-            edges[*k].a = m.iter().rev().copied().find(|&v| !inside(v, true, m)).unwrap_or(m[m.len() - 1]);
+            edges[*k].a = m
+                .iter()
+                .rev()
+                .copied()
+                .find(|&v| !inside(v, true, m))
+                .unwrap_or(m[m.len() - 1]);
         }
         if let Some(m) = items[1] {
-            edges[*k].b = m.iter().copied().find(|&v| !inside(v, false, m)).unwrap_or(m[0]);
+            edges[*k].b = m
+                .iter()
+                .copied()
+                .find(|&v| !inside(v, false, m))
+                .unwrap_or(m[0]);
         }
         out.push((*k, [items[0].cloned(), items[1].cloned()]));
     }
@@ -1220,16 +1275,26 @@ fn grid_cells(
 ) -> Vec<Constraint> {
     let mut out = Vec::new();
     for (k, &(v, cell, span)) in cells.iter().enumerate() {
-        if let Some(&(w, ..)) = cells[..k].iter().find(|c| c.1 == cell && cell.iter().all(Option::is_some)) {
+        if let Some(&(w, ..)) = cells[..k]
+            .iter()
+            .find(|c| c.1 == cell && cell.iter().all(Option::is_some))
+        {
             diags.push(
-                Diag::error("E0007", format!("`{}` and `{}` take the same grid cell", nodes[w].id, nodes[v].id))
-                    .primary(span, "cell already taken"),
+                Diag::error(
+                    "E0007",
+                    format!(
+                        "`{}` and `{}` take the same grid cell",
+                        nodes[w].id, nodes[v].id
+                    ),
+                )
+                .primary(span, "cell already taken"),
             );
             return out;
         }
     }
     // axis 0 groups by row (one row, ordered by col), axis 1 groups by col.
     for axis in 0..2 {
+        #[allow(clippy::type_complexity)]
         let mut lines: Vec<(usize, Vec<(usize, usize, Span)>)> = Vec::new();
         for &(v, cell, span) in cells {
             let Some(line) = cell[axis] else { continue };
@@ -1242,7 +1307,12 @@ fn grid_cells(
         for (_, mut items) in lines.into_iter().filter(|l| l.1.len() > 1) {
             items.sort_by_key(|i| i.0);
             let span = items.iter().map(|i| i.2).reduce(Span::to).unwrap();
-            let hard = |rel| Constraint { rel, hard: true, weight: 1, span };
+            let hard = |rel| Constraint {
+                rel,
+                hard: true,
+                weight: 1,
+                span,
+            };
             out.push(hard(Relation::Align {
                 side: if axis == 0 { Side::Row } else { Side::Column },
                 items: items.iter().map(|i| i.1).collect(),
@@ -1633,13 +1703,39 @@ mod tests {
 
     #[test]
     fn grid_cells_lower_to_alignment_and_order() {
-        let (g, d) = run("node a row=1 col=1\nnode b row=1 col=2\nnode c row=2 col=1\nnode d row=2 col=2\n");
+        let (g, d) =
+            run("node a row=1 col=1\nnode b row=1 col=2\nnode c row=2 col=1\nnode d row=2 col=2\n");
         assert!(d.is_empty());
-        let count = |f: fn(&Relation) -> bool| g.constraints.iter().filter(|c| c.hard && f(&c.rel)).count();
-        assert_eq!(count(|r| matches!(r, Relation::Align { side: Side::Row, .. })), 2);
-        assert_eq!(count(|r| matches!(r, Relation::Align { side: Side::Column, .. })), 2);
-        assert_eq!(count(|r| matches!(r, Relation::LeftOf { a: 0, b: 1, .. })), 1);
-        assert_eq!(count(|r| matches!(r, Relation::Above { a: 1, b: 3, .. })), 1);
+        let count =
+            |f: fn(&Relation) -> bool| g.constraints.iter().filter(|c| c.hard && f(&c.rel)).count();
+        assert_eq!(
+            count(|r| matches!(
+                r,
+                Relation::Align {
+                    side: Side::Row,
+                    ..
+                }
+            )),
+            2
+        );
+        assert_eq!(
+            count(|r| matches!(
+                r,
+                Relation::Align {
+                    side: Side::Column,
+                    ..
+                }
+            )),
+            2
+        );
+        assert_eq!(
+            count(|r| matches!(r, Relation::LeftOf { a: 0, b: 1, .. })),
+            1
+        );
+        assert_eq!(
+            count(|r| matches!(r, Relation::Above { a: 1, b: 3, .. })),
+            1
+        );
         assert_eq!(codes("node a row=1 col=1\nnode b row=1 col=1\n"), ["E0007"]);
         assert_eq!(codes("node a row=0\n"), ["E0006"]);
     }
@@ -1675,23 +1771,34 @@ mod tests {
 
     #[test]
     fn style_blocks_style_their_nodes() {
-        let (g, d) = run("style radial color=#CC79A7\nradial\n  coffee \"Coffee\"\nnode radial\nradial -> coffee\n");
-        assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        let (g, d) = run(
+            "style radial color=#CC79A7\nradial\n  coffee \"Coffee\"\nnode radial\nradial -> coffee\n",
+        );
+        assert!(
+            d.is_empty(),
+            "{:?}",
+            d.iter().map(|d| &d.msg).collect::<Vec<_>>()
+        );
         assert_eq!(g.nodes.len(), 2);
         let color = |id: &str| g.nodes.iter().find(|n| n.id == id).unwrap().color.clone();
         assert_eq!(color("coffee").as_deref(), Some("#CC79A7"));
         assert_eq!(color("radial"), None);
         assert_eq!(codes("style node color=#f00\nnode a\n"), vec!["E0015"]);
         assert_eq!(codes("style for color=#f00\nnode a\n"), vec!["E0015"]);
-        assert_eq!(codes("style step\nstp\n  a\nnode b\n"), vec!["E0004", "W0203"]);
+        assert_eq!(
+            codes("style step\nstp\n  a\nnode b\n"),
+            vec!["E0004", "W0203"]
+        );
     }
 
     #[test]
     fn module_qualified_classes_map_to_prefixed_styles() {
-        let (g, d) = run(
-            "style nn_block color=#CC79A7\nnn.block\n  a\n",
+        let (g, d) = run("style nn_block color=#CC79A7\nnn.block\n  a\n");
+        assert!(
+            d.is_empty(),
+            "{:?}",
+            d.iter().map(|d| &d.msg).collect::<Vec<_>>()
         );
-        assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
         assert_eq!(g.nodes[0].color.as_deref(), Some("#CC79A7"));
     }
 
@@ -1883,15 +1990,26 @@ mod tests {
         let (g, d) = run(
             "node l\nnode c\nnode t\nnode u\nnode r\ngroup p \"Prep\" l, c\ngroup f \"\" t, u\nl -> c\nt -> u\np -> f \"x\"\nf -> r\n",
         );
-        assert!(d.is_empty(), "{:?}", d.iter().map(|d| &d.msg).collect::<Vec<_>>());
+        assert!(
+            d.is_empty(),
+            "{:?}",
+            d.iter().map(|d| &d.msg).collect::<Vec<_>>()
+        );
         let id = |v: usize| g.nodes[v].id.as_str();
         let title = |c: Option<usize>| match &g.constraints[c.unwrap()].rel {
             Relation::Group { title, .. } => title.clone(),
             _ => panic!("not a group"),
         };
-        let e = g.edges.iter().find(|e| e.label.as_deref() == Some("x")).unwrap();
+        let e = g
+            .edges
+            .iter()
+            .find(|e| e.label.as_deref() == Some("x"))
+            .unwrap();
         assert_eq!((id(e.a), id(e.b)), ("c", "t"));
-        assert_eq!((title(e.groups[0]), title(e.groups[1])), (Some("Prep".into()), None));
+        assert_eq!(
+            (title(e.groups[0]), title(e.groups[1])),
+            (Some("Prep".into()), None)
+        );
         let e = g.edges.iter().find(|e| id(e.b) == "r").unwrap();
         assert_eq!((id(e.a), e.groups[1]), ("u", None));
         let base = "node a\nnode b\nnode z\ngroup o \"O\" a, b\ngroup i \"I\" a\n";

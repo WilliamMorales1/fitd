@@ -477,7 +477,8 @@ fn row_words(t: &str) -> Result<Vec<(bool, String)>, String> {
         }
         Err("`${` without a closing `}`".into())
     };
-    let opens = |i: usize| cs[i] == '$' && cs.get(i + 1) == Some(&'{') && (i == 0 || cs[i - 1] != '$');
+    let opens =
+        |i: usize| cs[i] == '$' && cs.get(i + 1) == Some(&'{') && (i == 0 || cs[i - 1] != '$');
     while i < cs.len() {
         let c = cs[i];
         if c.is_whitespace() {
@@ -801,7 +802,8 @@ impl Builder<'_> {
                 id(head)
                     && !crate::parse::KEYWORDS.contains(&head)
                     && (self.names.contains(head)
-                        || self.mods[at].is_some_and(|m| self.names.contains(&format!("{m}.{head}"))))
+                        || self.mods[at]
+                            .is_some_and(|m| self.names.contains(&format!("{m}.{head}"))))
             }
         };
         ok && !["->", "--", ".."].iter().any(|o| r.starts_with(o))
@@ -1340,7 +1342,9 @@ impl Expander<'_> {
                         }
                     };
                     let name = match words.first() {
-                        Some((false, w)) if block_name(w).is_some() && self.defs.contains_key(w) => {
+                        Some((false, w))
+                            if block_name(w).is_some() && self.defs.contains_key(w) =>
+                        {
                             words.remove(0).1
                         }
                         _ => r.name.clone(),
@@ -1352,7 +1356,11 @@ impl Expander<'_> {
                     let from = self.text.len();
                     self.invoke(r.line, &name, &args, Some(bases[r.depth]))?;
                     // Children sit right of every line the parent emitted, so its style opener cannot close the parent's scope.
-                    let deep = self.text[from..].lines().filter(|l| !l.trim().is_empty()).map(indent).max();
+                    let deep = self.text[from..]
+                        .lines()
+                        .filter(|l| !l.trim().is_empty())
+                        .map(indent)
+                        .max();
                     bases.push(deep.map_or(bases[r.depth], |d| d + 1));
                 }
             }
@@ -1382,14 +1390,11 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
     } else {
         &lines[..]
     };
-    if !lines
-        .iter()
-        .any(|l| {
-            let t = l.trim();
-            let head = t.split_whitespace().next().unwrap_or("");
-            l.contains("${") || is_kw_line(t).is_some() || block_name(head).is_some()
-        })
-    {
+    if !lines.iter().any(|l| {
+        let t = l.trim();
+        let head = t.split_whitespace().next().unwrap_or("");
+        l.contains("${") || is_kw_line(t).is_some() || block_name(head).is_some()
+    }) {
         let parse = a.text.clone();
         return Loaded {
             src: a,
@@ -1408,7 +1413,10 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
             .enumerate()
             .filter_map(|(k, l)| {
                 let (w, rest) = is_kw_line(l.trim())?;
-                let n: String = rest.chars().take_while(|&c| c.is_alphanumeric() || c == '_').collect();
+                let n: String = rest
+                    .chars()
+                    .take_while(|&c| c.is_alphanumeric() || c == '_')
+                    .collect();
                 (w == "def" && !n.is_empty()).then(|| match mods[k] {
                     Some(m) => format!("{m}.{n}"),
                     None => n,
@@ -1561,11 +1569,23 @@ mod tests {
 
     #[test]
     fn template_rows_call_and_nest() {
-        let go = |body: &str| load("t.fitd", &format!("include \"tree\"\n{body}"), DEFAULT_BUDGET);
-        let l = go("tree.unit a A \"x y\"\n  b \"B\" r\n    tree.word c c\n  d D r\nfor i in 1..2\n  tree.unit\n    s${i} \"S ${i}\" r\nend\n");
+        let go = |body: &str| {
+            load(
+                "t.fitd",
+                &format!("include \"tree\"\n{body}"),
+                DEFAULT_BUDGET,
+            )
+        };
+        let l = go(
+            "tree.unit a A \"x y\"\n  b \"B\" r\n    tree.word c c\n  d D r\nfor i in 1..2\n  tree.unit\n    s${i} \"S ${i}\" r\nend\n",
+        );
         let msgs: Vec<_> = l.diags.iter().map(|d| &d.msg).collect();
         assert!(msgs.is_empty(), "{msgs:?}");
-        let got: Vec<&str> = l.parse.lines().filter(|s| s.trim_start().starts_with(['n', '|'])).collect();
+        let got: Vec<&str> = l
+            .parse
+            .lines()
+            .filter(|s| s.trim_start().starts_with(['n', '|']))
+            .collect();
         assert_eq!(
             got,
             [
@@ -1582,8 +1602,18 @@ mod tests {
                 "  | r",
             ]
         );
-        assert!(go("tree.unit a b\n").diags.iter().any(|d| d.msg.contains("takes 3 arguments")));
-        assert!(go("tree.unit\n  a \"A\n").diags.iter().any(|d| d.msg.contains("unterminated")));
+        assert!(
+            go("tree.unit a b\n")
+                .diags
+                .iter()
+                .any(|d| d.msg.contains("takes 3 arguments"))
+        );
+        assert!(
+            go("tree.unit\n  a \"A\n")
+                .diags
+                .iter()
+                .any(|d| d.msg.contains("unterminated"))
+        );
     }
 
     #[test]

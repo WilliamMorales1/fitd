@@ -1139,10 +1139,16 @@ fn ratio_finish(
 fn load_images(g: &mut graph::Graph, input: &str) -> Vec<Diag> {
     let base = match input {
         "<stdin>" => std::path::Path::new(""),
-        _ => std::path::Path::new(input).parent().unwrap_or(std::path::Path::new("")),
+        _ => std::path::Path::new(input)
+            .parent()
+            .unwrap_or(std::path::Path::new("")),
     };
     let mut diags = Vec::new();
-    for c in g.nodes.iter_mut().flat_map(|n| n.figure.iter_mut().flatten()) {
+    for c in g
+        .nodes
+        .iter_mut()
+        .flat_map(|n| n.figure.iter_mut().flatten())
+    {
         let Some(im) = c.image.as_mut().and_then(std::sync::Arc::get_mut) else {
             continue;
         };

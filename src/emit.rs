@@ -920,6 +920,7 @@ fn tikz_line(o: &mut String, l: &TextLine, x: f64, y: f64, color: &str) {
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn tikz(
     g: &Graph,
     t: &Tree,
@@ -1201,9 +1202,7 @@ pub fn tikz(
                 let _ = writeln!(
                     o,
                     "\\node[anchor=north west, inner sep=0pt] at ({x:.1},{y:.1}) {{\\includegraphics[width={:.1}bp, height={:.1}bp]{{{}}}}};",
-                    c.w,
-                    c.h,
-                    im.path
+                    c.w, c.h, im.path
                 );
                 continue;
             }
@@ -1335,7 +1334,10 @@ fn base64(data: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for ch in data.chunks(3) {
-        let n = ch.iter().enumerate().fold(0u32, |n, (i, &b)| n | (b as u32) << (16 - 8 * i));
+        let n = ch
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, &b)| n | (b as u32) << (16 - 8 * i));
         for i in 0..4 {
             out.push(match i <= ch.len() {
                 true => A[(n >> (18 - 6 * i) & 63) as usize] as char,

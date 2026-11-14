@@ -65,9 +65,12 @@ pub fn resolve<'t>(target: &'t str, dir: &Path) -> Result<(PathBuf, Option<&'t s
     }
     if !target.contains(['/', '.']) {
         if crate::stdlib::get(target).is_none() {
-            return Err(Diag::error("E0011", format!("no library module `{target}`")).note(
-                format!("the library has: {}", crate::stdlib::names().join(", ")),
-            ));
+            return Err(
+                Diag::error("E0011", format!("no library module `{target}`")).note(format!(
+                    "the library has: {}",
+                    crate::stdlib::names().join(", ")
+                )),
+            );
         }
         return Ok((PathBuf::from(format!("std/{target}.fitd")), Some(target)));
     }
@@ -76,7 +79,8 @@ pub fn resolve<'t>(target: &'t str, dir: &Path) -> Result<(PathBuf, Option<&'t s
 
 fn is_ident(s: &str) -> bool {
     let mut c = s.chars();
-    c.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+    c.next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
         && c.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
@@ -84,7 +88,13 @@ fn canonical(p: &Path) -> PathBuf {
     p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
 }
 
-fn splice(out: &mut Splice, path: &str, text: &str, stack: &mut Vec<PathBuf>, module: Option<&str>) {
+fn splice(
+    out: &mut Splice,
+    path: &str,
+    text: &str,
+    stack: &mut Vec<PathBuf>,
+    module: Option<&str>,
+) {
     let (stmts, _) = crate::parse::parse(text);
     out.seg(path, 1, module);
     let mut cursor = 0;

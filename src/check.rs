@@ -198,8 +198,13 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
     }
     let radial = lay.kind == LayoutKind::Radial;
     let members = |e: &Drawn| -> Vec<usize> {
-        [&e.from, &e.frame].into_iter().flatten().flat_map(|r| r.nodes()).collect()
+        [&e.from, &e.frame]
+            .into_iter()
+            .flatten()
+            .flat_map(|r| r.nodes())
+            .collect()
     };
+    #[allow(clippy::type_complexity)]
     let straight: Vec<(usize, usize, (P, P), Vec<usize>)> = lay
         .edges
         .iter()
@@ -297,8 +302,7 @@ pub fn check(g: &Graph, fonts: &Fonts, cfg: &Config, lay: &Layout) -> Vec<Diag> 
         let inner = members(e);
         if let Some(u) = (0..n).find(|&u| {
             u != e.a && u != e.b && !inner.contains(&u) && path.iter().any(|&p| lay.inside(u, p))
-        })
-        {
+        }) {
             push(
                 false,
                 "W0201",

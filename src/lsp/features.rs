@@ -71,7 +71,10 @@ fn fence(code: &str) -> String {
 }
 
 fn signature(d: &index::Def) -> String {
-    std::iter::once(d.name.as_str()).chain(d.params.iter().map(|p| p.as_str())).collect::<Vec<_>>().join(" ")
+    std::iter::once(d.name.as_str())
+        .chain(d.params.iter().map(|p| p.as_str()))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn values_line(a: &docs::Attr) -> String {
@@ -468,7 +471,11 @@ pub fn folds(text: &str) -> Value {
         }
         let rest = &t[w.len()..];
         let directive = !rest.starts_with('-') && !rest.trim_start().starts_with(['-', '.']);
-        let lone = !w.is_empty() && (rest.is_empty() || rest.strip_prefix('.').is_some_and(|n| n.chars().all(|c| c.is_alphanumeric() || c == '_')));
+        let lone = !w.is_empty()
+            && (rest.is_empty()
+                || rest
+                    .strip_prefix('.')
+                    .is_some_and(|n| n.chars().all(|c| c.is_alphanumeric() || c == '_')));
         let style_open = open.iter().any(|o| o.1);
         match w.as_str() {
             "for" | "if" | "def" if directive => open.push((i, false, 0)),
@@ -941,13 +948,23 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
     };
     if words.len() == 1
         && let Some(m) = first.strip_suffix('.')
-        && idx.defs.iter().any(|d| d.name.starts_with(&format!("{m}.")))
+        && idx
+            .defs
+            .iter()
+            .any(|d| d.name.starts_with(&format!("{m}.")))
     {
         let mut out: Vec<Value> = idx
             .style_order
             .iter()
             .filter_map(|n| n.strip_prefix(&format!("{m}_")))
-            .map(|short| item(short, 14, "style block", "Opens a block: lines up to `end` take this module style."))
+            .map(|short| {
+                item(
+                    short,
+                    14,
+                    "style block",
+                    "Opens a block: lines up to `end` take this module style.",
+                )
+            })
             .collect();
         out.extend(
             idx.defs
@@ -1019,15 +1036,23 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                 v
             })
             .collect();
-        out.extend(
-            style_names(&idx)
-                .iter()
-                .map(|n| item(n, 14, "style block", "Opens a block: lines up to `end` take this style.")),
-        );
+        out.extend(style_names(&idx).iter().map(|n| {
+            item(
+                n,
+                14,
+                "style block",
+                "Opens a block: lines up to `end` take this style.",
+            )
+        }));
         out.extend(idx.defs.iter().filter(|d| !d.name.contains('.')).map(|d| {
             let mut v = item(&d.name, 3, &signature(d), &d.doc);
             if snippets {
-                let ps: Vec<String> = d.params.iter().enumerate().map(|(i, p)| format!("${{{}:{p}}}", i + 1)).collect();
+                let ps: Vec<String> = d
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| format!("${{{}:{p}}}", i + 1))
+                    .collect();
                 v["insertText"] = json!(format!("{} {}", d.name, ps.join(" ")));
                 v["insertTextFormat"] = json!(2);
             }

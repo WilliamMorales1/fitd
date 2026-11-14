@@ -21,7 +21,11 @@ fn fitd(args: &[&str]) -> (bool, String) {
 #[test]
 fn edge_source_lists_fan_in() {
     let src = tmp("fan.fitd");
-    std::fs::write(&src, "layout layered\nnode a\nnode b\nnode c\nnode d\na, b -> c, d \"x\"\n").unwrap();
+    std::fs::write(
+        &src,
+        "layout layered\nnode a\nnode b\nnode c\nnode d\na, b -> c, d \"x\"\n",
+    )
+    .unwrap();
     let out = tmp("fan.svg");
     let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", out.to_str().unwrap()]);
     assert!(ok && log.contains("4 nodes, 4 edges"), "{log}");
@@ -65,11 +69,21 @@ fn unconnected_grid_nodes_stack_in_layered() {
 fn ratio_pages_fold_long_chains_into_bands() {
     let page = |name: &str, extra: &[&str]| {
         let out = tmp(name);
-        let mut args = vec!["examples/gallery/17-timeline.fitd", "-o", out.to_str().unwrap()];
+        let mut args = vec![
+            "examples/gallery/17-timeline.fitd",
+            "-o",
+            out.to_str().unwrap(),
+        ];
         args.extend(extra);
         let (ok, log) = fitd(&args);
         assert!(ok, "{log}");
-        let w = log.split("fits on ").nth(1).unwrap().split('x').next().unwrap();
+        let w = log
+            .split("fits on ")
+            .nth(1)
+            .unwrap()
+            .split('x')
+            .next()
+            .unwrap();
         w.parse::<f64>().unwrap()
     };
     // A smaller page for the same font floor means a larger font at the requested ratio.
@@ -89,17 +103,31 @@ fn image_rows_embed_pictures_and_report_missing_files() {
     ]);
     assert!(ok, "{log}");
     let svg = std::fs::read_to_string(&out).unwrap();
-    assert!(svg.contains("href=\"data:image/png;base64,iVBORw0KGgo"), "no embedded PNG");
+    assert!(
+        svg.contains("href=\"data:image/png;base64,iVBORw0KGgo"),
+        "no embedded PNG"
+    );
     let tex = std::fs::read_to_string(&tex).unwrap();
-    assert!(tex.contains("\\includegraphics[width="), "no includegraphics");
+    assert!(
+        tex.contains("\\includegraphics[width="),
+        "no includegraphics"
+    );
     for e in ["png", "pdf"] {
         let out = tmp(&format!("image.{e}"));
-        let (ok, log) = fitd(&["examples/gallery/29-image.fitd", "-o", out.to_str().unwrap()]);
+        let (ok, log) = fitd(&[
+            "examples/gallery/29-image.fitd",
+            "-o",
+            out.to_str().unwrap(),
+        ]);
         assert!(ok, "{log}");
     }
     let src = tmp("missing.fitd");
     std::fs::write(&src, "node a\n~ image \"nope.png\"\n").unwrap();
-    let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", tmp("missing.svg").to_str().unwrap()]);
+    let (ok, log) = fitd(&[
+        src.to_str().unwrap(),
+        "-o",
+        tmp("missing.svg").to_str().unwrap(),
+    ]);
     assert!(!ok && log.contains("E0014"), "{log}");
 }
 
@@ -701,7 +729,9 @@ fn stable_lock_keeps_nodes_in_place_after_adding_a_leaf() {
         let src = tmp(&format!("{name}-leaf.fitd"));
         let text = std::fs::read_to_string(format!("{dir}/{name}.fitd")).unwrap();
         assert!(
-            text.lines().any(|l| l.trim_start().starts_with(&format!("{last} \"")) || l.starts_with(&format!("node {last} "))),
+            text.lines()
+                .any(|l| l.trim_start().starts_with(&format!("{last} \""))
+                    || l.starts_with(&format!("node {last} "))),
             "{name} has no node {last}"
         );
         std::fs::write(
@@ -1466,7 +1496,9 @@ fn gallery_and_every_std_module_compile_cleanly() {
         assert!(ok && !log.contains("warning["), "{src}\n{log}");
     }
     for path in glob("src/std/*.fitd") {
-        let module = path.trim_start_matches("src/std/").trim_end_matches(".fitd");
+        let module = path
+            .trim_start_matches("src/std/")
+            .trim_end_matches(".fitd");
         let name = format!("std-{module}.fitd");
         let input = tmp(&name);
         std::fs::write(
@@ -1755,7 +1787,10 @@ fn user_libraries_are_included_beside_the_file() {
         "shapes.fitd",
         "# shapes: boxes for tests\ninclude \"user/base\"\ndef pill(id, name)\nbase.tag ${id} ${name}\nend\n",
     );
-    write("base.fitd", "def tag(id, name)\nnode ${id} \"${name}\"\nend\n");
+    write(
+        "base.fitd",
+        "def tag(id, name)\nnode ${id} \"${name}\"\nend\n",
+    );
     let main = write(
         "main.fitd",
         "include \"user/base\"\ninclude \"user/shapes\"\nshapes.pill a Alpha\nbase.tag b Beta\na -> b\n",
@@ -1772,11 +1807,24 @@ fn user_libraries_are_included_beside_the_file() {
     assert!(!ok && log.contains("unknown statement `pill`"), "{log}");
 
     let missing = write("missing.fitd", "include \"user/nope\"\nnode a\n");
-    let (ok, log) = fitd(&[missing.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
-    assert!(!ok && log.contains("cannot read") && log.contains("nope.fitd"), "{log}");
+    let (ok, log) = fitd(&[
+        missing.to_str().unwrap(),
+        "-o",
+        o.to_str().unwrap(),
+        "--short",
+    ]);
+    assert!(
+        !ok && log.contains("cannot read") && log.contains("nope.fitd"),
+        "{log}"
+    );
 
     let badname = write("badname.fitd", "include \"user/a/b\"\nnode a\n");
-    let (ok, log) = fitd(&[badname.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
+    let (ok, log) = fitd(&[
+        badname.to_str().unwrap(),
+        "-o",
+        o.to_str().unwrap(),
+        "--short",
+    ]);
     assert!(!ok && log.contains("bad library name"), "{log}");
 }
 
@@ -1787,7 +1835,11 @@ fn user_libraries_fall_back_to_fitd_path() {
     for d in [&libs, &other, &work] {
         std::fs::create_dir_all(d).unwrap();
     }
-    std::fs::write(libs.join("kit.fitd"), "def tag(id)\nnode ${id} \"From path\"\nend\n").unwrap();
+    std::fs::write(
+        libs.join("kit.fitd"),
+        "def tag(id)\nnode ${id} \"From path\"\nend\n",
+    )
+    .unwrap();
     let main = work.join("main.fitd");
     std::fs::write(&main, "include \"user/kit\"\nkit.tag a\n").unwrap();
     let o = work.join("main.svg");
@@ -1799,7 +1851,10 @@ fn user_libraries_fall_back_to_fitd_path() {
             None => c.env_remove("FITD_PATH"),
         };
         let out = c.output().unwrap();
-        (out.status.success(), String::from_utf8_lossy(&out.stderr).into_owned())
+        (
+            out.status.success(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
     };
     let (ok, log) = run(None);
     assert!(!ok && log.contains("cannot read"), "{log}");
@@ -1808,7 +1863,11 @@ fn user_libraries_fall_back_to_fitd_path() {
     assert!(ok, "{log}");
     assert!(std::fs::read_to_string(&o).unwrap().contains("From path"));
     // A library beside the file wins over the search path.
-    std::fs::write(work.join("kit.fitd"), "def tag(id)\nnode ${id} \"Local\"\nend\n").unwrap();
+    std::fs::write(
+        work.join("kit.fitd"),
+        "def tag(id)\nnode ${id} \"Local\"\nend\n",
+    )
+    .unwrap();
     let (ok, log) = run(Some(libs.to_string_lossy().into_owned()));
     assert!(ok, "{log}");
     assert!(std::fs::read_to_string(&o).unwrap().contains("Local"));
@@ -2308,7 +2367,9 @@ fn algorithm_lines_keep_indent_and_bold_keywords() {
 fn layered_frames_between_unrelated_pieces_get_their_own_columns() {
     let mut src = String::from("layout layered dir=down\npage a2 landscape\n");
     for g in ["a", "b"] {
-        src += &format!("{g}1 \"{g} root\"\n{g}2 \"{g} left\"\n{g}3 \"{g} right\"\n{g}4 \"{g} leaf\"\n");
+        src += &format!(
+            "{g}1 \"{g} root\"\n{g}2 \"{g} left\"\n{g}3 \"{g} right\"\n{g}4 \"{g} leaf\"\n"
+        );
     }
     for i in 0..8 {
         src += &format!("p{i} \"Part {i}\"\nq{i} \"Piece {i}\"\nr{i} \"Bit {i}\"\n");

@@ -49,6 +49,7 @@ fn assign(g: &Graph) -> (Vec<usize>, Vec<Lane>) {
             frame: Some((r.depth(), *title_em, title.is_some())),
         });
     }
+    #[allow(clippy::needless_range_loop)]
     for v in 0..n {
         if of[v] == usize::MAX && g.nodes[v].lane.is_none() {
             of[v] = lanes.len();

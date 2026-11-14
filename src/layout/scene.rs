@@ -687,7 +687,13 @@ pub(super) fn build<'a>(
                 Some(rel) => frame(rel, &|v| sc.rects[sc.var[v]][0], b).center(),
                 None => sc.at[sc.var[v]][0],
             };
-            vias = detours(end(&e.from, e.a), end(&e.frame, e.b), &others, &sc.page, 0.4 * b);
+            vias = detours(
+                end(&e.from, e.a),
+                end(&e.frame, e.b),
+                &others,
+                &sc.page,
+                0.4 * b,
+            );
         }
         let spots: &[f64] = if e.label.is_some() { &SPOTS } else { &[0.5] };
         let opts = (0..bows.len() + vias.len())

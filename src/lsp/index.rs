@@ -528,7 +528,9 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
         let after = &t[call.len()..];
         let row = (after.is_empty() || after.starts_with(char::is_whitespace))
             && !crate::parse::KEYWORDS.contains(&call.as_str())
-            && !["->", "--", ".."].iter().any(|o| after.trim_start().starts_with(o))
+            && !["->", "--", ".."]
+                .iter()
+                .any(|o| after.trim_start().starts_with(o))
             && (names.contains(&call) || names.contains(&key(module, &call)));
         let (w, name_lo) = if row {
             ("call".to_string(), lead)

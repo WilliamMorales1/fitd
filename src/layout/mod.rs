@@ -27,7 +27,9 @@ use scene::{Scene, build};
 pub use measure::{label_size, line_height};
 pub use path::{curve, label_rect, paths_meet};
 pub use polish::Readable;
-pub use relations::{FRAME_CLEAR, FRAME_PAD, TITLE_BAND, TITLE_SIZE, frame, frame_clear, relation_holds};
+pub use relations::{
+    FRAME_CLEAR, FRAME_PAD, TITLE_BAND, TITLE_SIZE, frame, frame_clear, relation_holds,
+};
 pub use stable::Anchor;
 
 pub fn measure_groups(g: &mut Graph, fonts: &Fonts) {
@@ -180,14 +182,25 @@ impl Drawn {
     pub fn on(mut self, g: &Graph, e: &crate::graph::Edge) -> Drawn {
         let rel = |k: Option<usize>| k.map(|k| g.constraints[k].rel.clone());
         let (fa, fb) = (rel(e.groups[0]), rel(e.groups[1]));
-        (self.from, self.frame) = if (self.a, self.b) == (e.b, e.a) && e.a != e.b { (fb, fa) } else { (fa, fb) };
+        (self.from, self.frame) = if (self.a, self.b) == (e.b, e.a) && e.a != e.b {
+            (fb, fa)
+        } else {
+            (fa, fb)
+        };
         self
     }
 
     /// on_pair is `on` for the group edge joining this edge's two nodes, when there is one.
     pub fn on_pair(self, g: &Graph) -> Drawn {
-        let pair = |e: &&crate::graph::Edge| (e.a, e.b) == (self.a, self.b) || (e.a, e.b) == (self.b, self.a);
-        match g.edges.iter().filter(|e| e.groups.iter().any(Option::is_some)).find(pair) {
+        let pair = |e: &&crate::graph::Edge| {
+            (e.a, e.b) == (self.a, self.b) || (e.a, e.b) == (self.b, self.a)
+        };
+        match g
+            .edges
+            .iter()
+            .filter(|e| e.groups.iter().any(Option::is_some))
+            .find(pair)
+        {
             Some(e) => self.on(g, e),
             None => self,
         }
@@ -553,11 +566,22 @@ pub fn solve(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout,
     let first = solve_once(g, t, fonts, cfg);
     let framed = matches!(g.settings.layout, Some(LayoutKind::Layered(_)))
         && !g.settings.lanes
-        && g.constraints.iter().any(|c| matches!(c.rel, Relation::Group { .. }));
+        && g.constraints
+            .iter()
+            .any(|c| matches!(c.rel, Relation::Group { .. }));
     if first.is_ok() || !framed || cfg.pack_frames {
         return first;
     }
-    solve_once(g, t, fonts, &Config { pack_frames: true, ..*cfg }).or(first)
+    solve_once(
+        g,
+        t,
+        fonts,
+        &Config {
+            pack_frames: true,
+            ..*cfg
+        },
+    )
+    .or(first)
 }
 
 fn solve_once(g: &Graph, t: &Tree, fonts: &Fonts, cfg: &Config) -> Result<Layout, Failure> {

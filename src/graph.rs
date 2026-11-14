@@ -326,7 +326,10 @@ impl Graph {
         if order.iter().enumerate().all(|(i, &v)| i == v) {
             return;
         }
-        let mut old: Vec<Option<Node>> = std::mem::take(&mut self.nodes).into_iter().map(Some).collect();
+        let mut old: Vec<Option<Node>> = std::mem::take(&mut self.nodes)
+            .into_iter()
+            .map(Some)
+            .collect();
         self.nodes = order.iter().map(|&v| old[v].take().unwrap()).collect();
         let r = |v: &mut usize| *v = rank[*v];
         for node in &mut self.nodes {

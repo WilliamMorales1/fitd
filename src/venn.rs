@@ -251,6 +251,7 @@ pub fn plan(g: &Graph, venn: &Venn, boxes: &[Boxed], b: f64) -> Plan {
         cy / venn.circles.len() as f64,
     );
     let mut cands: Vec<Vec<Cand>> = Vec::with_capacity(n);
+    #[allow(clippy::needless_range_loop)]
     for v in 0..n {
         let m = venn.mask[v];
         let spots = venn.spots(m, boxes[v].w, boxes[v].h, step);

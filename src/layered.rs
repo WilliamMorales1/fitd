@@ -245,9 +245,8 @@ pub(crate) fn layering(g: &Graph, dir: Dir) -> Layering {
         .iter()
         .filter(|c| c.hard)
         .filter_map(|c| match (dir, &c.rel) {
-            (Dir::Down, Relation::Above { a, b, .. }) | (Dir::Right, Relation::LeftOf { a, b, .. }) => {
-                Some((rep[*a], rep[*b]))
-            }
+            (Dir::Down, Relation::Above { a, b, .. })
+            | (Dir::Right, Relation::LeftOf { a, b, .. }) => Some((rep[*a], rep[*b])),
             _ => None,
         })
         .filter(|&(a, b)| a != b)
@@ -503,17 +502,30 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     if cfg.pack_frames {
         // A source on row 0 stretches its frame up over every row above its children, walling off columns other frames need.
         let hard_after = |v: usize| {
-            g.constraints.iter().filter(|c| c.hard).filter_map(move |c| match (dir, &c.rel) {
-                (Dir::Down, Relation::Above { a, b, .. }) | (Dir::Right, Relation::LeftOf { a, b, .. }) if *a == v => Some(*b),
-                _ => None,
-            })
+            g.constraints
+                .iter()
+                .filter(|c| c.hard)
+                .filter_map(move |c| match (dir, &c.rel) {
+                    (Dir::Down, Relation::Above { a, b, .. })
+                    | (Dir::Right, Relation::LeftOf { a, b, .. })
+                        if *a == v =>
+                    {
+                        Some(*b)
+                    }
+                    _ => None,
+                })
         };
         for v in 0..n {
             let alone = rep[v] == v && (0..n).all(|u| u == v || rep[u] != v);
             let fed = dag.iter().any(|&(_, c)| c == v)
                 || g.constraints.iter().filter(|c| c.hard).any(|c| matches!((dir, &c.rel),
                     (Dir::Down, Relation::Above { b, .. }) | (Dir::Right, Relation::LeftOf { b, .. }) if *b == v));
-            let below = dag.iter().filter(|&&(a, _)| a == v).map(|&(_, c)| layer[c]).chain(hard_after(v).map(|c| layer[c])).min();
+            let below = dag
+                .iter()
+                .filter(|&&(a, _)| a == v)
+                .map(|&(_, c)| layer[c])
+                .chain(hard_after(v).map(|c| layer[c]))
+                .min();
             if let (true, false, Some(m)) = (alone, fed, below) {
                 layer[v] = layer[v].max(m.saturating_sub(1));
             }
@@ -539,7 +551,7 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     let detached: Vec<bool> = (0..n)
         .map(|v| g.nodes[v].aside && !flows[rep[v]] && !member(v) && flows.iter().any(|&f| f))
         .collect();
-    let strip = strip_rows(&detached, &size, main_len, sep);
+    let strip = strip_rows(&detached, size, main_len, sep);
     let strip_len = strip
         .iter()
         .map(|r| r.iter().map(|&v| size(v).1).fold(0.0, f64::max))
@@ -760,9 +772,17 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
             };
             let total = pack(&members, &p, &mut pos, true);
             // Stretching centers about the middle widens every gap, so blocks stay apart while fans spread like the unpacked rows.
-            let (c0, c1) = members.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, z), &v| (a.min(pos[v]), z.max(pos[v])));
+            let (c0, c1) = members
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, z), &v| {
+                    (a.min(pos[v]), z.max(pos[v]))
+                });
             let span = c1 - c0;
-            let stretch = if span > 0.0 { ((0.8 * (hi - lo) - (total - span)) / span).max(1.0) } else { 1.0 };
+            let stretch = if span > 0.0 {
+                ((0.8 * (hi - lo) - (total - span)) / span).max(1.0)
+            } else {
+                1.0
+            };
             for &v in &members {
                 pos[v] = (lo + hi) / 2.0 + (pos[v] - total / 2.0) * stretch;
             }
@@ -885,7 +905,8 @@ pub fn plan(g: &Graph, fonts: &Fonts, boxes: &[Boxed], cfg: &Config, b: f64, dir
     };
     for (i, &(a, c)) in dag.iter().enumerate() {
         let (lo, hi) = (layer[a].min(layer[c]), layer[a].max(layer[c]));
-        for u in (0..n).filter(|&u| u != a && u != c && near(layer[u], lo, hi) && !hidden(a, c, u)) {
+        for u in (0..n).filter(|&u| u != a && u != c && near(layer[u], lo, hi) && !hidden(a, c, u))
+        {
             cons.push((vec![a, c, u], Kind::Clear(sep * 0.25), 0));
         }
         for &(p, q) in &dag[i + 1..] {

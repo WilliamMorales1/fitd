@@ -617,7 +617,8 @@ impl DotParser {
             color: None,
             extra: Vec::new(),
         };
-        let (mut head, mut tail, mut dir, mut line, mut cross) = (None, None, "forward", None, false);
+        let (mut head, mut tail, mut dir, mut line, mut cross) =
+            (None, None, "forward", None, false);
         for (k, v) in attrs {
             match k.as_str() {
                 "label" | "xlabel" => e.label = Some(v.clone()),

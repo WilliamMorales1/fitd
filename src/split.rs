@@ -71,9 +71,15 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let groups: HashMap<&str, (&Option<String>, Vec<usize>)> = stmts
         .iter()
         .filter_map(|st| match &st.kind {
-            StmtKind::Group { id: Some(id), title, items, .. } => {
-                Some((id.text.as_str(), (title, items.iter().filter_map(index).collect())))
-            }
+            StmtKind::Group {
+                id: Some(id),
+                title,
+                items,
+                ..
+            } => Some((
+                id.text.as_str(),
+                (title, items.iter().filter_map(index).collect()),
+            )),
             _ => None,
         })
         .collect();
@@ -81,7 +87,9 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let pages_named = |n: &Name| -> Option<BTreeSet<Page>> {
         match index(n) {
             Some(v) => Some(pages_of(v)),
-            None => groups.get(n.text.as_str()).map(|(_, m)| m.iter().map(|&v| home(v)).collect()),
+            None => groups
+                .get(n.text.as_str())
+                .map(|(_, m)| m.iter().map(|&v| home(v)).collect()),
         }
     };
     let meet = |names: &[&Name]| -> BTreeSet<Page> {
@@ -125,14 +133,22 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let mut last: BTreeSet<Page> = BTreeSet::new();
     // A nested child's edge spans only the child, so its operator is rebuilt from the edge kind.
     let nested = |k: &StmtKind| match k {
-        StmtKind::Edge { from, to, link, directed, .. } if to.first().is_some_and(|t| t.span == from.span) => {
+        StmtKind::Edge {
+            from,
+            to,
+            link,
+            directed,
+            ..
+        } if to.first().is_some_and(|t| t.span == from.span) => {
             Some(["--", "->", "..", "..>"][2 * *link as usize + *directed as usize])
         }
         _ => None,
     };
     for st in &stmts {
         let own = match (&st.kind, nested(&st.kind)) {
-            (StmtKind::Edge { from, to, .. }, Some(op)) => format!("{} {op} {}", from.text, to[0].text),
+            (StmtKind::Edge { from, to, .. }, Some(op)) => {
+                format!("{} {op} {}", from.text, to[0].text)
+            }
             _ => snippet(st.span.lo, st.span.hi),
         };
         let looks: Looks = match &st.kind {
@@ -188,7 +204,10 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             }
             if on.len() == 2 {
                 let page = file(*on.iter().find(|&&p| p != OVERVIEW).unwrap());
-                body[slot(OVERVIEW)].push((None, format!("| see page {}", page.trim_end_matches(".fitd"))));
+                body[slot(OVERVIEW)].push((
+                    None,
+                    format!("| see page {}", page.trim_end_matches(".fitd")),
+                ));
             }
             last = on;
             continue;
@@ -235,7 +254,10 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                     }
                     let end_home = |n: &Name| match index(n) {
                         Some(v) => home(v),
-                        None => groups[n.text.as_str()].1.first().map_or(OVERVIEW, |&v| home(v)),
+                        None => groups[n.text.as_str()]
+                            .1
+                            .first()
+                            .map_or(OVERVIEW, |&v| home(v)),
                     };
                     for (here, there) in [(from, t), (t, from)] {
                         let p = end_home(here);
@@ -258,7 +280,11 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 }
             }
             StmtKind::Group {
-                id, title, items, attrs, ..
+                id,
+                title,
+                items,
+                attrs,
+                ..
             } => {
                 let title = match (id, title) {
                     (Some(n), Some(t)) => format!(" {} {}", n.text, quoted(t)),
@@ -357,13 +383,21 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
         let mut stub = Vec::new();
         for &v in &stubs[slot(p)] {
             stub.push(decl[v].clone());
-            stub.push((None, format!("| see page {}", file(home(v)).trim_end_matches(".fitd"))));
+            stub.push((
+                None,
+                format!("| see page {}", file(home(v)).trim_end_matches(".fitd")),
+            ));
         }
         for &id in &group_stubs[slot(p)] {
             let (title, members) = &groups[id];
             let ids: Vec<&str> = members.iter().map(|&v| g.nodes[v].id.as_str()).collect();
-            let title = title.as_deref().map_or(String::new(), |t| format!(" {}", quoted(t)));
-            stub.push((Some(Vec::new()), format!("group {id}{title} {}", ids.join(", "))));
+            let title = title
+                .as_deref()
+                .map_or(String::new(), |t| format!(" {}", quoted(t)));
+            stub.push((
+                Some(Vec::new()),
+                format!("group {id}{title} {}", ids.join(", ")),
+            ));
         }
         s += &blocks(&stub);
         (file(p), s)
@@ -455,7 +489,10 @@ mod tests {
         let out = split("m.fitd", text, "m").unwrap();
         let get = |n: &str| &out.files.iter().find(|f| f.0 == n).unwrap().1;
         let (a, b) = (get("m-a.fitd"), get("m-b.fitd"));
-        assert!(a.contains("G -> b1\n") && a.contains("s\n  b1\n  | see page m-b\n"), "{a}");
+        assert!(
+            a.contains("G -> b1\n") && a.contains("s\n  b1\n  | see page m-b\n"),
+            "{a}"
+        );
         assert!(
             b.contains("s\n  b1\n  b2\nb -- b1\n")
                 && b.contains("G -> b1\n")
