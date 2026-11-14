@@ -90,7 +90,7 @@ require input left-of check gap=2em
 - [Language reference](docs/language.md): grammar, statements, macros, semantics, diagnostics.
 - [Options](docs/options.md): command-line options, themes, watch mode, split output.
 - [Internals](docs/internals.md): solver and implementation details, testing, benchmarks.
-- [Examples](examples/): source files demonstrating language features, with renders in `examples/out`.
+- [Examples](examples/): source files demonstrating language features,.
 - [Showcase](examples/showcase/): figures that combine several standard-library modules.
 - [Gallery](examples/gallery/): one diagram per common academic figure type, built on the standard library.
 - [Agent skill](skills/fitd/SKILL.md): instructions for generating diagrams with fitd.

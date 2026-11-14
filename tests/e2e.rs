@@ -529,16 +529,14 @@ fn theme_colors_reach_svg_and_tikz() {
 /// busy core run slower per CPU second, so a CPU budget failed under load with identical
 /// output. CPU time is still capped loosely (HANG_SECS) to catch a hang. Lower a number when a
 /// change improves on it.
-const EXAMPLES: [(&str, usize, u64); 8] = [
+const EXAMPLES: [(&str, usize, u64); 6] = [
     ("coffee", 2, 155_000_000),
     ("compiler", 2, 4_200_000),
-    ("fib_calls", 0, 8_000_000),
     ("fitd_language", 1, 1_700_000),
     ("group_theory", 0, 164_000_000),
     // Built from a user library beside it, `library/runbook.fitd`.
     ("library/oncall", 0, 5_000),
     ("pipeline", 0, 94_000),
-    ("semester", 0, 34_000),
 ];
 
 const HANG_SECS: f64 = 60.0;
@@ -1524,7 +1522,7 @@ fn several_inputs_make_one_pdf() {
     let (ok, log) = fitd(&[
         "docs/pipeline.fitd",
         "examples/coffee.fitd",
-        "examples/semester.fitd",
+        "examples/compiler.fitd",
         "-o",
         pdf.to_str().unwrap(),
     ]);
@@ -1532,7 +1530,7 @@ fn several_inputs_make_one_pdf() {
     let (ok, log) = fitd(&[
         "docs/pipeline.fitd",
         "examples/coffee.fitd",
-        "examples/semester.fitd",
+        "examples/compiler.fitd",
         "--grid",
         "2x1",
         "--page",

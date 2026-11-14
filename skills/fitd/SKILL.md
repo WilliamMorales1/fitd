@@ -143,4 +143,4 @@ The chosen font is often not the largest that fits. fitd also lays out at 5% and
 
 ## Examples
 
-`examples/` in the fitd repo holds worked diagrams; `examples/00-index.fitd` lists the features each shows, and `examples/out/` holds renders. `coffee.fitd`, `group_theory.fitd`, `circular_financing.fitd` (radial maps; palette, undirected edges, groups, a `key`), `compiler.fitd` (dark layered flow with groups and styles, chained constraints), `fitd_language.fitd` (every statement, relation, and macro form once), `semester.fitd` and `fib_calls.fitd` (macros: loops, if, recursive template), `library/` (a `user/LIB` library). Read one when the user asks for a feature the guide only names.
+`examples/` in the fitd repo holds worked diagrams with renders in `examples/out/`: `fitd_language.fitd` (every statement, relation, and macro form once, with an `include`), `coffee.fitd` and `group_theory.fitd` (radial maps; palette, undirected edges, math markup), `compiler.fitd` (dark layered flow with groups, styles, chained constraints), and `library/` (a `user/LIB` library). Read one when the user asks for a feature the guide only names.
