@@ -1,6 +1,6 @@
 ---
 name: fitd
-description: Draw concept maps, mind maps, and flowcharts with the fitd CLI (.fitd text in, SVG/PNG/TikZ out). Use when asked to make a diagram, concept map, mind map, flowchart, or timeline, or when editing or fixing a .fitd file.
+description: Draw diagrams with the fitd CLI (.fitd text in, SVG/PNG/PDF/TikZ out): concept and mind maps, flowcharts, architecture and data flow, trees, UML class/state/sequence, ER, timelines, Gantt, tables, heat maps, Venn, swimlanes, pseudocode. Use when asked to make or fix a diagram or a .fitd file, or to convert Graphviz, Mermaid, or D2.
 ---
 
 # fitd
@@ -9,7 +9,7 @@ fitd compiles a small text language into a diagram. A constraint solver places e
 
 ## Workflow
 
-1. Run `fitd guide`. It prints the whole language on one page (about 600 tokens). Treat it as the reference; this skill does not repeat it.
+1. Run `fitd guide`. It prints the whole language on one page (about 600 tokens). Treat it as the syntax reference.
 2. Write the source and build in one command, reading from stdin:
 
 ```sh
@@ -25,22 +25,77 @@ EOF
 
 3. Exit status 0 means the file was written. Otherwise fix and rebuild (see Fix loop).
 
-If the user wants the source kept, write it to `NAME.fitd` and build with `fitd NAME.fitd -o NAME.png --short`.
+If the user wants the source kept, write it to `NAME.fitd` and build with `fitd NAME.fitd -o NAME.png --short`. For a common figure type, start from the stdlib module and its gallery file (see Standard library) instead of building by hand.
+
+## Commands
+
+| Command | Use |
+| --- | --- |
+| `fitd FILE.fitd -o out.svg\|.png\|.pdf` | Build. `-` reads stdin. |
+| `fitd a.fitd b.fitd -o book.pdf` | One PDF, a page per input; `--grid 2x2` puts several per page. |
+| `fitd guide` | Whole language on one page. |
+| `fitd std [NAME]` | List bundled modules, or print one. |
+| `fitd explain CODE` | Meaning and fix for a diagnostic code. |
+| `fitd import FILE.dot\|.mmd\|.d2 [-o out.fitd]` | Translate Graphviz, Mermaid, or D2. Unmapped attributes are listed in a warning. |
+| `fitd split FILE.fitd [-o DIR]` | Overview page plus one page per top-level branch; shared settings go in an included file. |
+| `fitd lsp` | Language server (diagnostics, hover, rename, completion, code actions). Editor support: `editors/vscode`, `editors/tree-sitter-fitd`. |
+
+## Language features
+
+Syntax details are in `fitd guide`; `docs/language.md` is the full reference. What exists:
+
+- Nodes: `ID "Title"`, `| body line` under it (leading spaces indent, `**bold**`), `wrap=24em`, `shape=box|circle|diamond|none`, `stack=N` (N copies, e.g. repeated layers), `color= fill= text=`, `row= col=` (grid placement: squares, 2x2 matrices, commutative diagrams), `place=aside` (layered: note strip beside the flow).
+- Children by indent: parent links to each indented node (`--` radial, `->` layered). Under a node, `-> x "label"` is an edge from it; a lone declared id reopens it.
+- Figure rows: `~ # %60 . _ LBL "two words" #X*3` draws a grid of cells below the node text (strips, masks, heat maps, tensor bars, unit bars). `~ image "plot.png" width=10em` embeds PNG/JPEG, for plots inside diagrams.
+- Edges: `->` flow, `--` undirected, `..>` dashed cross link that does not shape the layout, `..` undirected cross link. Chains and fans: `a, b -> c, d "label" -> e`. Attributes `color=`, `line=solid|dashed|dotted`, `head=` and `tail=` (`arrow|triangle|diamond|odiamond|crow|none`).
+- Groups: `group G "Title" a, b color=#hex` draws a frame; list inner members in the outer group to nest. A named group is an edge end (`x -> G`). `times=N` draws a dashed frame titled `Nx`.
+- Keys: `key "Label" color=... line=dashed head=...` adds a legend row at the bottom; `page ... keysize=20pt`.
+- Layouts: `radial root=ID` (default, mind maps), `layered dir=down|right bands=N order=source` (flows, trees; `order=source` keeps sibling order), `lanes dir= order=source` (each top-level group is a swimlane; `lane=ID` hangs a node on ID's lifeline, for sequence diagrams), `venn` (groups are set circles, up to three).
+- Page and font: `page a0..a4|WxHmm|16:9 portrait|landscape margin=1cm` (a ratio picks the smallest page of that shape), `font 8pt..30pt wrap=16em family="DejaVu Sans"`, `title "Text"`.
+- Theme: `theme paper|light|dark|mono` plus overrides `background text edge link label root palette gradient`. `paper` is black text on white with Okabe-Ito borders and light tints.
+- Styles: `style NAME attrs` declares; a line with only `NAME` opens a block, and every node, edge, group, and key indented under it takes the style (no `end`). Blocks nest.
+- Constraints: `require REL` (hard, E0110 if impossible) and `prefer REL weight=2` (soft, W0205 if unmet). REL: `a left-of|right-of|above|below b gap=2em` (chainable), `a near b within=4em`, `a at top-left|top|...|center|...|bottom-right`, `align row(a, b)|column(..)|top(..)|bottom(..)|left(..)|right(..)`.
+- Includes: `include "file.fitd"`, `include "MOD"` (bundled), `include "user/LIB"` (`LIB.fitd` beside the file or in a `FITD_PATH` directory; call as `LIB.name ARGS`).
+- Macros: `for i in 1..n` / `for i, x in a, b, c` ... `end`, `if EXPR` ... `end`, `def NAME(a, b)` ... `end` called as `NAME x "two words"` on its own line, `${expr}` in any line, `count(s, ";")`, `part(s, ";", i)`. Recursive templates should build a string and emit once. Errors on generated lines are reported at the call.
 
 ## Choosing a layout
 
-- Concept map or mind map (one topic branching out): the default, `layout radial`. Pick the center with `root=ID`; otherwise fitd picks it.
-- Process, pipeline, timeline, decision flow: `layout layered dir=down` or `dir=right`. Long flows wrap into bands; `bands=1` forbids wrapping. Trees (org chart, syntax tree): add `order=source` to keep children in edge order.
-- Indent a node line under another to make it a child: the parent links to it (`--` in radial maps, `->` in layered ones), so trees need no edge lines. Under a node, `-> x "label"` is an edge from it, and a line with only a declared id reopens that node.
-- `->` edges build the hierarchy or flow. `..>` draws a dashed cross link that does not change the structure. Use cross links for "relates to" connections. Hops chain on one line: `a -> b -> c, d` is `a -> b`, `b -> c`, `b -> d`, and `a, b -> c` fans in; `node a row=1 col=2` puts nodes on a grid (squares, 2x2 matrices); a trailing `color=` applies to every edge in it. `--` and `..` are the same without an arrowhead, for relations with no direction.
+- Concept map or mind map (one topic branching out): the default, `layout radial`. Pick the center with `root=ID`.
+- Process, pipeline, timeline, decision flow, tree: `layout layered dir=down` or `dir=right`. Long flows wrap into bands; `bands=1` forbids wrapping. Trees (org chart, syntax tree): add `order=source` to keep children in edge order.
+- Swimlanes and UML sequence: `layout lanes order=source`, or `include "seq"`.
+- Venn: `layout venn`, or `include "venn"`.
+- Cycle: a chain plus one back link. Fishbone: a tree into the effect. 2x2 or square: nodes with `row=`/`col=`.
+- `->` edges build the hierarchy or flow. Use `..>` for "relates to" links that should not change structure.
 
 ## Repetition
 
-When many nodes or edges share one style, write the style once as a block: `style step color=#0072B2`, then a line `step` and the lines indented under it (`lint "Lint"`, `test "Test"`, `a -> b`); the first line indented no deeper closes the block, with no `end`. Declaration order does not change the layout (except with `order=source`), so put each style's nodes in one block. Module styles open blocks too (`nn.block`); so do templates (`tree.unit`, one call per row). Node lines need `node` only for keyword ids (`node font`) or a lone untitled node outside blocks. When many nodes share one shape (numbered steps, one box per service, layers, recursion trees), write a loop or a template instead of copying lines: `for i in 1..n` or `for i, x in a, b, c` ... `end`, `def NAME(a, b)` ... `end` called as `NAME x "two words"` on its own line, and `${expr}` inside any line. Errors on generated lines are reported at the template line.
+When many nodes or edges share one style, write the style once as a block: `style step color=#0072B2`, then a line `step` and the lines indented under it. Declaration order does not change the layout (except with `order=source`), so put each style's nodes in one block. Module styles open blocks too (`nn.block`); so do templates (`tree.unit`, one call per indented row; a deeper row nests under the row above). Node lines need `node` only for keyword ids (`node font`). When many nodes share one shape (numbered steps, layers, recursion trees), use `for` or `def` instead of copying lines.
+
+## Standard library
+
+`fitd std` lists modules, `fitd std NAME` prints one. Include by name and call templates with the module prefix: `include "grid"`, then `grid.row "a; b; c"`. Bare words are text, digits are numbers, quotes group words; lists go in one string (text split on `;`, numbers on spaces).
+
+| Module | Draws | Gallery |
+| --- | --- | --- |
+| `flow` | Flowchart roles `io step decide done drop`, `flow.key` | 01 |
+| `arch` | `arch.client service store queue ext layers`, `arch_zone` frames, `arch.key` | 02, 11, 12 |
+| `nn` | `nn.input layer step out mask mask_rows mask_pad_rows note add`, styles `nn.block nn.data` | 03 |
+| `tree` | `tree.cat word` (syntax), `tree.q leaf` (decision), `tree.unit kids` (org) | 04, 05, 06 |
+| `grid` | `grid.head row title_row` (tables), `grid.heat shade` (heat maps, confusion), `grid.bar` (unit bars), `grid.task scale` (Gantt), `grid.layers`, `grid.quad` (2x2) | 08, 09, 18, 20, 21 |
+| `model` | Research models: `model.iv dv med mod ctl hyp key` | 10 |
+| `uml` | `uml.class iface state start final`, relations `uml.is has uses`, `uml.key` | 14, 15 |
+| `er` | `er.entity weak rel relation`, cardinality and crow's feet | 16 |
+| `time` | `time.event mile chain` | 17 |
+| `seq` | `seq.actor msg reply` for `layout lanes` | 25 |
+| `venn` | `venn.two three items set` for `layout venn` | 26, 27 |
+| `algo` | `algo.block` pseudocode, `;` lines, extra spaces indent, `**` keywords | 28 |
+| `palette` | Okabe-Ito colors | |
+
+Gallery sources: `examples/gallery/NN-*.fitd` (also 07 network, 13 cycle, 19 mind map, 22 commutative, 23 fishbone, 24 swimlane, 29 image). Not drawable yet: Euler diagrams, UML use-case actor glyph, dependency arcs, Sankey. Out of scope: data plots (embed as `~ image`), maps, photos, circuits.
 
 ## Start minimal
 
-Only node lines and edges are required. Leave out `page`, `font`, `theme`, and constraints at first: the defaults (A1 page, paper theme, font searched) usually work. Add a `require` only when the user asks for a specific placement, because each one can make the layout unsatisfiable. Prefer `prefer` over `require` when the placement is a wish, not a rule.
+Only node lines and edges are required. Leave out `page`, `font`, `theme`, and constraints at first: the defaults (A1 page, paper theme, font searched) usually work. Add `require` only when the user asks for a specific placement, because each one can make the layout unsatisfiable. Prefer `prefer` when the placement is a wish, not a rule.
 
 ## Fix loop
 
@@ -52,36 +107,40 @@ Only node lines and edges are required. Leave out `page`, `font`, `theme`, and c
 
 - Fix the first error only, then rebuild. Later errors are often caused by the first.
 - `fitd explain CODE` prints the meaning and fix for any code.
-- E0110 (constraints cannot all hold): the message lists a minimal conflicting set. Drop one of them, turn it into `prefer`, or use a larger `page`.
-- E0110 in a radial map with `left-of`/`right-of`/`above`/`below` between nodes on different branches: each branch stays within 30 degrees of its own wedge, so such a relation may be impossible at any font. Switch to `layout layered`, which places nodes freely within layers (but the flow fixes the other axis: with `dir=down`, two nodes in the same layer can never be `above` one another).
-- No layout fits (page too small): lower the font floor (`font 6pt..30pt` or `--min-font`), narrow the text with `font ... wrap=12em` (or `--wrap`), use a larger page, or follow the printed help.
-- Font smaller than expected: near the largest font that fits, search gets much harder; `--budget 100000000` (default 20M checks per probe) sometimes finds a slightly larger font. A layered layout of a long chain is limited by its number of layers; try `dir=right` or `page ... portrait`.
-- Warnings (W codes) do not block output. W0205 means a `prefer` was not met; usually fine.
+- E0110 (constraints cannot all hold): the message lists a minimal conflicting set. Drop one, turn it into `prefer`, or use a larger `page`.
+- E0110 in a radial map with `left-of`/`right-of`/`above`/`below` between nodes on different branches: each branch stays within its own wedge, so the relation may be impossible. Switch to `layout layered` (with `dir=down`, two nodes in one layer can never be `above` one another).
+- E0016: edge from a group to itself, a member, or a nested group, or a group edge under `venn`/`lanes`.
+- No layout fits (page too small): lower the font floor (`font 6pt..30pt` or `--min-font`), narrow text with `font ... wrap=12em` (or `--wrap`), use a larger page, or follow the printed help.
+- Font smaller than expected: `--budget 100000000` (default 20M checks per probe) sometimes finds a larger font. A layered chain is limited by its number of layers; try `dir=right` or `page ... portrait`.
+- Warnings (W codes) do not block output. W0205: a `prefer` was not met. W0208: a `place=aside` node stayed in the flow.
+- `--force` writes output despite checker errors, for a quick look only.
 
 ## Useful flags
 
 | Flag | Use |
 | --- | --- |
-| `-o FILE.svg` / `.png` / `.pdf` | Output format by extension. PNG is cropped to the drawing; PDF keeps the page and selectable text. |
-| `fitd a.fitd b.fitd -o out.pdf` | Several diagrams in one PDF, a page each, in order. |
+| `-o FILE.svg` / `.png` / `.pdf` | Format by extension. PNG is cropped to the drawing; SVG and PDF keep the page; PDF text is selectable. |
 | `--tikz FILE.tex` | Also write standalone LaTeX. |
 | `--short` | One line per diagnostic. Always use it. |
 | `--draft` | 2 to 6 times faster; use while iterating, drop it for the final build. |
+| `--watch` | Rebuild on save (draft first, full after 1.5 s idle). One file input. |
 | `--stable FILE.lock` | Keep nodes and font in place when editing a map someone already saw. |
-| `--page a0..a4`, `WxHmm`, or `16:9` | Page size; smaller pages give smaller fonts. A ratio picks the smallest page of that shape that fits at the font floor. |
-| `--portrait` / `--landscape` | Fix orientation. |
-| `--theme paper\|light\|dark\|mono` | Color preset; `paper` (default) is black on white, `mono` for grayscale print. |
+| `--page a0..a4`, `WxHmm`, or `16:9` | Page size; smaller pages give smaller fonts. |
+| `--portrait` / `--landscape`, `--margin PT` | Orientation and margin. |
+| `--min-font PT`, `--max-font PT`, `--wrap EM` | Font search bounds and text width. |
+| `--bands N` | Max bands for layered layouts. |
+| `--theme paper\|light\|dark\|mono`, `--font-family NAME` | Color preset (`mono` for grayscale print) and installed font. |
+| `--scale PX` | PNG pixels per point (default 2). |
+| `--budget N`, `--expand-budget N` | Layout search and macro expansion limits. |
 
-Flags override settings in the file.
+Flags override settings in the file. `FITD_DEBUG=1` prints solver probes.
 
 ## Checking the result
 
-Open the PNG (read the image) and check that labels are legible and nothing important is missing. The success line reports the chosen font and page, e.g. `body font 48.0pt on 2384x1684pt; 0 errors, 0 warnings`. A very small font means too much content for the page: split the diagram (`fitd split map.fitd` writes an overview plus one page per top-level branch), shorten bodies, or use a larger page.
+Open the PNG (read the image) and check that labels are legible and nothing important is missing. The success line reports the chosen font and page, e.g. `body font 48.0pt on 2384x1684pt; 0 errors, 0 warnings`. A very small font means too much content: split the diagram (`fitd split`), shorten bodies, or use a larger page.
 
-The chosen font is often not the largest that fits. fitd also lays out at 5% and 10% below it and keeps the one that reads best (fewer crossings, related nodes closer), as long as it stays above a legibility floor of 16pt per meter of page diagonal. A font a little under the maximum is intended, not a failure; `--min-font` raises that floor.
+The chosen font is often not the largest that fits. fitd also lays out at 5% and 10% below it and keeps the one that reads best (fewer crossings, related nodes closer), as long as it stays above a legibility floor of 16pt per meter of page diagonal. A font a little under the maximum is intended; `--min-font` raises the floor.
 
 ## Examples
 
-`examples/` in the fitd repo holds ten diagrams (`circular_financing.fitd` shows a radial money-flow map with a `key` for edge colors), each on a page sized to its content: `coffee.fitd` and `group_theory.fitd` (radial maps; palette, undirected edges, a group, math markup), `compiler.fitd` (dark layered flow with groups and styles), `fitd_language.fitd` (fitd described in fitd, using every statement, relation, and macro form once), `debugging.fitd` (mono decision flow at a fixed font), `release_pipeline.fitd` (banded flow, `include`, theme overrides, chained constraints), and three that use macros (`for`, `if`, `def` and calls, `${expr}`; see `docs/language/05-macros.fitd`): `semester.fitd` (a timeline from a list loop), `fib_calls.fitd` (a recursive template), `neural_net.fitd` (dense layers from loops). `examples/00-index.fitd` lists the features each example shows; `examples/out/` holds a render of each (PNG, SVG, or PDF). Read one when the user asks for a feature the guide only names.
-
-Before hand-building a common figure, check the standard library: `fitd std` lists modules, `fitd std NAME` prints one. Include a module by name and call its templates with the module prefix: `include "grid"`, then `grid.row "a; b; c"` on its own line (bare words are text, digits are numbers, quotes group text with spaces). A template name alone opens a block of calls, one row each, and an indented row is a child of the row above: `tree.unit`, then `  ceo Ada CEO`, `    cto Lin CTO`. A user library `LIB.fitd` beside the file works the same way: `include "user/LIB"`, then `LIB.name ARGS`. `grid` (tables, heat maps, confusion matrices, Gantt, unit bars, 2x2 matrices), `arch` (architecture, data flow, layer stacks), `uml` (class, state), `er`, `tree` (syntax, decision, org trees), `time` (timelines), `model` (research models), `flow`, `nn`, `palette`. Templates take lists as one string: text split on `;`, numbers on spaces. `examples/gallery/` has one source per figure type; `AGENTS.md` lists types fitd cannot draw yet (Euler, dependency arcs) and those out of scope (data plots, maps). Put a plot inside a diagram as `~ image "plot.png" width=10em` under a node.
+`examples/` in the fitd repo holds worked diagrams; `examples/00-index.fitd` lists the features each shows, and `examples/out/` holds renders. `coffee.fitd`, `group_theory.fitd`, `circular_financing.fitd` (radial maps; palette, undirected edges, groups, a `key`), `compiler.fitd` (dark layered flow with groups and styles), `fitd_language.fitd` (every statement, relation, and macro form once), `debugging.fitd` (mono decision flow at a fixed font), `release_pipeline.fitd` (bands, `include`, theme overrides, chained constraints), `semester.fitd`, `fib_calls.fitd`, `neural_net.fitd` (macros: loops, recursive template), `library/` (a `user/LIB` library). Read one when the user asks for a feature the guide only names.
