@@ -78,7 +78,7 @@ Node, edge, and group attributes include `color`, `fill`, and `text` where suppo
 
 - `fitd explain CODE` prints extended diagnostic information.
 - `fitd guide` prints concise language syntax and examples.
-- `fitd import INPUT` converts Graphviz DOT, Mermaid, or D2 input to `.fitd` source.
+- `fitd import INPUT` converts Graphviz DOT, Mermaid, or D2 input to `.fitd` source. DOT `arrowhead`, `arrowtail`, and `dir` become `head=` and `tail=`; `style=dashed|dotted` and `constraint=false` become cross links. Attributes with no fitd equivalent are listed in a warning.
 - `fitd lsp` starts language server using standard input and output. See [Language server](#language-server).
 
 ## Language server

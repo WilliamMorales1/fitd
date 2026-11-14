@@ -1321,7 +1321,7 @@ fn imported_sources_build_cleanly() {
         "{log}"
     );
     for (src, dropped) in [
-        ("import.dot", "edge attribute `constraint=false`"),
+        ("import.dot", "graph attribute `fontname`"),
         ("import.mmd", "`classDef` statements"),
         ("import.d2", "shape `cylinder`"),
     ] {

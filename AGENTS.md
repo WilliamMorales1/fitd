@@ -142,7 +142,6 @@ Only open work belongs here: planned changes, known problems, and caveats. Delet
 Finished plans are removed from this file; git history has them. These parts were left out:
 
 - Ordered layouts: no per-group `ordered` flag. A group draws a frame, so it is a poor switch for ordering alone. Add one only if a figure needs source order in one part and crossing reduction in another.
-- Edge heads: no Graphviz `arrowhead=`/`style=` import.
 - Sequence diagrams: no activation bars, self-messages, or lane-relative `group` frames inside a sequence.
 - Venn: no Euler diagrams (disjoint or nested sets drawn apart or inside) and no area-proportional circles.
 - Group edges: `layout lanes` and `layout venn` reject them (E0016). `fitd split` drops edges whose end is a group ID. An edge runs from a stand-in member, so a long group edge may leave the frame off center.

@@ -18,6 +18,8 @@ struct IEdge {
     directed: bool,
     dashed: bool,
     color: Option<String>,
+    // fitd edge attributes with no other source format, such as `head=crow`.
+    extra: Vec<String>,
 }
 
 struct IGroup {
@@ -197,6 +199,9 @@ impl Doc {
             }
             if let Some(c) = &e.color {
                 o += &format!(" color={c}");
+            }
+            for a in &e.extra {
+                o += &format!(" {a}");
             }
             o.push('\n');
         }
@@ -610,19 +615,74 @@ impl DotParser {
             directed,
             dashed: false,
             color: None,
+            extra: Vec::new(),
         };
+        let (mut head, mut tail, mut dir, mut line, mut cross) = (None, None, "forward", None, false);
         for (k, v) in attrs {
             match k.as_str() {
                 "label" | "xlabel" => e.label = Some(v.clone()),
-                "style" if matches!(v.as_str(), "dashed" | "dotted") => e.dashed = true,
+                "style" if matches!(v.as_str(), "dashed" | "dotted" | "solid") => {
+                    line = Some(if v == "dashed" { "dashed" } else { v.as_str() })
+                }
+                "constraint" if v == "false" => cross = true,
                 "color" if hex(v).is_some() => e.color = hex(v),
-                "dir" if v == "none" => e.directed = false,
-                "dir" if v == "back" => (e.a, e.b) = (b, a),
+                "dir" if matches!(v.as_str(), "none" | "back" | "both" | "forward") => {
+                    dir = if v == "none" { "none" } else { v.as_str() }
+                }
+                "arrowhead" if dot_head(v).is_some() => head = dot_head(v),
+                "arrowtail" if dot_head(v).is_some() => tail = dot_head(v),
                 _ => self.doc.drop(format!("edge attribute `{k}={v}`")),
             }
         }
+        if !directed && dir == "forward" {
+            dir = "none";
+        }
+        // Graphviz draws arrowhead at b and arrowtail at a, each only when dir shows that end.
+        let (at_b, at_a) = match dir {
+            "none" => (None, None),
+            "back" => (None, Some(tail.unwrap_or("arrow"))),
+            "both" => (Some(head.unwrap_or("arrow")), Some(tail.unwrap_or("arrow"))),
+            _ => (Some(head.unwrap_or("arrow")), None),
+        };
+        let (h, t) = if dir == "back" {
+            (e.a, e.b) = (b, a);
+            (at_a, at_b)
+        } else {
+            (at_b, at_a)
+        };
+        e.directed = h.is_some();
+        if let Some(h) = h.filter(|&h| h != "arrow" && h != "none") {
+            e.extra.push(format!("head={h}"));
+        }
+        if h == Some("none") && t.is_some() {
+            e.extra.push("head=none".into());
+        }
+        if let Some(t) = t {
+            e.directed = true;
+            e.extra.push(format!("tail={t}"));
+        }
+        // A dashed edge or one that skips ranking becomes a cross link, which is dashed unless told otherwise.
+        e.dashed = cross || matches!(line, Some("dashed" | "dotted"));
+        match line {
+            Some("dotted") => e.extra.push("line=dotted".into()),
+            Some("solid") | None if cross => e.extra.push("line=solid".into()),
+            _ => {}
+        }
         self.doc.edges.push(e);
     }
+}
+
+/// dot_head maps a Graphviz arrow shape to the fitd head that draws it, or None to drop it.
+fn dot_head(v: &str) -> Option<&'static str> {
+    Some(match v {
+        "normal" | "vee" | "open" => "arrow",
+        "empty" | "onormal" | "ovee" => "triangle",
+        "diamond" => "diamond",
+        "odiamond" | "ediamond" => "odiamond",
+        "crow" => "crow",
+        "none" => "none",
+        _ => return None,
+    })
 }
 
 fn from_dot(text: &str) -> Result<Doc, String> {
@@ -857,6 +917,7 @@ fn from_mermaid(text: &str) -> Result<Doc, String> {
                             directed,
                             dashed,
                             color: None,
+                            extra: Vec::new(),
                         });
                     }
                 }
@@ -1350,6 +1411,7 @@ fn from_d2(text: &str) -> Result<Doc, String> {
                             directed: matches!(*op, "->" | "<-"),
                             dashed: false,
                             color: None,
+                            extra: Vec::new(),
                         });
                     }
                     if opens {
@@ -1573,6 +1635,7 @@ fn from_mindmap(text: &str) -> Result<Doc, String> {
                 directed: true,
                 dashed: false,
                 color: None,
+                extra: Vec::new(),
             }),
             None if doc.root.is_some() => {
                 return Err(format!(
@@ -1658,6 +1721,23 @@ mod tests {
         );
         assert!(out.contains("group \"Front end\" lex, parse\n"), "{out}");
         assert_eq!(dropped, ["edge attribute `penwidth=2`"]);
+    }
+
+    #[test]
+    fn dot_arrow_shapes_become_heads() {
+        let dot = "digraph { a -> b [arrowhead=empty]; b -> c [dir=both, arrowtail=diamond, arrowhead=crow]; c -> d [dir=back, arrowtail=odiamond]; d -> e [style=dotted]; e -> a [constraint=false]; a -> c [arrowhead=dot]; }";
+        let (out, dropped) = import("x.dot", dot).unwrap();
+        for want in [
+            "a -> b head=triangle\n",
+            "b -> c head=crow tail=diamond\n",
+            "d -> c head=odiamond\n",
+            "d ..> e line=dotted\n",
+            "e ..> a line=solid\n",
+            "a -> c\n",
+        ] {
+            assert!(out.contains(want), "{want}: {out}");
+        }
+        assert_eq!(dropped, ["edge attribute `arrowhead=dot`"]);
     }
 
     #[test]
