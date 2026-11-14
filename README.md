@@ -5,19 +5,34 @@
 fitd is a text-based diagram compiler. It converts `.fitd` source into SVG, PNG, PDF, or TikZ and searches for a layout that satisfies declared constraints while maximizing font size on a fixed page.
 
 ```fitd
-title "Photosynthesis"
-layout radial root=leaf
-page a4 portrait margin=12mm
+title "How fitd compiles a diagram"
+layout layered dir=right
+page 297x210mm margin=1cm
 
-sun "Light"
-leaf "Leaf"
-| converts light into stored energy
-sugar "Glucose"
+style io color=#009E73 shape=circle
 
-sun -> leaf
-leaf -> sugar "produces"
-require sun above leaf
+io
+  src "Source : fitd"
+  out "SVG, PNG, TikZ"
+parse "Parser"
+csp "CSP search"
+| largest font that fits
+bnb "Branch and bound"
+core "QuickXplain"
+| minimal unsat core
+checker "Checker" color=#F85149
+
+src -> parse -> csp -> bnb, core
+bnb -> checker -> out
+core ..> src "points back at source"
+
+group "Solver" csp, bnb, core color=#AB7DF7
+
+require bnb above core gap=2em
+prefer out at right weight=2
 ```
+
+![Compiler pipeline from source through layout and checking to output](docs/pipeline.png)
 
 ## Design goals
 
@@ -56,8 +71,6 @@ fitd explain E0110
 ```
 
 Output format is selected from output filename extension. Multiple inputs with PDF output produce one page per input. Diagnostics are written to standard error. `--short` prints one line per diagnostic.
-
-![Compiler pipeline from source through layout and checking to output](docs/pipeline.png)
 
 ## Language
 
