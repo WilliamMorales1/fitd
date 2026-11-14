@@ -80,32 +80,6 @@
     }
   },
   {
-    "type": "call_statement",
-    "named": true,
-    "fields": {
-      "arguments": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "arguments",
-            "named": true
-          }
-        ]
-      },
-      "name": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "qualified_name",
-            "named": true
-          }
-        ]
-      }
-    }
-  },
-  {
     "type": "chain",
     "named": true,
     "fields": {
@@ -194,7 +168,7 @@
     "named": true,
     "fields": {
       "from": {
-        "multiple": false,
+        "multiple": true,
         "required": false,
         "types": [
           {
@@ -428,6 +402,32 @@
     }
   },
   {
+    "type": "key_statement",
+    "named": true,
+    "fields": {
+      "label": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "attribute",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "layout_statement",
     "named": true,
     "fields": {
@@ -630,10 +630,6 @@
         "required": true,
         "types": [
           {
-            "type": "name",
-            "named": true
-          },
-          {
             "type": "number",
             "named": true
           },
@@ -671,10 +667,6 @@
           "named": true
         },
         {
-          "type": "call_statement",
-          "named": true
-        },
-        {
           "type": "constraint_statement",
           "named": true
         },
@@ -695,6 +687,10 @@
           "named": true
         },
         {
+          "type": "figure",
+          "named": true
+        },
+        {
           "type": "font_statement",
           "named": true
         },
@@ -712,6 +708,10 @@
         },
         {
           "type": "include_statement",
+          "named": true
+        },
+        {
+          "type": "key_statement",
           "named": true
         },
         {
@@ -744,10 +744,6 @@
         },
         {
           "type": "title_statement",
-          "named": true
-        },
-        {
-          "type": "use_statement",
           "named": true
         }
       ]
@@ -821,32 +817,6 @@
     }
   },
   {
-    "type": "use_statement",
-    "named": true,
-    "fields": {
-      "arguments": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "arguments",
-            "named": true
-          }
-        ]
-      },
-      "name": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "name",
-            "named": true
-          }
-        ]
-      }
-    }
-  },
-  {
     "type": "\n",
     "named": false
   },
@@ -891,10 +861,6 @@
     "named": false
   },
   {
-    "type": "arguments",
-    "named": true
-  },
-  {
     "type": "at",
     "named": false
   },
@@ -928,6 +894,10 @@
     "named": true
   },
   {
+    "type": "figure",
+    "named": true
+  },
+  {
     "type": "font",
     "named": false
   },
@@ -949,6 +919,10 @@
   },
   {
     "type": "include",
+    "named": false
+  },
+  {
+    "type": "key",
     "named": false
   },
   {
@@ -997,10 +971,6 @@
   },
   {
     "type": "title",
-    "named": false
-  },
-  {
-    "type": "use",
     "named": false
   },
   {

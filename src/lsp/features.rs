@@ -71,7 +71,7 @@ fn fence(code: &str) -> String {
 }
 
 fn signature(d: &index::Def) -> String {
-    format!("{}({})", d.name, d.params.join(", "))
+    std::iter::once(d.name.as_str()).chain(d.params.iter().map(|p| p.as_str())).collect::<Vec<_>>().join(" ")
 }
 
 fn values_line(a: &docs::Attr) -> String {
@@ -570,68 +570,42 @@ pub fn color_presentation(params: &Value) -> Value {
     json!([{ "label": label, "textEdit": { "range": params["range"], "newText": label } }])
 }
 
-/// Call is a `MOD.name(args)` or `use NAME(args)` line: name, each argument's UTF-16 start and text, and whether `)` closed it.
+/// Call is a template call line: name, each argument's UTF-16 start and text, and whether a space follows the last one.
 type Call = (String, Vec<(usize, String)>, bool);
 
 fn call(line: &str) -> Option<Call> {
     let lead = line.len() - line.trim_start().len();
-    let name_lo = match line[lead..].strip_prefix("use") {
-        Some(rest) if rest.starts_with([' ', '\t']) => line.len() - rest.trim_start().len(),
-        _ => lead,
-    };
-    let name = index::template_name(&line[name_lo..]);
-    if name.is_empty() || name_lo == lead && !name.contains('.') {
+    let name = index::template_name(&line[lead..]);
+    let mut i = lead + name.len();
+    if name.is_empty() || !(i == line.len() || line[i..].starts_with([' ', '\t'])) {
         return None;
     }
-    let after = name_lo + name.len();
-    let open = after + line[after..].find('(')?;
-    let (mut args, mut depth, mut quoted, mut start) = (Vec::new(), 0, false, open + 1);
-    let mut closed = false;
-    let mut esc = false;
-    for (i, c) in line[open + 1..]
-        .char_indices()
-        .map(|(i, c)| (open + 1 + i, c))
-    {
-        if quoted {
-            match c {
-                _ if esc => esc = false,
-                '\\' => esc = true,
-                '"' => quoted = false,
-                _ => {}
-            }
+    let b = line.as_bytes();
+    let mut args = Vec::new();
+    while i < b.len() {
+        if b[i].is_ascii_whitespace() {
+            i += 1;
             continue;
         }
-        match c {
-            '"' => quoted = true,
-            '(' => depth += 1,
-            ')' if depth > 0 => depth -= 1,
-            ',' | ')' => {
-                let raw = &line[start..i];
-                let skip = raw.len() - raw.trim_start().len();
-                if !raw.trim().is_empty() {
-                    args.push((
-                        line[..start + skip].encode_utf16().count(),
-                        raw.trim().to_string(),
-                    ));
-                }
-                start = i + 1;
-                if c == ')' {
-                    closed = true;
-                    break;
-                }
-            }
-            _ => {}
+        if b[i] == b'#' {
+            break;
         }
+        let lo = i;
+        let (mut quoted, mut depth) = (false, 0);
+        while i < b.len() && (quoted || depth > 0 || !b[i].is_ascii_whitespace()) {
+            match b[i] {
+                b'\\' if quoted => i += 1,
+                b'"' => quoted = !quoted,
+                b'{' if i > 0 && b[i - 1] == b'$' => depth += 1,
+                b'}' if depth > 0 => depth -= 1,
+                _ => {}
+            }
+            i += 1;
+        }
+        let hi = i.min(b.len());
+        args.push((line[..lo].encode_utf16().count(), line[lo..hi].to_string()));
     }
-    if !closed {
-        let raw = &line[start..];
-        let skip = raw.len() - raw.trim_start().len();
-        args.push((
-            line[..start + skip].encode_utf16().count(),
-            raw.trim().to_string(),
-        ));
-    }
-    Some((name, args, closed))
+    Some((name, args, line.ends_with([' ', '\t'])))
 }
 
 pub fn inlay_hints(doc: &Doc, params: &Value) -> Value {
@@ -677,12 +651,9 @@ pub fn signature_help(doc: &Doc, p: &Value) -> Value {
         })
         .find(|&(u, _)| u >= ch)
         .map_or(text.len(), |(_, i)| i);
-    let Some((name, args, closed)) = call(&text[..cut]) else {
+    let Some((name, args, spaced)) = call(&text[..cut]) else {
         return Value::Null;
     };
-    if closed {
-        return Value::Null;
-    }
     let idx = doc.index();
     let Some(d) = idx.def(&name) else {
         return Value::Null;
@@ -694,7 +665,7 @@ pub fn signature_help(doc: &Doc, p: &Value) -> Value {
         .iter()
         .map(|p| {
             let r = json!([at, at + p.len()]);
-            at += p.len() + 2;
+            at += p.len() + 1;
             json!({ "label": r })
         })
         .collect();
@@ -705,7 +676,7 @@ pub fn signature_help(doc: &Doc, p: &Value) -> Value {
     json!({
         "signatures": [sig],
         "activeSignature": 0,
-        "activeParameter": args.len().saturating_sub(1),
+        "activeParameter": if spaced { args.len() } else { args.len().saturating_sub(1) },
     })
 }
 
@@ -968,27 +939,6 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
     } else {
         stmt
     };
-    if first == "use" && words.len() == 1 {
-        return Value::Array(
-            idx.defs
-                .iter()
-                .map(|d| {
-                    let mut v = item(&d.name, 3, &signature(d), &d.doc);
-                    if snippets {
-                        let ps: Vec<String> = d
-                            .params
-                            .iter()
-                            .enumerate()
-                            .map(|(i, p)| format!("${{{}:{p}}}", i + 1))
-                            .collect();
-                        v["insertText"] = json!(format!("{}({})", d.name, ps.join(", ")));
-                        v["insertTextFormat"] = json!(2);
-                    }
-                    v
-                })
-                .collect(),
-        );
-    }
     if words.len() == 1
         && let Some(m) = first.strip_suffix('.')
         && idx.defs.iter().any(|d| d.name.starts_with(&format!("{m}.")))
@@ -1012,7 +962,7 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                             .enumerate()
                             .map(|(i, p)| format!("${{{}:{p}}}", i + 1))
                             .collect();
-                        v["insertText"] = json!(format!("{short}({})", ps.join(", ")));
+                        v["insertText"] = json!(format!("{short} {}", ps.join(" ")));
                         v["insertTextFormat"] = json!(2);
                     }
                     v
@@ -1074,6 +1024,15 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                 .iter()
                 .map(|n| item(n, 14, "style block", "Opens a block: lines up to `end` take this style.")),
         );
+        out.extend(idx.defs.iter().filter(|d| !d.name.contains('.')).map(|d| {
+            let mut v = item(&d.name, 3, &signature(d), &d.doc);
+            if snippets {
+                let ps: Vec<String> = d.params.iter().enumerate().map(|(i, p)| format!("${{{}:{p}}}", i + 1)).collect();
+                v["insertText"] = json!(format!("{} {}", d.name, ps.join(" ")));
+                v["insertTextFormat"] = json!(2);
+            }
+            v
+        }));
         out.extend(node_items(&idx));
         return Value::Array(out);
     }

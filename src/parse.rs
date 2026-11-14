@@ -20,7 +20,7 @@ type PResult<T> = Result<T, Diag>;
 /// KEYWORDS are the words that start a statement or macro directive, so no style may take one.
 pub const KEYWORDS: &[&str] = &[
     "title", "root", "layout", "page", "font", "theme", "style", "node", "key", "group",
-    "include", "require", "prefer", "for", "if", "else", "end", "def", "use",
+    "include", "require", "prefer", "for", "if", "else", "end", "def",
 ];
 
 impl Parser<'_> {
@@ -118,9 +118,6 @@ impl Parser<'_> {
     fn attrs(&mut self) -> PResult<Vec<Attr>> {
         let mut out = Vec::new();
         while !self.at_end() {
-            if *self.peek() == Tok::Colon {
-                return Err(self.removed_class());
-            }
             let key = self.name("an attribute like `key=value`")?;
             self.expect(Tok::Eq)?;
             out.push(Attr {
@@ -226,12 +223,6 @@ impl Parser<'_> {
             1
         };
         matches!(self.peek_at(k), Tok::Newline | Tok::Eof).then_some(k)
-    }
-
-    fn removed_class(&self) -> Diag {
-        Diag::error("E0002", "`: NAME` no longer applies a style")
-            .primary(self.span(), "not valid here")
-            .help("put the line inside a block: a line holding only the style name, then the lines indented under it")
     }
 
     fn rel(&mut self) -> PResult<Rel> {

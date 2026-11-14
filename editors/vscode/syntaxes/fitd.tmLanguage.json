@@ -19,8 +19,8 @@
   ],
   "repository": {
     "body": {
-      "comment": "A `|` first on a line makes the rest of it a body line, verbatim.",
-      "match": "^\\s*(\\|)(.*)$",
+      "comment": "A `|` or `~` first on a line makes the rest of it a body or figure row, verbatim.",
+      "match": "^\\s*([|~])(.*)$",
       "captures": {
         "1": { "name": "punctuation.definition.body.fitd" },
         "2": { "name": "string.unquoted.body.fitd", "patterns": [{ "include": "#interpolation" }] }
@@ -30,7 +30,7 @@
       "comment": "Macro lines; a keyword followed by an edge operator is a node name instead.",
       "patterns": [
         {
-          "match": "^\\s*(def|use)\\s+([\\w]+)",
+          "match": "^\\s*(def)\\s+([\\w]+)",
           "captures": {
             "1": { "name": "keyword.control.macro.fitd" },
             "2": { "name": "entity.name.function.template.fitd" }
@@ -78,17 +78,17 @@
         },
         {
           "comment": "A node line without `node`: an id followed by a title or attribute.",
-          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def|use)\\b)([A-Za-z_][\\w-]*)(?=\\s+(?:\"|[\\w-]+=))",
+          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def)\\b)([A-Za-z_][\\w-]*)(?=\\s+(?:\"|[\\w-]+=))",
           "captures": { "1": { "name": "entity.name.function.node.fitd" } }
         },
         {
-          "comment": "`mod.name` followed by words calls a template without parentheses.",
+          "comment": "`mod.name` followed by words calls a template.",
           "match": "^\\s*([A-Za-z_][\\w-]*\\.[A-Za-z_][\\w-]*)(?=\\s+[^\\s#=(])",
           "captures": { "1": { "name": "entity.name.function.template.fitd" } }
         },
         {
           "comment": "A lone name, or `mod.name`, opens a style block over the lines indented under it, or reopens a node.",
-          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def|use)\\b)([A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)?)\\s*(?=#|$)",
+          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def)\\b)([A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)?)\\s*(?=#|$)",
           "captures": { "1": { "name": "entity.name.type.style.fitd" } }
         },
         {

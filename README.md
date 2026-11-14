@@ -9,10 +9,10 @@ title "Photosynthesis"
 layout radial root=leaf
 page a4 portrait margin=12mm
 
-node sun "Light"
-node leaf "Leaf"
+sun "Light"
+leaf "Leaf"
 | converts light into stored energy
-node sugar "Glucose"
+sugar "Glucose"
 
 sun -> leaf
 leaf -> sugar "produces"
@@ -64,9 +64,9 @@ Output format is selected from output filename extension. Multiple inputs with P
 `.fitd` files contain one statement per line. Node declarations and edges form basic diagrams; optional statements configure page, typography, themes, groups, layouts, and constraints. The [language reference](docs/language.md) specifies grammar and semantics.
 
 ```fitd
-node input "Input"
-node check "Valid?"
-node output "Save"
+input "Input"
+check "Valid?"
+output "Save"
 input -> check
 check -> output "yes"
 require input left-of check gap=2em

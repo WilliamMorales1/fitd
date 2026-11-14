@@ -34,7 +34,7 @@ gate
   | all checks green
   | changelog entry present
   prod "Production"
-node monitor "Monitoring"
+monitor "Monitoring"
 | error rate, latency, saturation
 
 repo -> commit -> lint, unit -> build -> review "pull request" -> integ -> gate -> artifact -> stage -> canary -> prod "promote"

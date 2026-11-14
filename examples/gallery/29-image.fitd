@@ -1,11 +1,11 @@
 # Mixed figure: a plot inside a pipeline (Viziometrics, DocFigure, ACL-Fig mix plots and diagrams).
 layout layered dir=right
 page 16:9
-node data "Corpus"
+data "Corpus"
 | 2M sentences
-node model "Transformer"
+model "Transformer"
 | 6 layers
-node eval "Validation"
+eval "Validation"
 ~ image "loss.png" width=9em
 | train solid, val dashed
 data -> model -> eval ..> model "tune"

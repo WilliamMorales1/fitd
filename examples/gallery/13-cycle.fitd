@@ -2,8 +2,8 @@
 layout layered dir=right
 page 2:1
 font 9pt..28pt
-node p "Plan"
-node d "Do"
-node c "Check"
-node a "Act"
+p "Plan"
+d "Do"
+c "Check"
+a "Act"
 p -> d -> c -> a ..> p "repeat"

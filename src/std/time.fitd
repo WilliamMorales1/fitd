@@ -3,21 +3,21 @@ style time_event color=#0072B2 shape=box
 style time_mile color=#D55E00 shape=box
 style time_era color=#56B4E9
 
-# time.event(id, date, text): an event titled with its date.
+# time.event id date text: an event titled with its date.
 def event(id, date, text)
 time_event
   node ${id} "${date}"
   | ${text}
 end
 
-# time.mile(id, date, text): a milestone, drawn in the accent colour.
+# time.mile id date text: a milestone, drawn in the accent colour.
 def mile(id, date, text)
 time_mile
   node ${id} "${date}"
   | ${text}
 end
 
-# time.chain(ids): joins the `;`-separated events in order.
+# time.chain ids: joins the `;`-separated events in order.
 def chain(ids)
 for i in 2..count(ids, ";")
 ${part(ids, ";", i - 1)} -> ${part(ids, ";", i)}

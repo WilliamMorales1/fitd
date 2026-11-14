@@ -14,10 +14,10 @@ probe
   fits "Fits?"
   bnb "Branch and bound"
   | fewest unmet prefer weight
-node trade "Trade-off"
+trade "Trade-off"
 | top font, 5% and 10% smaller, polished in parallel
 | kept above 16pt per meter of page diagonal
-node polish "Polish each"
+polish "Polish each"
 | annealing: crossings, nearness, spread
 good
   best "Best merit"
@@ -33,12 +33,12 @@ fits ..> font "yes: go larger; no: smaller"
 bnb -> trade -> polish -> best
 none -> core
 
-node refs "References" color=#57606A
+refs "References" color=#57606A
 | Prosser 1993: conflict-directed backjumping
 | Junker, AAAI 2004: QuickXplain
 | Sugiyama, Tagawa, Toda 1981: layered layout
 refs ..> csp
-node links "Dashed links last"
+links "Dashed links last"
 | with nodes fixed, each link picks a bend
 | or a detour around boxes
 best -> links

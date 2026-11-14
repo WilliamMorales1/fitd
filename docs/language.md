@@ -118,7 +118,7 @@ coffee
 
 Only one hierarchy can follow indentation, so cross links, groups, and lanes stay explicit.
 
-A line holding only a style name opens a style block. The lines indented deeper than it form the block, and the first line indented no deeper closes it (the off-side rule), so a block needs no `end`. Every node, edge, group, and key inside the block takes that style, so a style is written once for many lines. Module styles use qualified names: `nn.block` opens a block of module-prefixed style `nn_block`. Blocks nest, and inner styles apply after outer ones. A lone name inside a block is a node unless it is a declared style, so a node and a style may share a name; a lone undeclared name outside any block is E0004. A block may hold `for`, `if`, and `use`, and may sit inside them. Macro bodies expand at the indent of their directive or call, so a template body opens and closes blocks relative to where it is used. The older `: NAME` suffix is an error.
+A line holding only a style name opens a style block. The lines indented deeper than it form the block, and the first line indented no deeper closes it (the off-side rule), so a block needs no `end`. Every node, edge, group, and key inside the block takes that style, so a style is written once for many lines. Module styles use qualified names: `nn.block` opens a block of module-prefixed style `nn_block`. Blocks nest, and inner styles apply after outer ones. A lone name inside a block is a node unless it is a declared style, so a node and a style may share a name; a lone undeclared name outside any block is E0004. A block may hold `for`, `if`, and template calls, and may sit inside them. Macro bodies expand at the indent of their directive or call, so a template body opens and closes blocks relative to where it is used.
 
 A body line begins with `|` in first non-whitespace position. It appends text to most recently declared node. Multiple body lines may follow one declaration. A body line without preceding node is invalid.
 
@@ -152,13 +152,13 @@ A `*N` suffix is recognized only when digits end the cell, so a label such as `a
 Column width is the widest single-column cell in that column; a spanning cell that still does not fit widens the last column it covers. Row height is uniform. Rows need not have equal length. One primitive therefore covers sequence strips, attention masks and other heatmaps, tensor-shape bars, and unit-cell bar charts.
 
 ```fitd
-node mask "Causal mask"
+mask "Causal mask"
 ~ # . . .
 ~ # # . .
 ~ # # # .
 ~ # # # #
 
-node bar "Attention weights"
+bar "Attention weights"
 ~ %90 %55 %20 %5
 ~ #"d_model = 64"*4
 ```
@@ -166,7 +166,7 @@ node bar "Attention weights"
 An image row, `~ image "PATH" width=Nem`, puts a PNG or JPEG in the figure instead of cells. It is drawn the full figure width, centered, and its height follows the picture's pixel aspect ratio. `width=` takes an em length and defaults to `10em`, so the picture scales with the body font like everything else. The path is relative to the main file, even inside an included file; a file that cannot be read or is not a PNG or JPEG is error E0014. SVG output embeds the bytes as a data URI, PDF and PNG draw them, and TikZ writes `\includegraphics{PATH}`. This is how a plot from a plotting library goes inside a diagram.
 
 ```fitd
-node eval "Validation"
+eval "Validation"
 ~ image "loss.png" width=9em
 ```
 
@@ -175,7 +175,7 @@ node eval "Validation"
 `stack=N` draws a node as N identical copies, offset up and to the right, with the frontmost copy carrying the text and figure. N ranges from 1 to 8. This is the conventional way to show a block repeated N times, such as N identical encoder layers.
 
 ```fitd
-node enc "Encoder layer" stack=4
+enc "Encoder layer" stack=4
 ~ #"d 64"*4
 ```
 
@@ -187,11 +187,11 @@ node enc "Encoder layer" stack=4
 
 ```fitd
 layout layered dir=right
-node a "Input"
-node enc "Encoder"
-node out "Output"
+a "Input"
+enc "Encoder"
+out "Output"
 a -> enc -> out
-node pre "Pretraining" wrap=34em place=aside
+pre "Pretraining" wrap=34em place=aside
 pre ..> enc "init"
 ```
 
@@ -250,8 +250,8 @@ key "Principal" shape=circle fill=#FFFFFF color=#222222
 ```fitd
 layout lanes order=source
 style pt shape=none
-node c "Client"
-node s "Server"
+c "Client"
+s "Server"
 pt
   c1 "" lane=c
   s1 "" lane=s
@@ -265,9 +265,9 @@ The `seq` module wraps this as `seq.actor`, `seq.msg`, and `seq.reply`.
 
 ```fitd
 layout venn
-node py "Python"
-node both "garbage collected"
-node go "Go"
+py "Python"
+both "garbage collected"
+go "Go"
 group "Scripting" py, both
 group "Compiled" go, both
 ```
@@ -325,10 +325,10 @@ Nodes can also be placed on a grid with `row=R col=C`, counted from 1. Nodes wit
 
 ```fitd
 layout layered
-node a "A" row=1 col=1
-node b "B" row=1 col=2
-node c "C" row=2 col=1
-node d "D" row=2 col=2
+a "A" row=1 col=1
+b "B" row=1 col=2
+c "C" row=2 col=1
+d "D" row=2 col=2
 a -> b, c
 b, c -> d
 ```
@@ -337,9 +337,9 @@ b, c -> d
 
 `include "PATH"` inserts source file before macro expansion and parsing. Path is resolved relative to including file. Include cycles and missing files produce diagnostics.
 
-A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name(args)` on a line of its own; `use` is not needed. Styles are global and keep the module prefix; open a block with `nn.layer` for style `nn_layer`.
+A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name ARGS` on a line of its own. Styles are global and keep the module prefix; open a block with `nn.layer` for style `nn_layer`.
 
-A template call can also drop the parentheses: `MOD.name a "Two words" 3` passes its words as arguments. A bare word is text, a run of digits is a number, and quotes group text with spaces or symbols. A template name alone on a line opens a template block, which takes precedence over a style block of the same name: each line indented under it is one call, and a row may start with another template name to call that one instead. A row indented under another row is its child, linked the way a nested node line is, so trees need no edge lines:
+`MOD.name a "Two words" 3` passes its words as arguments. A bare word is text, a run of digits is a number, quotes group text with spaces or symbols, and a word that is only `${expr}` passes the value itself, so `f ${n + 1}` passes a number. A template name followed by an edge operator is a node, not a call. A template name alone on a line opens a template block, which takes precedence over a style block of the same name: each line indented under it is one call, and a row may start with another template name to call that one instead. A row indented under another row is its child, linked the way a nested node line is, so trees need no edge lines:
 
 ```fitd
 include "tree"
@@ -356,18 +356,18 @@ Rows are read after `${...}` substitution, so they work inside loops and templat
 | Module    | Contents                                                                                                                                                                                                                                                   |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `nn`      | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus styles such as `nn.block` and `nn.data`                                                                  |
-| `flow`    | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow.key()`                                                                                                                                                               |
+| `flow`    | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow.key`                                                                                                                                                               |
 | `palette` | Okabe-Ito color-blind-safe classes `c1`..`c8`                                                                                                                                                                                                              |
 | `grid`    | Figure-row grids: `grid.head`, `grid.row`, `grid.title_row` (tables), `grid.heat`, `grid.shade` (heat maps, confusion matrices), `grid.bar` (unit bar charts), `grid.task`, `grid.scale` (Gantt), `grid.layers` (layer stacks), `grid.quad` (2x2 matrices) |
-| `arch`    | Architecture and data flow: `arch.client`, `arch.service`, `arch.store`, `arch.queue`, `arch.ext`, `arch.layers`, the `arch_zone` group style, `arch.key()`                                                                                                |
-| `uml`     | UML class and state diagrams: `uml.class`, `uml.iface`, `uml.state`, `uml.start`, `uml.final`, relations `uml.is` (hollow triangle), `uml.has` (diamond), `uml.uses` (dashed), `uml.key()`                                                                 |
+| `arch`    | Architecture and data flow: `arch.client`, `arch.service`, `arch.store`, `arch.queue`, `arch.ext`, `arch.layers`, the `arch_zone` group style, `arch.key`                                                                                                |
+| `uml`     | UML class and state diagrams: `uml.class`, `uml.iface`, `uml.state`, `uml.start`, `uml.final`, relations `uml.is` (hollow triangle), `uml.has` (diamond), `uml.uses` (dashed), `uml.key`                                                                 |
 | `er`      | Entity-relationship diagrams: `er.entity`, `er.weak`, `er.rel` with cardinality labels and crow's feet, `er.relation` diamonds                                                                                                                             |
 | `tree`    | Syntax trees, decision trees, org charts: `tree.cat`, `tree.word`, `tree.q`, `tree.leaf`, `tree.unit`, `tree.kids`                                                                                                                                         |
 | `time`    | Timelines: `time.event`, `time.mile`, `time.chain`                                                                                                                                                                                                         |
 | `seq`     | UML sequence diagrams for `layout lanes`: `seq.actor`, `seq.msg`, `seq.reply` (dashed)                                                                                                                                                                     |
 | `venn`    | Venn diagrams for `layout venn`: `venn.two`, `venn.three`, `venn.items`, `venn.set`, set styles `venn_a`..`venn_c`                                                                                                                                         |
 | `algo`    | Algorithm and pseudocode blocks: `algo.block` with `;`-separated, indentable lines and `**` keywords                                                                                                                                                       |
-| `model`   | Research models: `model.iv`, `model.dv`, `model.med`, `model.mod`, `model.ctl`, `model.hyp`, `model.key()`                                                                                                                                                 |
+| `model`   | Research models: `model.iv`, `model.dv`, `model.med`, `model.mod`, `model.ctl`, `model.hyp`, `model.key`                                                                                                                                                 |
 
 [examples/gallery](../examples/gallery/) has one diagram per common academic figure type, each built on these modules.
 
@@ -381,7 +381,7 @@ nn.mask m "Causal mask" 4 1
 x -> e -> m
 ```
 
-`include "user/LIB"` reads `LIB.fitd` from the including file's directory and treats it as a library: its templates are called as `LIB.name(args)`, the same way as bundled modules, and inside the library they can be called unqualified with `use name(args)`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and open a block with `LIB.box` for style `LIB_box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
+`include "user/LIB"` reads `LIB.fitd` from the including file's directory and treats it as a library: its templates are called as `LIB.name ARGS`, the same way as bundled modules, and inside the library they can be called unqualified as `name ARGS`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and open a block with `LIB.box` for style `LIB_box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
 
 ```fitd
 include "user/runbook"
@@ -394,7 +394,7 @@ deploy -> rollback "yes"
 
 ![Macro directives, expressions, scope, and expansion limits](language/05-macros.png)
 
-Macro processing provides `for`, `if`/`else if`/`else`, `def`/`use`, module template calls and blocks (`MOD.name(...)`, `MOD.name a b`), and `${expression}` interpolation. Macro blocks close with `end`. Their bodies expand at the indent of the directive or call line, keeping deeper indents, so style blocks inside them nest as written. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
+Macro processing provides `for`, `if`/`else if`/`else`, `def NAME(a, b)` templates, template calls and blocks (`NAME a b`, `MOD.name a b`, a lone `MOD.name` over indented rows), and `${expression}` interpolation. Macro blocks close with `end`. Their bodies expand at the indent of the directive or call line, keeping deeper indents, so style blocks inside them nest as written. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
 
 Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for node lists. `count(s, sep)` gives the number of fields in `s`; `part(s, sep, i)` gives field `i`, counted from 1, without trailing spaces or the one space after the separator. Further leading spaces stay, so a `|` body line built from a field keeps its indent. A whitespace separator splits on runs of whitespace, and an empty string has no fields, so templates can take lists as one string:
 
@@ -408,7 +408,7 @@ end
 
 ```fitd
 for i in 1..3
-  node step${i} "Step ${i}"
+  step${i} "Step ${i}"
 end
 ```
 

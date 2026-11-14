@@ -10,4 +10,4 @@ time.event
 time.mile
   t2 1969 "Moon landing"
   t5 2021 JWST
-time.chain("t1; t2; t3; t4; t5")
+time.chain "t1; t2; t3; t4; t5"

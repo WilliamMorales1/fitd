@@ -6,31 +6,31 @@ style er_weak color=#56B4E9 shape=box
 style er_relation color=#E69F00 shape=diamond
 style er_link color=#444444
 
-# er.entity(id, name, attrs): an entity with its attributes, keys first.
+# er.entity id name attrs: an entity with its attributes, keys first.
 def entity(id, name, attrs)
 er_entity
   node ${id} "${name}"
-use lines(attrs)
+lines ${attrs}
 end
 
-# er.weak(id, name, attrs): a weak entity, identified through its owner.
+# er.weak id name attrs: a weak entity, identified through its owner.
 def weak(id, name, attrs)
 er_weak
   node ${id} "${name}"
-use lines(attrs)
+lines ${attrs}
 end
 
-# er.rel(a, b, card): a relationship such as "1:N" or "M:N".
+# er.rel a b card: a relationship such as "1:N" or "M:N".
 def rel(a, b, card)
-use edge(a, b, card, part(card, ":", 1), part(card, ":", 2))
+edge ${a} ${b} ${card} ${part(card, ":", 1)} ${part(card, ":", 2)}
 end
 
-# er.relation(id, name, a, b, card): a named diamond joining a and b, card such as "1:N".
+# er.relation id name a b card: a named diamond joining a and b, card such as "1:N".
 def relation(id, name, a, b, card)
 er_relation
   node ${id} "${name}"
-use edge(a, id, part(card, ":", 1), part(card, ":", 1), "1")
-use edge(id, b, part(card, ":", 2), "1", part(card, ":", 2))
+edge ${a} ${id} ${part(card, ":", 1)} ${part(card, ":", 1)} "1"
+edge ${id} ${b} ${part(card, ":", 2)} "1" ${part(card, ":", 2)}
 end
 
 # A crow's foot marks each end whose cardinality is not 1.

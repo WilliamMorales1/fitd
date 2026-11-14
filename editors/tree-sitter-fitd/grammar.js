@@ -2,6 +2,9 @@
  * Tree-sitter grammar for fitd diagram sources. Mirrors parse.rs and the macro lines of macros.rs: one
  * statement per line, `#` comments except right after `=`, where it starts a color.
  */
+const KEYWORDS = ['title', 'root', 'layout', 'page', 'font', 'theme', 'style', 'node', 'key', 'group',
+  'include', 'require', 'prefer', 'for', 'if', 'else', 'end', 'def'];
+
 module.exports = grammar({
   name: 'fitd',
 
@@ -26,9 +29,11 @@ module.exports = grammar({
       $.font_statement,
       $.theme_statement,
       $.style_statement,
+      $.key_statement,
       $.node_statement,
       $.block_statement,
       $.body,
+      $.figure,
       $.edge_statement,
       $.group_statement,
       $.constraint_statement,
@@ -38,8 +43,6 @@ module.exports = grammar({
       $.else_statement,
       $.end_statement,
       $.def_statement,
-      $.use_statement,
-      $.call_statement,
       $.row_statement,
     ),
 
@@ -49,6 +52,7 @@ module.exports = grammar({
     page_statement: $ => seq('page', field('size', $._value), repeat(choice($.flag, $.attribute))),
     font_statement: $ => seq('font', field('size', $._value), optional(seq('..', field('max', $._value))), repeat($.attribute)),
     theme_statement: $ => seq('theme', optional(field('preset', $.name)), repeat($.attribute)),
+    key_statement: $ => seq('key', field('label', $.string), repeat($.attribute)),
     style_statement: $ => seq('style', field('name', $.name), repeat($.attribute)),
     // A node line may drop `node` when a title or attribute follows the id; indentation nests it, which only parse.rs tracks.
     node_statement: $ => choice(
@@ -58,13 +62,15 @@ module.exports = grammar({
     // A lone name opens a style block over the lines indented under it; inside a block an undeclared one is a node, which only sema knows.
     block_statement: $ => field('style', $.qualified_name),
     body: _ => token(seq('|', /[^\n]*/)),
+    figure: _ => token(seq('~', /[^\n]*/)),
     edge_statement: $ => seq(
-      // A node may be named like a macro keyword; the edge operator after it tells. No source: from the node above.
-      optional(field('from', choice($.name, alias(choice('for', 'if', 'else', 'end', 'def', 'use'), $.name)))),
+      // A node may be named like a keyword; the edge operator after it tells. No source: from the node above.
+      optional(seq($._source, repeat(seq(',', $._source)))),
       repeat1($._hop),
       repeat($.attribute),
     ),
     // A hop's targets feed the next hop: `a -> b, c "x" -- d`.
+    _source: $ => field('from', choice($.name, alias(choice(...KEYWORDS), $.name))),
     _hop: $ => seq(field('operator', $.edge_operator), $._targets, optional(field('label', $.string))),
     group_statement: $ => seq('group', optional(field('title', $.string)), $._targets, repeat($.attribute)),
     constraint_statement: $ => seq(choice('require', 'prefer'), $._relation, repeat($.attribute)),
@@ -76,14 +82,11 @@ module.exports = grammar({
     else_statement: $ => seq('else', optional(seq('if', field('condition', $.expression)))),
     end_statement: _ => 'end',
     def_statement: $ => seq('def', field('name', $.name), '(', optional(seq(field('parameter', $.name), repeat(seq(',', field('parameter', $.name))))), ')'),
-    use_statement: $ => seq('use', field('name', $.name), field('arguments', $.arguments)),
-    call_statement: $ => seq(field('name', $.qualified_name), field('arguments', $.arguments)),
-    // A template call without parentheses, or a row of a template block; only macros.rs knows which names are templates.
-    row_statement: $ => prec.dynamic(-1, seq(field('name', choice($.qualified_name, $.string, $.number, $.word, alias('use', $.name))), repeat1(field('argument', $._row_word)))),
+    // A template call, or a row of a template block; only macros.rs knows which names are templates.
+    row_statement: $ => prec.dynamic(-1, seq(field('name', choice($.qualified_name, $.string, $.number, $.word)), repeat1(field('argument', $._row_word)))),
     _row_word: $ => choice($.name, $.string, $.number, $.word),
     word: _ => token(prec(-1, /[^\s"#=.]+(\.[^\s"#=.]+)*/)),
     expression: _ => token(prec(-1, /[^\n#]+/)),
-    arguments: _ => token(seq('(', /[^\n#]*/)),
 
     edge_operator: _ => choice('->', '--', '..>', '..'),
     _targets: $ => seq(field('to', $.name), repeat(seq(optional(','), field('to', $.name)))),
@@ -101,7 +104,8 @@ module.exports = grammar({
 
     // `${expr}` may stand anywhere in a name, as macros write names like `s${i}`.
     name: _ => /([\p{L}_]|\$\{[^}\n]*\})([\p{L}\p{N}_]|\$\{[^}\n]*\})*(-([\p{L}\p{N}_]|\$\{[^}\n]*\})+)*/,
-    string: _ => /"([^"\\\n]|\\[^\n])*"/,
+    // Quotes inside `${}` belong to the expression, as in `"${part(xs, ";", i)}"`.
+    string: _ => /"([^"\\\n$]|\$\{[^}\n]*\}|\$|\\[^\n])*"/,
     number: _ => /[0-9]([\p{L}\p{N}]|[.:][0-9])*/,
     color: _ => token.immediate(prec(1, /#[0-9a-fA-F]*/)),
     comment: _ => token(seq('#', /[^\n]*/)),

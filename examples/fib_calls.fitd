@@ -16,10 +16,10 @@ def fib(id, n)
   n${n}
     node ${id} "fib(${n})"
   if n >= 2
-    use fib(id + "a", n - 1)
-    use fib(id + "b", n - 2)
+    fib ${id + "a"} ${n - 1}
+    fib ${id + "b"} ${n - 2}
     ${id} -> ${id}a, ${id}b
   end
 end
 
-use fib("f", 5)
+fib f 5

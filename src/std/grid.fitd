@@ -3,63 +3,63 @@
 # Text lists split on `;`, number lists on spaces: "name; type; size", "90 5 5".
 style grid color=#0072B2 shape=box
 
-# grid.head(labels): a header row of outlined labels over the value columns, leaving the row-label column blank.
+# grid.head labels: a header row of outlined labels over the value columns, leaving the row-label column blank.
 def head(labels)
-use cells("_", labels, ";", "", 1)
+cells _ ${labels} ";" "" 1
 end
 
-# grid.row(cells): one table row of outlined labelled cells.
+# grid.row cells: one table row of outlined labelled cells.
 def row(cells)
-use cells("", cells, ";", "", 1)
+cells "" ${cells} ";" "" 1
 end
 
-# grid.title_row(cells): a table row of solid cells, for a header without a row-label column.
+# grid.title_row cells: a table row of solid cells, for a header without a row-label column.
 def title_row(cells)
-use cells("", cells, ";", "#", 1)
+cells "" ${cells} ";" "#" 1
 end
 
-# grid.heat(label, values): a heat-map row; values are percents 0..100 and each cell prints its value.
+# grid.heat label values: a heat-map row; values are percents 0..100 and each cell prints its value.
 def heat(label, values)
-use heat_acc("\"" + label + "\"", values, 1)
+heat_acc ${"\"" + label + "\""} ${values} 1
 end
 
 def heat_acc(acc, values, i)
 if i > count(values, " ")
 ~ ${acc}
 else
-use heat_acc(acc + " %" + part(values, " ", i) + "\"" + part(values, " ", i) + "\"", values, i + 1)
+heat_acc ${acc + " %" + part(values, " ", i) + "\"" + part(values, " ", i) + "\""} ${values} ${i + 1}
 end
 end
 
-# grid.shade(label, values): a heat-map row without numbers, for dense maps.
+# grid.shade label values: a heat-map row without numbers, for dense maps.
 def shade(label, values)
-use shade_acc("\"" + label + "\"", values, 1)
+shade_acc ${"\"" + label + "\""} ${values} 1
 end
 
 def shade_acc(acc, values, i)
 if i > count(values, " ")
 ~ ${acc}
 else
-use shade_acc(acc + " %" + part(values, " ", i), values, i + 1)
+shade_acc ${acc + " %" + part(values, " ", i)} ${values} ${i + 1}
 end
 end
 
-# grid.bar(label, n): a unit bar chart row of n solid cells after its label.
+# grid.bar label n: a unit bar chart row of n solid cells after its label.
 def bar(label, n)
-use span("\"" + label + "\"", 0, n)
+span ${"\"" + label + "\""} 0 ${n}
 end
 
-# grid.task(label, start, len): a Gantt row; the bar covers columns start..start+len-1, counted from 1.
+# grid.task label start len: a Gantt row; the bar covers columns start..start+len-1, counted from 1.
 def task(label, start, len)
-use span("\"" + label + "\"", start - 1, len)
+span ${"\"" + label + "\""} ${start - 1} ${len}
 end
 
-# grid.scale(first, last): a Gantt header numbering the time columns first..last.
+# grid.scale first last: a Gantt header numbering the time columns first..last.
 def scale(first, last)
-use cells("_", names("", first, last), ",", "", 1)
+cells _ ${names("", first, last)} "," "" 1
 end
 
-# grid.layers(names): a layer stack, one full-width solid row per name, top layer first.
+# grid.layers names: a layer stack, one full-width solid row per name, top layer first.
 def layers(names)
 for i in 1..count(names, ";")
 ~ #"${part(names, ";", i)}"*4
@@ -68,7 +68,7 @@ end
 
 def span(acc, gaps, n)
 if gaps > 0
-use span(acc + " _", gaps - 1, n)
+span ${acc + " _"} ${gaps - 1} ${n}
 else if n > 1
 ~ ${acc} #*${n}
 else if n == 1
@@ -82,11 +82,11 @@ def cells(acc, items, sep, shade, i)
 if i > count(items, sep)
 ~ ${acc}
 else
-use cells(acc + " " + shade + "\"" + part(items, sep, i) + "\"", items, sep, shade, i + 1)
+cells ${acc + " " + shade + "\"" + part(items, sep, i) + "\""} ${items} ${sep} ${shade} ${i + 1}
 end
 end
 
-# grid.quad(tl, tr, bl, br): a 2x2 matrix (SWOT, effort/impact) with the diagonal shaded darker.
+# grid.quad tl tr bl br: a 2x2 matrix (SWOT, effort/impact) with the diagonal shaded darker.
 def quad(tl, tr, bl, br)
 ~ %80"${tl}" %25"${tr}"
 ~ %25"${bl}" %80"${br}"

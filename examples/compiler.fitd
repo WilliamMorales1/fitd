@@ -33,13 +33,13 @@ stage
   quality "Layout polish"
   | annealing reduces crossings and edge clutter
   | never violates a hard constraint
-node csp "CSP search"
+csp "CSP search"
 | FC-CBJ, binary search on font
 | candidate positions satisfy hard constraints
-node bnb "Branch and bound"
+bnb "Branch and bound"
 | soft `prefer` constraints
 | compares layouts at the best readable font
-node core "QuickXplain"
+core "QuickXplain"
 | minimal unsat core (E0110)
 | isolates a conflicting subset of `require`s
 check
@@ -53,7 +53,7 @@ check
   | parse errors are reported and skipped
   | unsatisfiable requirements stop output
   failure ..> diagnostics "reported"
-node emit "Emitter"
+emit "Emitter"
 | absolute positions; no downstream reflow
 
 src -> lex -> parse -> sema -> plan -> measure -> quality

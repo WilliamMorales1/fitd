@@ -6,7 +6,7 @@ style line color=#8250DF
 style expr color=#0969DA
 style safe color=#CF222E
 
-node mac "Macros"
+mac "Macros"
 | expand after include and before parsing,
 | so the rest of the language never sees them
 | a file with no macro lines passes through unchanged
@@ -22,17 +22,18 @@ line
   deff "def NAME(a, b) ... end"
   | a template, top level only; usable before its def
   | and from included files
-  node use "use NAME(EXPR, ...)"
+  call "NAME a \"two words\" $${EXPR}"
   | expands a template with its parameters bound
+  | a lone NAME opens a block: one call per indented row
   interp "$${EXPR}"
   | replaced by the value anywhere in a line, strings and bodies too,
   | but not in # comments; $$${ is a literal $${
-node kw "Keywords"
+kw "Keywords"
 | recognized only at the start of a line, never before an edge
 | operator, so a node named end still works in end -> start
 
 expr
-  node expr "Expressions"
+  expr "Expressions"
   | integers and strings
   | + - * / % (floor division, non-negative remainder)
   | == != < <= > >= (ordering on numbers only), and, or, ( )
@@ -56,12 +57,12 @@ safe
   diag "Diagnostics"
   | generated lines are shown expanded, at the template line
   | that wrote them; columns count in the expanded text
-  | macro errors name the use sites that led there
+  | macro errors name the call sites that led there
   | an error repeated by every call is reported once
   | a line that fails to expand writes nothing,
   | so a following | body may report E0002
 
 mac -> forr, forl, iff, deff, kw, expr, budget, diag
-deff -> use
+deff -> call
 mac -> interp
 expr -> names, scope

@@ -5,11 +5,11 @@ page 320x180mm margin=1cm
 style fast color=#0969DA
 style slow color=#8250DF
 
-node save "Save"
+save "Save"
 fast
   draft "Draft build"
   | at once, coarse font search
-node wait "1.5 s quiet"
+wait "1.5 s quiet"
 slow
   full "Full build"
   | trade-off and full polish

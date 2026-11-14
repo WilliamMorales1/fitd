@@ -55,7 +55,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0012",
-        "A macro line failed while expanding: an unknown variable, function, or template, a wrong number of arguments, a string where a number is needed, division by zero, overflow, or templates nested more than 200 deep (usually recursion with no base case). The notes list the `use` lines that led there.",
+        "A macro line failed while expanding: an unknown variable, function, or template, a wrong number of arguments, a string where a number is needed, division by zero, overflow, or templates nested more than 200 deep (usually recursion with no base case). The notes list the template call lines that led there.",
     ),
     (
         "E0013",

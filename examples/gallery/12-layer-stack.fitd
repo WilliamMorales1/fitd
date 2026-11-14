@@ -2,4 +2,4 @@
 include "arch"
 page 3:4
 font 9pt..28pt
-arch.layers("osi", "Internet stack", "Application; Transport; Network; Link")
+arch.layers osi "Internet stack" "Application; Transport; Network; Link"

@@ -175,15 +175,6 @@ impl P {
         }
     }
 
-    /// template reads a template name, either `name` or `MOD.name`.
-    fn template(&mut self, what: &str) -> Result<String, String> {
-        let mut n = self.name(what)?;
-        if self.op(".") {
-            n = format!("{n}.{}", self.name(what)?);
-        }
-        Ok(n)
-    }
-
     fn expect(&mut self, o: &str) -> Result<(), String> {
         if self.op(o) {
             Ok(())
@@ -398,7 +389,6 @@ enum Kind {
     Text(Vec<Piece>),
     For(Vec<String>, Iter, Vec<Item>),
     If(Vec<(Option<Expr>, Vec<Item>)>),
-    Use(String, Vec<Expr>),
     Rows(Vec<Row>),
     Skip,
 }
@@ -440,7 +430,7 @@ fn is_kw_line(t: &str) -> Option<(&str, &str)> {
         .split(|c: char| !(c.is_alphanumeric() || c == '_'))
         .next()
         .unwrap_or("");
-    if !matches!(w, "for" | "if" | "else" | "end" | "def" | "use") {
+    if !matches!(w, "for" | "if" | "else" | "end" | "def") {
         return None;
     }
     let rest = &t[w.len()..];
@@ -449,19 +439,6 @@ fn is_kw_line(t: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some((w, r))
-}
-
-/// is_call_line reports whether `t` starts with `MOD.name(`, a module template call.
-fn is_call_line(t: &str) -> bool {
-    let word = |s: &str| {
-        s.find(|c: char| !(c.is_alphanumeric() || c == '_'))
-            .filter(|&k| k > 0 && !s.starts_with(|c: char| c.is_ascii_digit()))
-    };
-    let Some(k) = word(t) else { return false };
-    let Some(r) = t[k..].strip_prefix('.') else {
-        return false;
-    };
-    word(r).is_some_and(|j| r[j..].trim_start().starts_with('('))
 }
 
 /// block_name gives the `MOD.name` that line `t` holds alone, a possible template block opener.
@@ -475,11 +452,32 @@ fn block_name(t: &str) -> Option<&str> {
     (id(m) && id(n)).then_some(t)
 }
 
-/// row_args reads a template row: an optional `MOD.name`, then words, where quotes group text and digits are numbers.
-fn row_args(t: &str, defs: &HashMap<String, Def>) -> Result<(Option<String>, Vec<Expr>), String> {
+/// row_words splits a template row into words, each with whether it was quoted; `${...}` stays raw, quotes and all.
+fn row_words(t: &str) -> Result<Vec<(bool, String)>, String> {
     let cs: Vec<char> = t.chars().collect();
-    let mut words: Vec<(bool, String)> = Vec::new();
+    let mut words = Vec::new();
     let mut i = 0;
+    // skip_expr copies `${...}` from cs[i] through its `}` into w.
+    let skip_expr = |i: &mut usize, w: &mut String| -> Result<(), String> {
+        let mut in_str = false;
+        while let Some(&c) = cs.get(*i) {
+            w.push(c);
+            *i += 1;
+            match c {
+                '\\' if in_str => {
+                    if let Some(&n) = cs.get(*i) {
+                        w.push(n);
+                        *i += 1;
+                    }
+                }
+                '"' => in_str = !in_str,
+                '}' if !in_str => return Ok(()),
+                _ => {}
+            }
+        }
+        Err("`${` without a closing `}`".into())
+    };
+    let opens = |i: usize| cs[i] == '$' && cs.get(i + 1) == Some(&'{') && (i == 0 || cs[i - 1] != '$');
     while i < cs.len() {
         let c = cs[i];
         if c.is_whitespace() {
@@ -497,6 +495,7 @@ fn row_args(t: &str, defs: &HashMap<String, Def>) -> Result<(Option<String>, Vec
                         w.push(cs[i + 1]);
                         i += 2;
                     }
+                    Some(_) if opens(i) => skip_expr(&mut i, &mut w)?,
                     Some(&o) => {
                         w.push(o);
                         i += 1;
@@ -506,27 +505,19 @@ fn row_args(t: &str, defs: &HashMap<String, Def>) -> Result<(Option<String>, Vec
             i += 1;
             words.push((true, w));
         } else {
-            let lo = i;
+            let mut w = String::new();
             while i < cs.len() && !cs[i].is_whitespace() && cs[i] != '"' {
-                i += 1;
+                if opens(i) {
+                    skip_expr(&mut i, &mut w)?;
+                } else {
+                    w.push(cs[i]);
+                    i += 1;
+                }
             }
-            words.push((false, cs[lo..i].iter().collect()));
+            words.push((false, w));
         }
     }
-    let name = match words.first() {
-        Some((false, w)) if block_name(w).is_some() && defs.contains_key(w) => Some(words.remove(0).1),
-        _ => None,
-    };
-    let args = words
-        .into_iter()
-        .map(|(quoted, w)| {
-            Expr::Lit(match w.parse() {
-                Ok(n) if !quoted && w.bytes().all(|b| b.is_ascii_digit()) => Val::Int(n),
-                _ => Val::Str(w),
-            })
-        })
-        .collect();
-    Ok((name, args))
+    Ok(words)
 }
 
 fn classify(line: &str) -> Result<Line, String> {
@@ -535,8 +526,7 @@ fn classify(line: &str) -> Result<Line, String> {
     if t.starts_with('#') || verbatim && !t.contains("${") {
         return Ok(Line::Item(Kind::Plain));
     }
-    let call = is_call_line(t).then_some(("use", t));
-    let Some((w, rest)) = call.or_else(|| is_kw_line(t)) else {
+    let Some((w, rest)) = is_kw_line(t) else {
         let cut = if verbatim {
             line.len()
         } else {
@@ -577,7 +567,7 @@ fn classify(line: &str) -> Result<Line, String> {
             p.done()?;
             Line::If(e)
         }
-        "def" => {
+        _ => {
             let name = p.name("a template name: `def NAME(a, b)`")?;
             p.expect("(")?;
             let mut params = Vec::new();
@@ -592,13 +582,6 @@ fn classify(line: &str) -> Result<Line, String> {
             }
             p.done()?;
             Line::Def(name, params)
-        }
-        _ => {
-            let name = p.template("a template name: `MOD.name(args)` or `use NAME(args)`")?;
-            p.expect("(")?;
-            let args = p.args()?;
-            p.done()?;
-            Line::Item(Kind::Use(name, args))
         }
     })
 }
@@ -689,6 +672,8 @@ struct Builder<'a> {
     mods: &'a [Option<&'a str>],
     i: usize,
     defs: HashMap<String, Def>,
+    /// names holds every template key, gathered before building so a call may precede its `def`.
+    names: std::collections::HashSet<String>,
     errs: Vec<(usize, Diag)>,
 }
 
@@ -710,10 +695,8 @@ impl Builder<'_> {
             self.i += 1;
             let t = self.lines[at].trim();
             let head = t.split_whitespace().next().unwrap_or("");
-            if let Some(name) = block_name(head)
-                && self.defs.contains_key(name)
-            {
-                let kind = self.rows(at, name.to_string(), &t[head.len()..]);
+            if self.calls(at, head, &t[head.len()..]) {
+                let kind = self.rows(at, head.to_string(), &t[head.len()..]);
                 items.push(Item {
                     lo: at,
                     hi: self.i - 1,
@@ -804,7 +787,27 @@ impl Builder<'_> {
         (items, Stop::Eof, self.lines.len())
     }
 
-    /// rows reads the lines indented under template block opener `at`, one call each.
+    /// calls reports whether a line starting with `head` calls a template; an edge from a node named like one, or a bare keyword, does not.
+    fn calls(&self, at: usize, head: &str, rest: &str) -> bool {
+        let r = rest.trim_start();
+        let id = |w: &str| {
+            !w.is_empty()
+                && !w.starts_with(|c: char| c.is_ascii_digit())
+                && w.chars().all(|c| c.is_alphanumeric() || c == '_')
+        };
+        let ok = match head.split_once('.') {
+            Some((m, n)) => id(m) && id(n) && self.names.contains(head),
+            None => {
+                id(head)
+                    && !crate::parse::KEYWORDS.contains(&head)
+                    && (self.names.contains(head)
+                        || self.mods[at].is_some_and(|m| self.names.contains(&format!("{m}.{head}"))))
+            }
+        };
+        ok && !["->", "--", ".."].iter().any(|o| r.starts_with(o))
+    }
+
+    /// rows reads the lines indented under template block opener `at`, one call each; with none it is one call without arguments.
     fn rows(&mut self, at: usize, name: String, rest: &str) -> Kind {
         let col = indent(self.lines[at]);
         let mut rows = Vec::new();
@@ -841,6 +844,14 @@ impl Builder<'_> {
                 depth,
                 name: name.clone(),
                 text: t.to_string(),
+            });
+        }
+        if rows.is_empty() {
+            rows.push(Row {
+                line: at,
+                depth: 0,
+                name,
+                text: String::new(),
             });
         }
         Kind::Rows(rows)
@@ -994,7 +1005,7 @@ impl Expander<'_> {
     fn fail(&mut self, line: usize, msg: impl Into<String>) {
         let mut d = Diag::error("E0012", msg);
         for (name, at) in self.calls.iter().rev().take(4) {
-            d = d.note(format!("in `use {name}` at {}", at_marker(*at)));
+            d = d.note(format!("in `{name}` at {}", at_marker(*at)));
         }
         self.errs.push((line, d));
     }
@@ -1123,7 +1134,7 @@ impl Expander<'_> {
             "count" => 2,
             _ => {
                 let hint = if self.defs.contains_key(f) {
-                    format!("; `{f}` is a template, so write `use {f}(...)` on its own line")
+                    format!("; `{f}` is a template, so write `{f} ARGS` on its own line")
                 } else {
                     String::new()
                 };
@@ -1223,6 +1234,34 @@ impl Expander<'_> {
         Ok(())
     }
 
+    /// word evaluates a template row word: a lone unquoted `${e}` keeps its type, unquoted digits are a number, the rest is text.
+    fn word(&mut self, line: usize, quoted: bool, w: &str) -> Run<Val> {
+        let ps = match pieces(w) {
+            Ok(p) => p.unwrap_or_else(|| vec![Piece::Lit(w.to_string())]),
+            Err(m) => {
+                self.fail(line, m);
+                return Err(());
+            }
+        };
+        if let (false, [Piece::Lit(a), Piece::Expr(e), Piece::Lit(b)]) = (quoted, &ps[..])
+            && a.is_empty()
+            && b.is_empty()
+        {
+            return self.eval(line, e);
+        }
+        let mut s = String::new();
+        for p in &ps {
+            match p {
+                Piece::Lit(l) => s += l,
+                Piece::Expr(e) => s += &self.eval(line, e)?.to_string(),
+            }
+        }
+        Ok(match s.parse() {
+            Ok(n) if !quoted && s.bytes().all(|b| b.is_ascii_digit()) => Val::Int(n),
+            _ => Val::Str(s),
+        })
+    }
+
     fn item(&mut self, item: &Item, top: bool) -> Run<()> {
         let at = item.lo;
         self.tick(at)?;
@@ -1289,34 +1328,27 @@ impl Expander<'_> {
                     }
                 }
             }
-            Kind::Use(name, args) => self.invoke(at, name, args, None)?,
             Kind::Rows(rows) => {
                 let mut bases = vec![self.at(self.lines[at])];
                 for r in rows {
                     bases.truncate(r.depth + 1);
-                    let mut t = String::new();
-                    match pieces(&r.text) {
-                        Ok(Some(ps)) => {
-                            for p in &ps {
-                                match p {
-                                    Piece::Lit(l) => t += l,
-                                    Piece::Expr(e) => t += &self.eval(r.line, e)?.to_string(),
-                                }
-                            }
-                        }
-                        Ok(None) => t.clone_from(&r.text),
-                        Err(m) => {
-                            self.fail(r.line, m);
-                            return Err(());
-                        }
-                    }
-                    let (name, args) = match row_args(&t, self.defs) {
-                        Ok((n, a)) => (n.unwrap_or_else(|| r.name.clone()), a),
+                    let mut words = match row_words(&r.text) {
+                        Ok(w) => w,
                         Err(m) => {
                             self.fail(r.line, m);
                             return Err(());
                         }
                     };
+                    let name = match words.first() {
+                        Some((false, w)) if block_name(w).is_some() && self.defs.contains_key(w) => {
+                            words.remove(0).1
+                        }
+                        _ => r.name.clone(),
+                    };
+                    let mut args = Vec::new();
+                    for (quoted, w) in &words {
+                        args.push(Expr::Lit(self.word(r.line, *quoted, w)?));
+                    }
                     let from = self.text.len();
                     self.invoke(r.line, &name, &args, Some(bases[r.depth]))?;
                     // Children sit right of every line the parent emitted, so its style opener cannot close the parent's scope.
@@ -1355,7 +1387,7 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
         .any(|l| {
             let t = l.trim();
             let head = t.split_whitespace().next().unwrap_or("");
-            l.contains("${") || is_kw_line(t).is_some() || is_call_line(t) || block_name(head).is_some()
+            l.contains("${") || is_kw_line(t).is_some() || block_name(head).is_some()
         })
     {
         let parse = a.text.clone();
@@ -1371,6 +1403,18 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
         mods: &mods,
         i: 0,
         defs: HashMap::new(),
+        names: lines
+            .iter()
+            .enumerate()
+            .filter_map(|(k, l)| {
+                let (w, rest) = is_kw_line(l.trim())?;
+                let n: String = rest.chars().take_while(|&c| c.is_alphanumeric() || c == '_').collect();
+                (w == "def" && !n.is_empty()).then(|| match mods[k] {
+                    Some(m) => format!("{m}.{n}"),
+                    None => n,
+                })
+            })
+            .collect(),
         errs: Vec::new(),
     };
     let (items, _, _) = b.block(true);
@@ -1501,7 +1545,7 @@ mod tests {
     #[test]
     fn count_and_part_split_lists() {
         let l = run(
-            "def row(xs)\nfor i in 1..count(xs, \";\")\n| ${part(xs, \";\", i)}\nend\nend\nnode a\nuse row(\"x: int; y: int\")\nuse row(\"\")\n",
+            "def row(xs)\nfor i in 1..count(xs, \";\")\n| ${part(xs, \";\", i)}\nend\nend\nnode a\nrow \"x: int; y: int\"\nrow \"\"\n",
         );
         assert!(
             l.diags.is_empty(),
@@ -1599,7 +1643,7 @@ mod tests {
     #[test]
     fn recursive_templates() {
         let l = run(
-            "use fib(\"f\", 3)\ndef fib(id, n)\n  node ${id} \"${n}\"\n  if n >= 2\n    use fib(id + \"a\", n - 1)\n    use fib(id + \"b\", n - 2)\n    ${id} -> ${id}a, ${id}b\n  end\nend\n",
+            "fib f 3\ndef fib(id, n)\n  node ${id} \"${n}\"\n  if n >= 2\n    fib ${id + \"a\"} ${n - 1}\n    fib ${id + \"b\"} ${n - 2}\n    ${id} -> ${id}a, ${id}b\n  end\nend\n",
         );
         assert!(
             l.diags.is_empty(),
@@ -1612,7 +1656,7 @@ mod tests {
 
     #[test]
     fn collatz_runs_and_budget_stops_runaway() {
-        let collatz = "def c(k)\n  node n${k}\n  if k > 1 and k % 2 == 0\n    n${k} -> n${k / 2}\n    use c(k / 2)\n  else if k > 1\n    n${k} -> n${3 * k + 1}\n    use c(3 * k + 1)\n  end\nend\nuse c(27)\n";
+        let collatz = "def c(k)\n  node n${k}\n  if k > 1 and k % 2 == 0\n    n${k} -> n${k / 2}\n    c ${k / 2}\n  else if k > 1\n    n${k} -> n${3 * k + 1}\n    c ${3 * k + 1}\n  end\nend\nc 27\n";
         let l = run(collatz);
         assert!(
             l.diags.is_empty(),
@@ -1623,7 +1667,7 @@ mod tests {
             visible(&l).iter().filter(|s| s.starts_with("node")).count(),
             112
         );
-        let l = run("def f(n)\n  use f(n + 1)\nend\nuse f(0)\n");
+        let l = run("def f(n)\n  f ${n + 1}\nend\nf 0\n");
         assert!(
             l.diags.iter().any(|d| d.msg.contains("nest more than")),
             "{:?}",

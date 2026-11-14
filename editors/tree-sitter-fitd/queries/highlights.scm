@@ -1,8 +1,8 @@
 ; A later pattern overrides an earlier one, so the catch-all comes first.
 (name) @variable
 
-["title" "root" "layout" "page" "font" "theme" "style" "node" "group" "require" "prefer" "include" "align" "at"] @keyword
-["for" "in" "if" "else" "end" "def" "use"] @keyword.control
+["title" "root" "layout" "page" "font" "theme" "style" "node" "key" "group" "require" "prefer" "include" "align" "at"] @keyword
+["for" "in" "if" "else" "end" "def"] @keyword.control
 
 (edge_operator) @operator
 ["=" ".." "." "," "(" ")"] @punctuation.delimiter
@@ -10,6 +10,7 @@
 (comment) @comment
 (string) @string
 (body) @string.documentation
+(figure) @string.special
 (number) @number
 (color) @constant
 
@@ -25,8 +26,6 @@
 
 (node_statement id: (name) @label)
 (def_statement name: (name) @function)
-(use_statement name: (name) @function.call)
-(call_statement name: (qualified_name (name) @function.call))
+(row_statement name: (qualified_name (name) @function.call))
 (def_statement parameter: (name) @variable.parameter)
 (expression) @embedded
-(arguments) @embedded

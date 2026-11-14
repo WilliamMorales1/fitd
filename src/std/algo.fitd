@@ -2,7 +2,7 @@
 # Write keywords in `**`: "**for** v **in** V **do**;   d[v] = inf".
 style algo_block color=#0072B2 shape=box wrap=40em
 
-# algo.block(id, title, lines): a titled pseudocode block whose lines keep their indent.
+# algo.block id title lines: a titled pseudocode block whose lines keep their indent.
 def block(id, title, lines)
 algo_block
   node ${id} "${title}"

@@ -6,7 +6,7 @@ style stat color=#0969DA
 style search color=#8250DF
 style after color=#1A7F37
 
-node src "Source with require, align, group"
+src "Source with require, align, group"
 
 stat
   classes "E0008: merge classes"

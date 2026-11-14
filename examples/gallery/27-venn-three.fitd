@@ -3,4 +3,4 @@ include "venn"
 layout venn
 page 1:1
 font 9pt..28pt
-venn.three("Statistics", "Programming", "Domain", "inference", "systems", "fieldwork", "data science", "research", "tooling", "applied ML")
+venn.three Statistics Programming Domain inference systems fieldwork "data science" research tooling "applied ML"

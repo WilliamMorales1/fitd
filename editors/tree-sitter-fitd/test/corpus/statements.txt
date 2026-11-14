@@ -145,7 +145,7 @@ else if i == 2
 else
 end
 def box(id, label)
-use box("a", 1)
+box a 1
 node in "Input"
 end -> in
 
@@ -173,9 +173,11 @@ end -> in
     name: (name)
     parameter: (name)
     parameter: (name))
-  (use_statement
-    name: (name)
-    arguments: (arguments))
+  (row_statement
+    name: (qualified_name
+      (name))
+    argument: (name)
+    argument: (number))
   (node_statement
     id: (name)
     title: (string))
@@ -212,7 +214,10 @@ stage
   lex -> parse
 nn.block
   node enc
-flow.key()
+flow.key
+font -> csp
+a, b -> c
+~ # %60 . "x y"
 
 --------------------------------------------------------------------------------
 
@@ -238,11 +243,20 @@ flow.key()
       (name)))
   (node_statement
     id: (name))
-  (call_statement
-    name: (qualified_name
+  (block_statement
+    style: (qualified_name
       (name)
-      (name))
-    arguments: (arguments)))
+      (name)))
+  (edge_statement
+    from: (name)
+    operator: (edge_operator)
+    to: (name))
+  (edge_statement
+    from: (name)
+    from: (name)
+    operator: (edge_operator)
+    to: (name))
+  (figure))
 
 ================================================================================
 Nested nodes
@@ -277,7 +291,7 @@ Template rows
 tree.unit
   ceo Ada CEO
     web "Web team" 6
-  use adopt 2 +
+  adopt 2 +
 
 --------------------------------------------------------------------------------
 
@@ -297,7 +311,7 @@ tree.unit
     argument: (string)
     argument: (number))
   (row_statement
-    name: (name)
-    argument: (name)
+    name: (qualified_name
+      (name))
     argument: (number)
     argument: (word)))

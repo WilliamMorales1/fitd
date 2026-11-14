@@ -12,4 +12,4 @@ uml.is
   circle shape
   rect shape
 uml.has canvas shape "0..*"
-uml.key()
+uml.key

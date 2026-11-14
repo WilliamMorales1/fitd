@@ -6,37 +6,37 @@ style arch_queue color=#E69F00 shape=box
 style arch_ext color=#888888 shape=box
 style arch_zone color=#888888
 
-# arch.client(id, name): a user-facing client.
+# arch.client id name: a user-facing client.
 def client(id, name)
 arch_client
   node ${id} "${name}"
 end
 
-# arch.service(id, name): a service or process.
+# arch.service id name: a service or process.
 def service(id, name)
 arch_service
   node ${id} "${name}"
 end
 
-# arch.store(id, name): a database, cache, or file store.
+# arch.store id name: a database, cache, or file store.
 def store(id, name)
 arch_store
   node ${id} "${name}"
 end
 
-# arch.queue(id, name): a queue, topic, or stream.
+# arch.queue id name: a queue, topic, or stream.
 def queue(id, name)
 arch_queue
   node ${id} "${name}"
 end
 
-# arch.ext(id, name): a system outside the boundary.
+# arch.ext id name: a system outside the boundary.
 def ext(id, name)
 arch_ext
   node ${id} "${name}"
 end
 
-# arch.layers(id, title, names): a layer stack, top layer first, names split on `;`.
+# arch.layers id title names: a layer stack, top layer first, names split on `;`.
 def layers(id, title, names)
 arch_service
   node ${id} "${title}"
@@ -45,7 +45,7 @@ for i in 1..count(names, ";")
 end
 end
 
-# arch.key(): a legend for the element kinds.
+# arch.key: a legend for the element kinds.
 def key()
 key "client" color=#56B4E9
 key "service" color=#0072B2

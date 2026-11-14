@@ -493,10 +493,22 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
     out
 }
 
-/// macro_lines indexes `def` and `use` lines, which never reach the parser.
+/// macro_lines indexes `def` and template call lines, which never reach the parser.
 fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
     let (src, _) = crate::include::expand(path, text);
     let lines: Vec<&str> = src.text.lines().collect();
+    let key = |module: Option<&str>, n: &str| match module {
+        Some(m) if !n.contains('.') => format!("{m}.{n}"),
+        _ => n.to_string(),
+    };
+    let names: std::collections::HashSet<String> = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(i, l)| {
+            let n = template_name(l.trim_start().strip_prefix("def ")?.trim_start());
+            (!n.is_empty()).then(|| key(src.module(i + 1), &n))
+        })
+        .collect();
     for (i, line) in lines.iter().enumerate() {
         let (file, n) = src.file_line(i + 1);
         let file = file.to_string();
@@ -511,9 +523,11 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
         let call = template_name(t);
         let after = &t[call.len()..];
         let row = (after.is_empty() || after.starts_with(char::is_whitespace))
-            && b.out.defs.iter().any(|d| d.name == call);
-        let (w, name_lo) = if call.contains('.') && (after.trim_start().starts_with('(') || row) {
-            ("use".to_string(), lead)
+            && !crate::parse::KEYWORDS.contains(&call.as_str())
+            && !["->", "--", ".."].iter().any(|o| after.trim_start().starts_with(o))
+            && (names.contains(&call) || names.contains(&key(module, &call)));
+        let (w, name_lo) = if row {
+            ("call".to_string(), lead)
         } else {
             let w: String = t.chars().take_while(|&c| is_ident(c)).collect();
             if !super::docs::MACRO_WORDS.contains(&w.as_str()) || t[w.len()..].starts_with('-') {
@@ -523,7 +537,7 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
                 word: Word::Keyword(w.clone()),
                 loc: at(lead, lead + w.len()),
             });
-            if w != "def" && w != "use" {
+            if w != "def" {
                 continue;
             }
             let rest = &t[w.len()..];
@@ -535,7 +549,7 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
         }
         let loc = at(name_lo, name_lo + written.len());
         let name = match module {
-            Some(m) if !written.contains('.') => format!("{m}.{written}"),
+            Some(_) if !names.contains(&written) => key(module, &written),
             _ => written.clone(),
         };
         if w == "def" {

@@ -6,7 +6,7 @@ style ord color=#0969DA
 style al color=#8250DF
 style kind color=#CF222E
 
-node rel "REL"
+rel "REL"
 
 ord
   leftof "a left-of b gap=1em"
@@ -24,7 +24,7 @@ al
   | that edge is shared, within the grid tolerance
   rowcol "align row(...) / column(...)"
   | centers share y / x
-node chain "Chains"
+chain "Chains"
 | a left-of b left-of c means a left-of b and b left-of c
 | steps may mix: a above b near c
 | attributes apply to every step

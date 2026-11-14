@@ -12,4 +12,4 @@ model.hyp
   use adopt 2 +
   ease adopt 3 +
 exp ..> adopt "H4"
-model.key()
+model.key

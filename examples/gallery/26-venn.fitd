@@ -3,4 +3,4 @@ include "venn"
 layout venn
 page 4:3
 font 9pt..28pt
-venn.two("Supervised", "Unsupervised", "regression; classification", "semi-supervised; self-training", "clustering; dimension reduction")
+venn.two Supervised Unsupervised "regression; classification" "semi-supervised; self-training" "clustering; dimension reduction"

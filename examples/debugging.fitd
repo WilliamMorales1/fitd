@@ -14,17 +14,17 @@ done
 ask
   repro "Reproduces\nlocally?"
   recent "Started after\na recent change?"
-node flaky "Flaky test"
+flaky "Flaky test"
 | timing, order, shared state
-node quarantine "Quarantine"
+quarantine "Quarantine"
 | ticket, owner, deadline
-node bisect "Bisect"
+bisect "Bisect"
 | git bisect run
-node read "Read the failure"
+read "Read the failure"
 | expected vs actual
-node minimal "Shrink the case"
+minimal "Shrink the case"
 | smallest input that fails
-node fix "Fix and add\na regression test"
+fix "Fix and add\na regression test"
 
 fail -> repro -> flaky "no"
 repro -> recent "yes"

@@ -5,7 +5,7 @@ style decide color=#E69F00 shape=diamond
 style done color=#009E73
 style drop color=#D55E00
 
-# flow.key(): a legend naming the four roles.
+# flow.key: a legend naming the four roles.
 def key()
 key "input / output" color=#0072B2
 key "step" color=#56B4E9

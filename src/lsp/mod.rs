@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn modern_requests_answer() {
-        let text = "style hot color=#C62828\n# Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nhot\n  node a \"A\"\nnode b\na -> b\nuse pair(c, d)\n";
+        let text = "style hot color=#C62828\n# Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nhot\n  node a \"A\"\nnode b\na -> b\npair c d\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str| position(text, text.rfind(s).unwrap());
@@ -758,8 +758,8 @@ mod tests {
         let r = features::rename(&d, &at("b\n"), "bee").unwrap();
         assert_eq!(r["changes"]["file:///x.fitd"].as_array().unwrap().len(), 2);
         assert!(features::rename(&d, &at("b\n"), "1x").is_err());
-        let sig = features::signature_help(&d, &json!({ "line": 10, "character": 10 }));
-        assert_eq!(sig["signatures"][0]["label"], "pair(x, y)");
+        let sig = features::signature_help(&d, &json!({ "line": 10, "character": 6 }));
+        assert_eq!(sig["signatures"][0]["label"], "pair x y");
         assert_eq!(sig["activeParameter"], 0);
         let hints = features::inlay_hints(
             &d,
@@ -831,13 +831,13 @@ mod tests {
 
     #[test]
     fn module_templates_answer_by_qualified_name() {
-        let text = "include \"nn\"\nnn.layer(\"e\", \"Enc\", \"d\", 2)\nnn.\n";
+        let text = "include \"nn\"\nnn.layer e Enc d 2\nnn.\n";
         let none = |_: &str| None;
         let d = doc("file:///m.fitd", "/m.fitd", text, &none);
         let h = features::hover(&d, &json!({ "line": 1, "character": 4 }), &[]);
-        assert!(h["contents"]["value"].as_str().unwrap().contains("nn.layer("), "{h}");
-        let sig = features::signature_help(&d, &json!({ "line": 1, "character": 15 }));
-        assert_eq!(sig["signatures"][0]["label"], "nn.layer(id, name, dims, times)");
+        assert!(h["contents"]["value"].as_str().unwrap().contains("nn.layer id"), "{h}");
+        let sig = features::signature_help(&d, &json!({ "line": 1, "character": 12 }));
+        assert_eq!(sig["signatures"][0]["label"], "nn.layer id name dims times");
         assert_eq!(sig["activeParameter"], 1);
         let items = features::completion(&d, &json!({ "line": 2, "character": 3 }), false);
         let labels: Vec<&str> = items

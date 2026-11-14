@@ -13,4 +13,4 @@ done
   serve "Serve page"
 req -> auth -> serve "yes"
 auth -> login "no" -> serve
-flow.key()
+flow.key

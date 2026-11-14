@@ -16,7 +16,6 @@ pub enum Tok {
     LParen,
     RParen,
     Eq,
-    Colon,
     Dot,
     Newline,
     Eof,
@@ -44,7 +43,6 @@ pub fn describe(t: &Tok) -> &'static str {
         Tok::LParen => "`(`",
         Tok::RParen => "`)`",
         Tok::Eq => "`=`",
-        Tok::Colon => "`:`",
         Tok::Dot => "`.`",
         Tok::Newline => "end of line",
         Tok::Eof => "end of file",
@@ -167,7 +165,6 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
                 ('(', _) => (Some(Tok::LParen), 1),
                 (')', _) => (Some(Tok::RParen), 1),
                 ('=', _) => (Some(Tok::Eq), 1),
-                (':', _) => (Some(Tok::Colon), 1),
                 ('.', _) => (Some(Tok::Dot), 1),
                 _ => (None, 1),
             };

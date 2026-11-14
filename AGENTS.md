@@ -29,8 +29,8 @@ These are the design goals from the [README](README.md#design-goals). Each one h
 - Stdlib modules:
   - A module lives at `src/std/NAME.fitd` and is registered in `MODULES` in `src/stdlib.rs`.
   - The first comment line is the summary printed by `fitd std`.
-  - Templates are called as `MOD.name(...)`, so `def` names carry no prefix. Style names are global, so prefix every style with the module name (`uml_class`, `er_rel`).
-  - Every exported `def` gets a one-line comment above it in the form `# MOD.name(args): what it draws`.
+  - Templates are called as `MOD.name ARGS`, so `def` names carry no prefix. Style names are global, so prefix every style with the module name (`uml_class`, `er_rel`).
+  - Every exported `def` gets a one-line comment above it in the form `# MOD.name ARGS: what it draws`.
   - Each module needs a gallery file and a row in the `docs/language.md` Includes table.
 - Macro helpers that recurse should accumulate a string and emit once, as `grid.heat` does with `heat_acc`. Partial lines cannot be emitted.
 
@@ -150,7 +150,7 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
 - Style blocks: `fitd split` writes `node` on every line inside a block. Indents count characters, so a tab is one column; mixing tabs and spaces can close a block early.
-- Editor grammars: tree-sitter cannot tell a lone node, or a reopened one, from a block opener, so all parse as `block_statement`; template rows parse as `row_statement` only when they cannot be a node line, and a lone template name parses as a block. Nesting by indent is left to parse.rs and macros.rs. It also rejects `~` figure rows, comma fan-in (`a, b -> c`), and nodes named like statement keywords (`font -> csp`).
+- Editor grammars: tree-sitter cannot tell a lone node, or a reopened one, from a block opener, so all parse as `block_statement`; template rows parse as `row_statement` only when they cannot be a node line, and a lone template name parses as a block. Nesting by indent is left to parse.rs and macros.rs.
 
 ### 8. Dependency arcs and Sankey widths (low priority)
 

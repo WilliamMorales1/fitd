@@ -108,16 +108,10 @@ pub const KEYWORDS: &[Keyword] = &[
         "def NAME(PARAM, ...) ... end",
         "Defines a template at top level. A `#` comment just above becomes its documentation.",
     ),
-    (
-        "use",
-        "use ${1:name}($2)",
-        "use NAME(ARG, ...)",
-        "Expands a `def` template with arguments bound to its parameters.",
-    ),
 ];
 
 /// MACRO_WORDS are the keywords that only the macro stage reads.
-pub const MACRO_WORDS: &[&str] = &["for", "if", "else", "end", "def", "use"];
+pub const MACRO_WORDS: &[&str] = &["for", "if", "else", "end", "def"];
 
 /// Attr documents one attribute key on the statements that accept it.
 pub struct Attr {

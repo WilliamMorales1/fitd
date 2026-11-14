@@ -7,13 +7,13 @@ style io color=#009E73 shape=circle
 io
   src "Source : fitd"
   out "SVG, PNG, TikZ"
-node parse "Parser"
-node csp "CSP search"
+parse "Parser"
+csp "CSP search"
 | largest font that fits
-node bnb "Branch and bound"
-node core "QuickXplain"
+bnb "Branch and bound"
+core "QuickXplain"
 | minimal unsat core
-node checker "Checker" color=#F85149
+checker "Checker" color=#F85149
 
 src -> parse -> csp -> bnb, core
 bnb -> checker -> out

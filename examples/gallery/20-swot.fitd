@@ -2,12 +2,12 @@
 layout layered
 page 16:9
 font 9pt..28pt
-node s "Strengths" row=1 col=1
+s "Strengths" row=1 col=1
 | loyal users
 | fast support
-node w "Weaknesses" row=1 col=2
+w "Weaknesses" row=1 col=2
 | slow builds
-node o "Opportunities" row=2 col=1
+o "Opportunities" row=2 col=1
 | new markets
-node t "Threats" row=2 col=2
+t "Threats" row=2 col=2
 | cheaper rivals

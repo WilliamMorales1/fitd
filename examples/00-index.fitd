@@ -7,13 +7,13 @@ style radial color=#2E7D32
 style down color=#1565C0
 style right color=#6A1B9A
 
-node ex "examples/* : fitd"
+ex "examples/* : fitd"
 | each builds alone with no flags; each has its own page size
 | every one: -> and ..> edges, edge labels, node bodies, style
 | fonts: all give a range, debugging fixes one size
 
 radial
-  node radial "Radial maps"
+  radial "Radial maps"
   coffee "coffee.fitd"
   | theme palette=, fill=, text=, landscape page
   | undirected -- and .., group in radial layout
@@ -22,7 +22,7 @@ radial
   | no layout or theme: radial is the default
   | root statement, \n in titles, math markup
 down
-  node down "Layered, dir=down"
+  down "Layered, dir=down"
   compiler "compiler.fitd"
   | theme dark with color overrides, shape=circle
   | edge  : style, group, near ... within=
@@ -32,9 +32,9 @@ down
   | shape=box and circle, \n in titles
   | right-of, below, align top
   fib_calls "fib_calls.fitd"
-  | macros: recursive def and use, if, $${expr} in names
+  | macros: recursive def and calls, if, $${expr} in names
 right
-  node right "Layered, dir=right"
+  right "Layered, dir=right"
   release_pipeline "release_pipeline.fitd"
   | bands=2, include of shared styles, arrow chains
   | theme color overrides, group, edge color=
@@ -49,7 +49,7 @@ right
   | fitd described in fitd: one of each kind of statement
   | settings, include, edge forms, nested groups
   | require and prefer, near, at, align
-  | macros: for, if, def/use, names(), $${expr} escape
+  | macros: for, if, def and calls, names(), $${expr} escape
 ex -> radial, down, right
 radial -> coffee, group_theory
 down -> compiler, debugging, fib_calls
