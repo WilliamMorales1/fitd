@@ -1527,10 +1527,21 @@ impl Expander<'_> {
             || last.last().is_some_and(|t| t.tok == Tok::LBrace)
             || matches!(last[0].tok, Tok::Body(_) | Tok::Tilde);
         if open {
+            // A template that ends on a text line, as `algo.for` does, nests the text lines in its braces under it.
+            let nest = matches!(last.first().map(|t| &t.tok), Some(Tok::Body(_)))
+                && !closers.iter().any(|t| t.tok == Tok::RBrace);
             if !last.is_empty() {
                 self.newline();
             }
+            let start = self.out.len();
             let r = self.run(kids);
+            if nest {
+                for t in &mut self.out[start..] {
+                    if let Tok::Body(s) = &mut t.tok {
+                        s.insert_str(0, "  ");
+                    }
+                }
+            }
             self.out.extend(closers);
             return r;
         }
@@ -1823,6 +1834,25 @@ mod tests {
         let (out, errs) = lines(src);
         assert!(errs.is_empty(), "{errs:?}");
         assert_eq!(out, ["with s {", "a {", "b", "}", "}"]);
+    }
+
+    #[test]
+    fn text_lines_nest_under_a_template_that_ends_on_one() {
+        let src = "def kw(c) {\n  | **for** ${c}\n}\nn {\n  kw(a) {\n    | x\n    kw(b) {\n      | y\n    }\n  }\n  | z\n}\n";
+        let (out, errs) = lines(src);
+        assert!(errs.is_empty(), "{errs:?}");
+        assert_eq!(
+            out,
+            [
+                "n {",
+                "| **for** a",
+                "|   x",
+                "|   **for** b",
+                "|     y",
+                "| z",
+                "}"
+            ]
+        );
     }
 
     #[test]

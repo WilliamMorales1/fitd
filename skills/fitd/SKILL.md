@@ -90,7 +90,7 @@ When many nodes or edges share one style, write the style once as a block: `styl
 | `time` | `time.event mile chain` | 17 |
 | `seq` | `seq.actor msg reply` for `layout lanes` | 25 |
 | `venn` | `venn.two three items set` for `layout venn` | 26, 27 |
-| `algo` | `algo.block` pseudocode, a `[...]` list of lines, leading spaces indent, `**` keywords | 28 |
+| `algo` | `algo.block(id, title) { }` pseudocode: `|` lines nest under `algo.for`/`while`/`if`/`else` blocks, bold keywords | 28 |
 | `palette` | Okabe-Ito colors | |
 
 Gallery sources: `examples/gallery/NN-*.fitd` (also 07 network, 13 cycle, 19 mind map, 22 commutative, 23 fishbone, 24 swimlane, 29 image). `examples/showcase/` mixes modules in one figure (arch+time+flow, nn+grid, uml+arch, tree+flow). Not drawable yet: Euler diagrams, UML use-case actor glyph, dependency arcs, Sankey. Out of scope: data plots (embed as `~ image`), maps, photos, circuits.

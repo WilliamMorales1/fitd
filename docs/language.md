@@ -398,6 +398,19 @@ tree.cat(s, S) {
 }
 ```
 
+When the template ends on a `|` line instead, as `algo.for` does, the `|` lines in the block continue that text two spaces further in, so pseudocode takes its indent from the braces:
+
+```fitd
+include "algo"
+
+algo.block(gcd, "Algorithm 2: GCD(a, b)") {
+  algo.while("b != 0") {
+    | (a, b) = (b, a mod b)
+  }
+  algo.return("a")
+}
+```
+
 | Module    | Contents                                                                                                                                                                                                                                                   |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `nn`      | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus styles such as `nn.block` and `nn.data`                                                                  |
@@ -411,7 +424,7 @@ tree.cat(s, S) {
 | `time`    | Timelines: `time.event`, `time.mile`, `time.chain`                                                                                                                                                                                                         |
 | `seq`     | UML sequence diagrams for `layout lanes`: `seq.actor`, `seq.msg`, `seq.reply` (dashed)                                                                                                                                                                     |
 | `venn`    | Venn diagrams for `layout venn`: `venn.two`, `venn.three`, `venn.items`, `venn.set`, set styles `venn.a`..`venn.c`                                                                                                                                         |
-| `algo`    | Algorithm and pseudocode blocks: `algo.block` with `;`-separated, indentable lines and `**` keywords                                                                                                                                                       |
+| `algo`    | Algorithm and pseudocode blocks: `algo.block` with `|` lines nested under `algo.for`, `algo.while`, `algo.if`, `algo.else`, and `algo.return`, keywords in bold                                                                                            |
 | `model`   | Research models: `model.iv`, `model.dv`, `model.med`, `model.mod`, `model.ctl`, `model.hyp`, `model.key`                                                                                                                                                 |
 
 [examples/gallery](../examples/gallery/) has one diagram per common academic figure type, each built on these modules.
