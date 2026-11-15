@@ -83,7 +83,7 @@ Each row lists the figure type, the surveys (by number above) that name it, and 
 | UML sequence | 5, 6 | yes, no activation bars or self-messages | `std/seq` | `25-sequence` |
 | Venn | 3, 4, 5 | yes, up to three sets | `std/venn` | `26-venn`, `27-venn-three` |
 | Euler | 3, 4, 5 | **no** | planned | |
-| Algorithm / pseudocode | 3, 4 | yes, indented lines and bold keywords | `std/algo` | `28-algorithm` |
+| Algorithm / pseudocode | 3, 4 | **no**, removed | | |
 | UML use case | 6 | partial: no actor glyph | planned | |
 | Dependency arcs (NLP) | 4 | **no** | planned, low priority | |
 | Sankey / flow widths | 1 | **no** | out of scope for now | |
@@ -147,7 +147,6 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Group edges: `layout lanes` and `layout venn` reject them (E0016). An edge runs from a stand-in member, so a long group edge may leave the frame off center.
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
-- Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
 - Editor grammars: tree-sitter cannot tell a lone node from a reopened one, so both parse as `name_statement`.
 
 ### 8. Dependency arcs and Sankey widths (low priority)

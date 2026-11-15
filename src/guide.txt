@@ -30,7 +30,7 @@ Syntax: a statement per line, // comment, blocks in { }.
   group G "Title" a, b [color=#hex, times=N] // G: edge end; times: dashed `Nx`
   require REL                  // must hold, else E0110
   prefer REL [weight=2]        // soft; W0205 if unmet
-  include "a.fitd"|"user/L"|"uml" // L.f(x); std: nn flow palette grid arch uml er tree time model seq venn algo
+  include "a.fitd"|"user/L"|"uml" // L.f(x); std: nn flow palette grid arch uml er tree time model seq venn
   uml.class(a, A, ["x: int", y]) { KID } // args: w 1 "s" [..] k=v ${e} "a.b"
   for i in 1..3 {} / for x in xs {} / if X {} else {} / def f(a, b=1) {}; f(1); ${i}
   // xs[1] len(xs) xs+ys split(s,";") names(p,1,3)

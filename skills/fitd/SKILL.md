@@ -1,6 +1,6 @@
 ---
 name: fitd
-description: Draw diagrams with the fitd CLI (.fitd text in, SVG/PNG/PDF/TikZ out): concept and mind maps, flowcharts, architecture and data flow, trees, UML class/state/sequence, ER, timelines, Gantt, tables, heat maps, Venn, swimlanes, pseudocode. Use when asked to make or fix a diagram or a .fitd file, or to convert Graphviz, Mermaid, or D2.
+description: Draw diagrams with the fitd CLI (.fitd text in, SVG/PNG/PDF/TikZ out): concept and mind maps, flowcharts, architecture and data flow, trees, UML class/state/sequence, ER, timelines, Gantt, tables, heat maps, Venn, swimlanes. Use when asked to make or fix a diagram or a .fitd file, or to convert Graphviz, Mermaid, or D2.
 ---
 
 # fitd
@@ -90,7 +90,6 @@ When many nodes or edges share one style, write the style once as a block: `styl
 | `time` | `time.event mile chain` | 17 |
 | `seq` | `seq.actor msg reply` for `layout lanes` | 25 |
 | `venn` | `venn.two three items set` for `layout venn` | 26, 27 |
-| `algo` | `algo.block(id, title) { }` pseudocode: `|` lines nest under `algo.for`/`while`/`if`/`else` blocks, bold keywords | 28 |
 | `palette` | Okabe-Ito colors | |
 
 Gallery sources: `examples/gallery/NN-*.fitd` (also 07 network, 13 cycle, 19 mind map, 22 commutative, 23 fishbone, 24 swimlane, 29 image). `examples/showcase/` mixes modules in one figure (arch+time+flow, nn+grid, uml+arch, tree+flow). Not drawable yet: Euler diagrams, UML use-case actor glyph, dependency arcs, Sankey. Out of scope: data plots (embed as `~ image`), maps, photos, circuits.

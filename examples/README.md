@@ -230,12 +230,6 @@ Venn diagram of three sets, every overlap labelled (skills, feature comparisons)
 
 ![27-venn-three](gallery/out/27-venn-three.png)
 
-### [28-algorithm.fitd](gallery/28-algorithm.fitd)
-
-Algorithm block (DocFigure and ACL-Fig: "algorithm" class).
-
-![28-algorithm](gallery/out/28-algorithm.png)
-
 ### [29-image.fitd](gallery/29-image.fitd)
 
 Mixed figure: a plot inside a pipeline (Viziometrics, DocFigure, ACL-Fig mix plots and diagrams).
