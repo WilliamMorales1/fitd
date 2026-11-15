@@ -1,42 +1,9 @@
-mod ast;
-mod attrs;
-mod check;
-mod csp;
-mod diag;
-mod emit;
-mod error;
-#[cfg(test)]
-mod fuzz;
-mod geom;
-mod graph;
-mod import;
-mod include;
-mod key;
-
-/// KEY_RATIO is the key text size relative to the body font when `keysize` is not set.
-const KEY_RATIO: f64 = 0.85;
-mod lanes;
-mod layered;
-mod layout;
-mod lex;
-mod lsp;
-mod macros;
-mod metrics;
-mod parse;
-mod quality;
-mod radial;
-mod sema;
-mod split;
-mod stdlib;
-mod theme;
-mod tree;
-mod venn;
-
 use diag::{Diag, Level};
 use error::FitdResult;
+use fitd::{
+    attrs, check, compile, diag, emit, error, geom, import, layout, lsp, metrics, split, stdlib,
+};
 use geom::Rect;
-use graph::LayoutKind;
-use layout::{Config, Failure};
 use std::process::ExitCode;
 
 const USAGE: &str = "usage:
@@ -55,15 +22,6 @@ const USAGE: &str = "usage:
 
 const GUIDE: &str = include_str!("guide.txt");
 type PdfPage = (String, metrics::Fonts, (f64, f64));
-
-fn page(spec: &str, portrait: bool) -> Result<(f64, f64), String> {
-    let (w, h) = sema::page_size(&spec.to_ascii_lowercase(), Some("pt"))?;
-    Ok(if portrait {
-        (w.min(h), w.max(h))
-    } else {
-        (w, h)
-    })
-}
 
 fn run(args: &[String]) -> FitdResult<ExitCode> {
     match args.first().map(String::as_str) {
@@ -302,7 +260,7 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
                 .position(|a| a == "--page")
                 .and_then(|i| args.get(i + 1))
                 .map_or("a1", String::as_str);
-            let (w, h) = page(spec, false)?;
+            let (w, h) = compile::page_size(spec, false)?;
             Some(if args.iter().any(|a| a == "--portrait") {
                 (w.min(h), w.max(h))
             } else if args.iter().any(|a| a == "--landscape") {
@@ -384,14 +342,10 @@ fn build(args: &[String]) -> Result<ExitCode, String> {
 fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCode, String> {
     let mut input = None;
     let (mut svg_out, mut tikz_out) = (None, None);
-    let (mut page_spec, mut portrait, mut landscape, mut force, mut draft, mut short) =
-        (None, false, false, false, false, false);
-    let mut bands = None;
-    let (mut margin, mut min_font, mut max_font, mut wrap) = (None, None, None, None);
-    let mut budget = 20_000_000;
-    let mut expand_budget = macros::DEFAULT_BUDGET;
+    let mut short = false;
     let mut scale = 2.0;
-    let (mut theme_name, mut family, mut lock) = (None, None, None);
+    let mut force = false;
+    let mut o = compile::Options::default();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut val = || it.next().cloned().ok_or(format!("{a} needs a value"));
@@ -399,11 +353,11 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         match a.as_str() {
             "-o" => svg_out = Some(val()?),
             "--tikz" => tikz_out = Some(val()?),
-            "--page" => page_spec = Some(val()?),
-            "--portrait" => portrait = true,
-            "--landscape" => landscape = true,
+            "--page" => o.page = Some(val()?),
+            "--portrait" => o.portrait = true,
+            "--landscape" => o.landscape = true,
             "--bands" => {
-                bands = Some(
+                o.bands = Some(
                     val()?
                         .parse::<usize>()
                         .ok()
@@ -412,22 +366,22 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
                 )
             }
             "--force" => force = true,
-            "--draft" => draft = true,
+            "--draft" => o.draft = true,
             "--short" => short = true,
-            "--margin" => margin = Some(num(val()?)?),
-            "--min-font" => min_font = Some(num(val()?)?),
-            "--max-font" => max_font = Some(num(val()?)?),
-            "--wrap" => wrap = Some(num(val()?)?),
-            "--budget" => budget = num(val()?)? as u64,
+            "--margin" => o.margin = Some(num(val()?)?),
+            "--min-font" => o.min_font = Some(num(val()?)?),
+            "--max-font" => o.max_font = Some(num(val()?)?),
+            "--wrap" => o.wrap = Some(num(val()?)?),
+            "--budget" => o.budget = num(val()?)? as u64,
             "--expand-budget" => {
-                expand_budget = val()?
+                o.expand_budget = val()?
                     .parse::<u64>()
                     .map_err(|_| "--expand-budget needs a whole number")?
             }
             "--scale" => scale = num(val()?)?,
-            "--theme" => theme_name = Some(val()?),
-            "--font-family" => family = Some(val()?),
-            "--stable" => lock = Some(val()?),
+            "--theme" => o.theme = Some(val()?),
+            "--font-family" => o.family = Some(val()?),
+            "--stable" => o.lock = Some(val()?),
             s if (s == "-" || !s.starts_with('-')) && input.is_none() => {
                 input = Some(s.to_string())
             }
@@ -449,264 +403,27 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
     } else {
         std::fs::read_to_string(&input).map_err(|e| format!("{input}: {e}"))?
     };
-    let macros::Loaded {
-        src,
-        parse: parse_text,
-        mut diags,
-    } = macros::load(&input, &text, expand_budget);
-    let show = |diags: &[Diag]| {
-        eprint!(
-            "{}",
-            if short {
-                diag::render_short(&src, diags)
-            } else {
-                diag::render(&src, diags)
-            }
-        )
-    };
-    let (stmts, parse_diags) = parse::parse(&parse_text);
-    diags.extend(parse_diags);
-    let (mut g, sema_diags) = sema::analyze(&stmts);
-    diags.extend(sema_diags);
-    diags.extend(load_images(&mut g, &input));
-    diags.retain(|d| !include::unused_shared_style(&src, d));
-    diags.sort_by_key(Diag::pos);
-    show(&diags);
-    if diags.iter().any(|d| d.level == Level::Error) {
-        return Ok(ExitCode::FAILURE);
-    }
-
-    if bands.is_some() {
-        g.settings.bands = bands;
-    }
-    let set = &g.settings;
-    // Without `keysize`, the key follows the body font, which is known only after a solve.
-    let key_auto = g.settings.key_size.is_none();
-    let mut shape = match page_spec.as_deref().and_then(sema::ratio) {
-        Some(r) => Some(r?),
-        None if page_spec.is_some() => None,
-        None => set.page_ratio,
-    };
-    let (mut page_w, mut page_h) = match (&page_spec, shape) {
-        (_, Some((w, h))) => (w, h),
-        (Some(p), None) => page(p, false)?,
-        (None, None) => set.page.unwrap_or(page("a1", false)?),
-    };
-    if portrait {
-        (page_w, page_h) = (page_w.min(page_h), page_w.max(page_h));
-    }
-    if landscape {
-        (page_w, page_h) = (page_w.max(page_h), page_w.min(page_h));
-    }
-    if shape.is_some() {
-        shape = Some((page_w, page_h));
-    }
-    let page_fixed = portrait
-        || landscape
-        || shape.is_some()
-        || page_spec.as_ref().map_or(set.page_fixed, |p| {
-            sema::paper(&p.to_ascii_lowercase()).is_none()
-        });
-    let mut anchor = None;
-    if let Some(path) = &lock
-        && let Ok(text) = std::fs::read_to_string(path)
-    {
-        let a = layout::Anchor::parse(&g, &text).map_err(|e| format!("{path}: {e}"))?;
-        if !page_fixed && a.page == (page_h, page_w) {
-            (page_w, page_h) = (page_h, page_w);
-        }
-        if shape.is_some_and(|(w, h)| ((a.page.0 / a.page.1) / (w / h) - 1.0).abs() < 0.005) {
-            (page_w, page_h) = a.page;
-        }
-        if a.page == (page_w, page_h) {
-            anchor = Some(a);
+    let render = |src: &diag::Source, diags: &[Diag]| {
+        if short {
+            diag::render_short(src, diags)
         } else {
-            show(&[Diag::info(format!(
-                "{path} was made for a {:.0}x{:.0}pt page; laying out afresh",
-                a.page.0, a.page.1
-            ))]);
+            diag::render(src, diags)
         }
-    }
-    let font = set.font.unwrap_or((9.0, 28.0));
-    let mut cfg = Config {
-        page_w,
-        page_h,
-        margin: margin.or(set.margin).unwrap_or(24.0),
-        min_font: min_font.unwrap_or(font.0),
-        max_font: max_font.unwrap_or(font.1),
-        wrap_em: wrap.or(set.wrap_em).unwrap_or(24.0),
-        budget,
-        opt_budget: budget / if draft { 32 } else { 16 },
-        first_cap: budget / if draft { 20 } else { 4 },
-        legible: legible(page_w, page_h, min_font.unwrap_or(font.0)),
-        draft,
-        key_h: 0.0,
-        pack_frames: false,
-        anchor: anchor.map(|a| &*Box::leak(Box::new(a))),
     };
-
-    let t = tree::build(&g);
-    if g.settings.layout.unwrap_or(LayoutKind::Radial) == LayoutKind::Radial {
-        show(&t.notes);
-    }
-    let fonts = metrics::Fonts::load(family.as_deref().or(set.family.as_deref()))?;
-    show(
-        &fonts
-            .notes
-            .iter()
-            .map(|n| Diag::info(n.clone()))
-            .collect::<Vec<_>>(),
-    );
-    let name = theme_name
-        .as_deref()
-        .or(set.theme.as_deref())
-        .unwrap_or(theme::PRESETS[0]);
-    let th = theme::Theme::preset(name)
-        .ok_or(format!(
-            "unknown theme `{name}` (expected one of: {})",
-            theme::PRESETS.join(", ")
-        ))?
-        .with(&set.theme_over);
-    layout::measure_groups(&mut g, &fonts);
-    if let Some(r) = shape
-        && cfg.anchor.is_none()
-    {
-        (cfg.page_w, cfg.page_h) = fit_ratio(&mut g, &t, &fonts, cfg, r);
-        cfg.legible = legible(cfg.page_w, cfg.page_h, cfg.min_font);
-        let (w, h) = (cfg.page_w, cfg.page_h);
-        show(&[Diag::info(format!(
-            "page {}:{} fits on {w:.0}x{h:.0}pt ({:.0}x{:.0}mm)",
-            trim(r.0),
-            trim(r.1),
-            w / 72.0 * 25.4,
-            h / 72.0 * 25.4
-        ))]);
-    }
-    let plan_key = |size: f64| {
-        key::KeyPlan::new(
-            &g.key,
-            &fonts,
-            cfg.page_w - 2.0 * cfg.margin,
-            cfg.margin,
-            size,
-        )
-    };
-    let mut key = plan_key(g.settings.key_size.unwrap_or(KEY_RATIO * cfg.min_font));
-    cfg.key_h = key.as_ref().map_or(0.0, key::KeyPlan::height);
-    let mut lay = match layout::solve(&g, &t, &fonts, &cfg) {
-        Ok(lay) if key_auto && key.is_some() && lay.body > 1.02 * cfg.min_font => {
-            let wider = plan_key(KEY_RATIO * lay.body);
-            let mut c2 = cfg;
-            c2.key_h = wider.as_ref().map_or(0.0, key::KeyPlan::height);
-            match layout::solve(&g, &t, &fonts, &c2) {
-                Ok(l2) => {
-                    (key, cfg) = (wider, c2);
-                    l2
-                }
-                Err(_) => lay,
-            }
-        }
-        Ok(lay) => lay,
-        Err(Failure::NoRoom { crowded, cut_off }) => {
-            eprintln!(
-                "error: no layout fits at the {}pt font floor on a {:.0}x{:.0}pt page, even ignoring `require` constraints",
-                cfg.min_font, cfg.page_w, cfg.page_h
-            );
-            match cut_off {
-                Some(n) => eprintln!(
-                    "  = note: the search was cut off after {n} checks, so a layout may still exist; try `--budget {}`",
-                    budget * 4
-                ),
-                None => {
-                    eprintln!("  = note: proved for every candidate position this layout considers")
-                }
-            }
-            match (crowded, g.settings.layout) {
-                (Some((layers, need, have)), Some(LayoutKind::Layered(dir))) => {
-                    let (along, other) = if dir == graph::Dir::Down {
-                        ("tall", "right")
-                    } else {
-                        ("wide", "down")
-                    };
-                    eprintln!(
-                        "  = note: the longest path has {layers} layers, which need {need:.0}pt along the flow; the page gives {have:.0}pt"
-                    );
-                    eprintln!(
-                        "  = help: use `layout layered dir={other}`, a page that is more {along}, or fewer steps on the longest path"
-                    );
-                }
-                _ => eprintln!(
-                    "  = help: use a larger page, a lower font floor (`font 6pt..30pt`), or a narrower `wrap`"
-                ),
-            }
-            if let Some((b, n, share)) = layout::largest_branch(&g, &t, &fonts, &cfg) {
-                eprintln!(
-                    "  = help: or split the map: the branch under `{}` ({n} nodes, {:.0}% of the box area at {}pt) could become its own diagram, leaving one stub node here; `fitd split` makes one page per branch",
-                    g.nodes[b].id,
-                    100.0 * share,
-                    cfg.min_font
-                );
-            }
+    let c = match compile::compile(&input, &text, &o, &mut |src, d| {
+        eprint!("{}", render(src, d))
+    }) {
+        Ok(c) => c,
+        Err(compile::Stop::Failed(text)) => {
+            eprint!("{text}");
             return Ok(ExitCode::FAILURE);
         }
-        Err(Failure::Core { core, cut_off }) => {
-            let what = if core.len() == 1 {
-                "this constraint cannot hold".to_string()
-            } else {
-                format!("these {} constraints cannot all hold", core.len())
-            };
-            let mut d = Diag::error(
-                "E0110",
-                format!("{what} at {}pt on this page", cfg.min_font),
-            );
-            for (k, &ci) in core.iter().enumerate() {
-                let span = g.constraints[ci].span;
-                d = if k == 0 {
-                    d.primary(span, "")
-                } else {
-                    d.secondary(span, "")
-                };
-            }
-            let d = match (min_font, g.settings.font_span) {
-                (Some(_), _) => d.note("the font floor is set by `--min-font`"),
-                (None, Some(span)) => d.secondary(span, "the font floor is set here"),
-                (None, None) => d.note(format!(
-                    "{}pt is the default font floor; a `font` statement can lower it",
-                    cfg.min_font
-                )),
-            };
-            let d = if core.len() == 1 {
-                d.note("it fails even with every other `require` removed")
-            } else {
-                d.note("drop any one of them and the rest can be satisfied")
-            };
-            let d = match cut_off {
-                Some(n) => d.note(format!("the search was cut off after {n} checks, so this may be an artifact of the budget; try `--budget {}`", budget * 4)),
-                None => d.note("proved for every candidate position this layout considers"),
-            };
-            let d = if g.settings.layout.unwrap_or(LayoutKind::Radial) == LayoutKind::Radial {
-                d.note("radial layout keeps each branch within 30 degrees of its wedge; try `layout layered` for free placement")
-            } else {
-                d
-            };
-            show(&[d.help("remove one, turn it into `prefer`, or use a larger page")]);
-            return Ok(ExitCode::FAILURE);
-        }
+        Err(compile::Stop::Err(e)) => return Err(e),
     };
-    let mut diags = check::check(&g, &fonts, &cfg, &lay);
-    if !diags.is_empty() && !draft && cfg.anchor.is_none() {
-        let (cfg2, notes) = retry(&g, &t, &fonts, cfg, page_fixed, &mut lay, &mut diags);
-        cfg = cfg2;
-        show(&notes);
-    }
-    if let Some(&(top, _)) = lay.tradeoff.iter().max_by(|a, b| a.0.total_cmp(&b.0))
-        && top > lay.body + 0.05
-    {
-        diags.push(Diag::info(format!("chose {:.1}pt over {top:.1}pt, which fits but reads worse (crossings, spacing); `--min-font {top:.1}` keeps the larger", lay.body)));
-    }
-    show(&diags);
-    let errors = diags.iter().filter(|d| d.level == Level::Error).count();
-    let warnings = diags.iter().filter(|d| d.level == Level::Warning).count();
+    let (g, lay, cfg) = (&c.graph, &c.layout, &c.cfg);
+    eprint!("{}", render(&c.src, &c.diags));
+    let errors = c.diags.iter().filter(|d| d.level == Level::Error).count();
+    let warnings = c.diags.iter().filter(|d| d.level == Level::Warning).count();
     let s = lay.stats;
     if short {
         eprintln!(
@@ -733,8 +450,8 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
             }
         );
         let rects: Vec<Rect> = (0..g.nodes.len()).map(|v| lay.rect(v)).collect();
-        let q =
-            layout::Readable::new(&t, lay.kind, &lay.edges, cfg.page(), cfg.legible).score(&rects);
+        let q = layout::Readable::new(&c.tree, lay.kind, &lay.edges, cfg.page(), cfg.legible)
+            .score(&rects);
         eprintln!(
             "readability penalty {:.0}: crossings {:.0}, proximity {:.0}, grouping {:.0}, angles {:.0}, alignment {:.0}, spread {:.0}",
             q.total(),
@@ -770,90 +487,31 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         return Ok(ExitCode::FAILURE);
     }
     if let Some(pages) = pages {
-        pages.push((
-            emit::svg(
-                &g,
-                &t,
-                &fonts,
-                &lay,
-                Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h),
-                &th,
-                key.as_ref(),
-            ),
-            fonts,
-            (cfg.page_w, cfg.page_h),
-        ));
+        let svg = c.svg(None);
+        let size = (cfg.page_w, cfg.page_h);
+        pages.push((svg, c.fonts, size));
         return Ok(ExitCode::SUCCESS);
     }
     let stem = input.strip_suffix(".fitd").unwrap_or(&input).to_string();
     let out = svg_out.unwrap_or(format!("{stem}.svg"));
     let bytes = if out.to_ascii_lowercase().ends_with(".png") {
-        let svg = emit::svg(
-            &g,
-            &t,
-            &fonts,
-            &lay,
-            // A ratio page names the shape the reader asked for, so the bitmap keeps it.
-            if shape.is_some() {
-                Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h)
-            } else {
-                emit::png_view(&g, &lay, key.as_ref(), cfg.margin)
-            },
-            &th,
-            key.as_ref(),
-        );
-        emit::png(&svg, &fonts, scale)?
+        emit::png(&c.svg(Some(c.png_view())), &c.fonts, scale)?
     } else if out.to_ascii_lowercase().ends_with(".pdf") {
         emit::pdf(&[emit::Sheet {
             size: None,
-            cells: vec![(
-                &emit::svg(
-                    &g,
-                    &t,
-                    &fonts,
-                    &lay,
-                    Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h),
-                    &th,
-                    key.as_ref(),
-                ),
-                &fonts,
-                0.0,
-                0.0,
-            )],
+            cells: vec![(&c.svg(None), &c.fonts, 0.0, 0.0)],
         }])?
     } else {
-        emit::svg(
-            &g,
-            &t,
-            &fonts,
-            &lay,
-            Rect::centered((0.0, 0.0), cfg.page_w, cfg.page_h),
-            &th,
-            key.as_ref(),
-        )
-        .into_bytes()
+        c.svg(None).into_bytes()
     };
     write(&out, &bytes)?;
     eprintln!("wrote {out}");
     if let Some(p) = tikz_out {
-        write(
-            &p,
-            emit::tikz(
-                &g,
-                &t,
-                &fonts,
-                &lay,
-                cfg.page_w,
-                cfg.page_h,
-                &th,
-                key.as_ref(),
-            )
-            .as_bytes(),
-        )?;
+        write(&p, c.tikz().as_bytes())?;
         eprintln!("wrote {p}");
     }
-    if let Some(p) = lock {
-        write(&p, layout::Anchor::render(&g, &lay, &cfg).as_bytes())?;
+    if let Some(p) = &o.lock {
+        write(p, layout::Anchor::render(g, lay, cfg).as_bytes())?;
         if let Some(a) = cfg.anchor {
             let kept = (0..g.nodes.len())
                 .filter(|&v| {
@@ -869,309 +527,6 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
         }
     }
     Ok(ExitCode::SUCCESS)
-}
-
-fn retry(
-    g: &graph::Graph,
-    t: &tree::Tree,
-    fonts: &metrics::Fonts,
-    cfg: Config,
-    page_fixed: bool,
-    lay: &mut layout::Layout,
-    diags: &mut Vec<Diag>,
-) -> (Config, Vec<Diag>) {
-    let arranged = if lay.kind == LayoutKind::Radial {
-        radial::arrange(g, t, &cfg)
-    } else {
-        None
-    };
-    let quick = Config {
-        first_cap: cfg.budget / 20,
-        ..cfg
-    };
-    let turned = Config {
-        page_w: cfg.page_h,
-        page_h: cfg.page_w,
-        ..quick
-    };
-    let mut tries: Vec<(&tree::Tree, Config, String)> = Vec::new();
-    if let Some(a) = &arranged {
-        let moved: Vec<String> = (0..t.children.len())
-            .filter(|&v| a.children[v] != t.children[v])
-            .map(|v| format!("`{}`", g.nodes[v].id))
-            .collect();
-        tries.push((
-            a,
-            quick,
-            format!("reordered the branches under {}", moved.join(", ")),
-        ));
-    }
-    if !page_fixed && cfg.page_w != cfg.page_h {
-        tries.push((
-            t,
-            turned,
-            format!(
-                "turned the page to {}",
-                if turned.page_w < turned.page_h {
-                    "portrait"
-                } else {
-                    "landscape"
-                }
-            ),
-        ));
-    }
-    let runs: Vec<_> = std::thread::scope(|s| {
-        let handles: Vec<_> = tries
-            .iter()
-            .map(|(tr, c, _)| s.spawn(move || layout::solve(g, tr, fonts, c).ok()))
-            .collect();
-        handles
-            .into_iter()
-            .map(|h| h.join().expect("retry thread"))
-            .collect()
-    });
-    let before = diags.len();
-    let mut best = (before, layout::merit(g, t, &cfg, lay));
-    let (mut win, mut stats) = (None, lay.stats);
-    for (k, run) in runs.into_iter().enumerate() {
-        let Some(l) = run else { continue };
-        stats.attempts += l.stats.attempts;
-        stats.search += l.stats.search;
-        let c = tries[k].1;
-        let d = check::check(g, fonts, &c, &l);
-        let key = (d.len(), layout::merit(g, t, &c, &l));
-        if key.0 < best.0 || (key.0 == best.0 && key.1 < best.1) {
-            best = key;
-            win = Some((k, d.len()));
-            *lay = l;
-            *diags = d;
-        }
-    }
-    let soft = (lay.stats.soft_cost, lay.stats.soft_total);
-    lay.stats = layout::Stats {
-        soft_cost: soft.0,
-        soft_total: soft.1,
-        ..stats
-    };
-    match win {
-        Some((k, now)) => {
-            let note = Diag::info(format!("{} (warnings: {before} -> {now})", tries[k].2));
-            (tries[k].1, vec![note])
-        }
-        None => (cfg, Vec::new()),
-    }
-}
-
-fn trim(x: f64) -> String {
-    format!("{x:.3}")
-        .trim_end_matches('0')
-        .trim_end_matches('.')
-        .into()
-}
-
-/// fit_ratio finds the smallest page of shape `r` that fits at the font floor and meets as many checks and preferences as an unbounded page.
-type Score = (usize, usize);
-
-/// fit_ratio sizes a `W:H` page for the content; layered flows without `bands=` also try 2 and 3 bands and keep the count that gives the largest font.
-fn fit_ratio(
-    g: &mut graph::Graph,
-    t: &tree::Tree,
-    fonts: &metrics::Fonts,
-    cfg: Config,
-    r: (f64, f64),
-) -> (f64, f64) {
-    let layered = matches!(g.settings.layout, Some(LayoutKind::Layered(_))) && !g.settings.lanes;
-    let folds: &[Option<usize>] = if layered && g.settings.bands.is_none() {
-        &[None, Some(2), Some(3)]
-    } else {
-        &[None]
-    };
-    let mut best: Option<(Option<usize>, Score, f64)> = None;
-    for &fold in folds {
-        g.settings.fold = fold;
-        // A fold that does not fit on the best page so far cannot win, so it gets one solve there.
-        let Some((goal, s)) = ratio_probe(g, t, fonts, cfg, r, best.map(|b| b.2)) else {
-            if best.is_some() {
-                break;
-            }
-            continue;
-        };
-        // Probes are rough, so another band count must win clearly.
-        if best.is_none_or(|b| goal < b.1 || (goal == b.1 && s < 0.95 * b.2)) {
-            best = Some((fold, goal, s));
-        } else if fold.is_some() {
-            break;
-        }
-    }
-    let Some((fold, goal, s)) = best else {
-        g.settings.fold = None;
-        let (aw, ah) = (r.0 / r.0.max(r.1), r.1 / r.0.max(r.1));
-        return ((aw * 16000.0).round(), (ah * 16000.0).round());
-    };
-    g.settings.fold = fold;
-    ratio_finish(g, t, fonts, cfg, r, goal, s)
-}
-
-fn ratio_solve(
-    g: &graph::Graph,
-    t: &tree::Tree,
-    fonts: &metrics::Fonts,
-    cfg: Config,
-    r: (f64, f64),
-) -> impl Fn(f64, f64, bool) -> Option<(Score, f64)> {
-    let (aw, ah) = (r.0 / r.0.max(r.1), r.1 / r.0.max(r.1));
-    let dims = move |s: f64| ((aw * s).round(), (ah * s).round());
-    let radial = g.settings.layout.unwrap_or(LayoutKind::Radial) == LayoutKind::Radial;
-    move |s: f64, max_font: f64, quick: bool| {
-        let (page_w, page_h) = dims(s);
-        let mut c = Config {
-            page_w,
-            page_h,
-            max_font,
-            legible: legible(page_w, page_h, cfg.min_font),
-            budget: if quick { cfg.budget / 4 } else { cfg.budget },
-            first_cap: if quick {
-                cfg.budget / 20
-            } else {
-                cfg.first_cap
-            },
-            ..cfg
-        };
-        let size = g.settings.key_size.unwrap_or(KEY_RATIO * c.min_font);
-        c.key_h = key::KeyPlan::new(&g.key, fonts, page_w - 2.0 * c.margin, c.margin, size)
-            .as_ref()
-            .map_or(0.0, key::KeyPlan::height);
-        // Includes the branch reordering that `retry` tries on the final page.
-        let arranged = if radial {
-            radial::arrange(g, t, &c)
-        } else {
-            None
-        };
-        std::iter::once(t)
-            .chain(arranged.as_ref())
-            .filter_map(|tr| {
-                let l = layout::solve(g, tr, fonts, &c).ok()?;
-                let d = check::check(g, fonts, &c, &l);
-                let n = |lv| d.iter().filter(|x| x.level == lv).count();
-                let top = l.tradeoff.iter().map(|x| x.0).fold(l.body, f64::max);
-                Some(((n(Level::Error), n(Level::Warning)), top))
-            })
-            .min_by(|a, b| a.0.cmp(&b.0).then(b.1.total_cmp(&a.1)))
-    }
-}
-
-/// ratio_probe finds the page scale where the content just fits at the font floor, and the score there.
-fn ratio_probe(
-    g: &graph::Graph,
-    t: &tree::Tree,
-    fonts: &metrics::Fonts,
-    cfg: Config,
-    r: (f64, f64),
-    start: Option<f64>,
-) -> Option<(Score, f64)> {
-    let (aw, ah) = (r.0 / r.0.max(r.1), r.1 / r.0.max(r.1));
-    let m = cfg.margin;
-    let solve = ratio_solve(g, t, fonts, cfg, r);
-    // Layouts scale with the font, so the largest font on one page predicts the size at the floor.
-    let unbounded = 1000.0 * cfg.min_font;
-    // A fixed font (`font 11pt`) can outgrow the first guess, so double until something fits.
-    let mut s = start.unwrap_or(1000.0);
-    let (goal, mut top) = loop {
-        match solve(s, unbounded, true) {
-            Some(r) => break r,
-            None if s < 16000.0 && start.is_none() => s *= 2.0,
-            None => return None,
-        }
-    };
-    for _ in 0..3 {
-        // Only the area inside the margin scales with the font.
-        let next =
-            (s * aw.min(ah) - 2.0 * m) * cfg.min_font / top / aw.min(ah) + 2.0 * m / aw.min(ah);
-        if (next / s - 1.0).abs() < 0.02 {
-            break;
-        }
-        match solve(next, unbounded, true) {
-            Some((_, f)) => (s, top) = (next, f),
-            None => {
-                s = next * 1.04;
-                break;
-            }
-        }
-    }
-    Some((goal, s))
-}
-
-fn ratio_finish(
-    g: &graph::Graph,
-    t: &tree::Tree,
-    fonts: &metrics::Fonts,
-    cfg: Config,
-    r: (f64, f64),
-    goal: Score,
-    s: f64,
-) -> (f64, f64) {
-    let (aw, ah) = (r.0 / r.0.max(r.1), r.1 / r.0.max(r.1));
-    let dims = |s: f64| ((aw * s).round(), (ah * s).round());
-    let solve = &ratio_solve(g, t, fonts, cfg, r);
-    // Preferences met depend on search luck, so try a few sizes up and keep the smallest best one.
-    let sizes: Vec<f64> = (0..6).map(|k| s * 1.04_f64.powi(k)).collect();
-    // The first size usually meets the goal, so it runs alone before the rest fan out.
-    let first = solve(sizes[0], cfg.max_font, false).map(|r| r.0);
-    if first.is_some_and(|sc| sc <= goal) {
-        return dims(sizes[0]);
-    }
-    let scores: Vec<_> = std::iter::once(first)
-        .chain(std::thread::scope(|sc| {
-            let hs: Vec<_> = sizes[1..]
-                .iter()
-                .map(|&x| sc.spawn(move || solve(x, cfg.max_font, false).map(|r| r.0)))
-                .collect();
-            hs.into_iter()
-                .map(|h| h.join().expect("ratio probe"))
-                .collect::<Vec<_>>()
-        }))
-        .collect();
-    let pick = scores
-        .iter()
-        .position(|sc| sc.is_some_and(|sc| sc <= goal))
-        .or_else(|| {
-            let best = scores.iter().flatten().min()?;
-            scores.iter().position(|sc| sc.as_ref() == Some(best))
-        });
-    dims(pick.map_or(sizes[5], |k| sizes[k]))
-}
-
-/// load_images reads each `~ image` file, relative to the input file's folder.
-fn load_images(g: &mut graph::Graph, input: &str) -> Vec<Diag> {
-    let base = match input {
-        "<stdin>" => std::path::Path::new(""),
-        _ => std::path::Path::new(input)
-            .parent()
-            .unwrap_or(std::path::Path::new("")),
-    };
-    let mut diags = Vec::new();
-    for c in g
-        .nodes
-        .iter_mut()
-        .flat_map(|n| n.figure.iter_mut().flatten())
-    {
-        let Some(im) = c.image.as_mut().and_then(std::sync::Arc::get_mut) else {
-            continue;
-        };
-        let file = base.join(&im.path);
-        let err = match std::fs::read(&file) {
-            Ok(data) => im.decode(data).err().map(String::from),
-            Err(e) => Some(format!("cannot read `{}`: {e}", file.display())),
-        };
-        if let Some(e) = err {
-            diags.push(
-                Diag::error("E0014", e)
-                    .primary(im.span, "image not loaded")
-                    .help("paths are relative to the main file; use a PNG or JPEG"),
-            );
-        }
-    }
-    diags
 }
 
 fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
@@ -1190,11 +545,6 @@ fn write(path: &str, bytes: &[u8]) -> Result<(), String> {
         let _ = std::fs::remove_file(&tmp);
         format!("{path}: {e}")
     })
-}
-
-fn legible(page_w: f64, page_h: f64, min_font: f64) -> f64 {
-    let diagonal_m = page_w.hypot(page_h) / 72.0 * 0.0254;
-    (16.0 * diagonal_m).max(8.0).max(min_font)
 }
 
 fn main() -> ExitCode {

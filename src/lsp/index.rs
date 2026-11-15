@@ -302,9 +302,13 @@ impl Builder<'_, '_, '_> {
 
 /// build indexes `text`, the buffer at `path`, with its includes and macros.
 pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
-    let crate::macros::Loaded { src, parse, .. } =
-        crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
-    let (stmts, _) = crate::parse::parse(&parse);
+    let opts = crate::compile::Options {
+        images: false,
+        ..Default::default()
+    };
+    let crate::compile::Front {
+        src, parse, stmts, ..
+    } = crate::compile::check(path, text, &opts);
     files.cache.insert(path.to_string(), Some(text.to_string()));
     let mut b = Builder {
         src: &src,

@@ -108,15 +108,11 @@ fn lsp_diag(range: Value, d: &Diag) -> Value {
 type Diags = HashMap<String, Vec<Value>>;
 
 fn front_end(path: &str, text: &str) -> Diags {
-    let crate::macros::Loaded {
-        src,
-        parse,
-        mut diags,
-    } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
-    let (stmts, parse_diags) = crate::parse::parse(&parse);
-    diags.extend(parse_diags);
-    diags.extend(crate::sema::analyze(&stmts).1);
-    diags.retain(|d| !crate::include::unused_shared_style(&src, d));
+    let opts = crate::compile::Options {
+        images: false,
+        ..Default::default()
+    };
+    let crate::compile::Front { src, diags, .. } = crate::compile::check(path, text, &opts);
     let mut out = Diags::from([(path.to_string(), Vec::new())]);
     for d in diags.iter().filter(|d| d.level != Level::Note) {
         let span = d

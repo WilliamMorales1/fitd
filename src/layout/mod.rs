@@ -15,6 +15,7 @@ mod path;
 mod polish;
 mod relations;
 mod scene;
+mod search;
 mod stable;
 
 use explain::quickxplain;
@@ -30,6 +31,7 @@ pub use polish::Readable;
 pub use relations::{
     FRAME_CLEAR, FRAME_PAD, TITLE_BAND, TITLE_SIZE, frame, frame_clear, relation_holds,
 };
+pub use search::{KEY_RATIO, fit_ratio, legible, num_text, retry};
 pub use stable::Anchor;
 
 pub fn measure_groups(g: &mut Graph, fonts: &Fonts) {
