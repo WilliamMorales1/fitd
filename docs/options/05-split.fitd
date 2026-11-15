@@ -1,41 +1,51 @@
 title "fitd split map.fitd [-o DIR]"
-layout layered dir=down
-page 320x180mm margin=1cm
+layout layered [dir=down]
+page 320x180mm [margin=1cm]
 
-style src color=#0969DA
-style shared color=#BC4C00
-style sheet color=#1A7F37
+style src [color=#0969DA]
+style shared [color=#BC4C00]
+style sheet [color=#1A7F37]
 
-src
-  map "map.fitd"
-  | the original, too big for one page
-  | fitd split map.fitd [-o DIR], default map-pages/
-shared
-  shared "map-shared.fitd"
-  | layout, page, font, theme, styles
-sheet
-  over "map.fitd (overview)"
-  | root plus one stub per branch
-for b in a, b, c
-  sheet
-    p${b} "map-${b} : fitd"
-    | branch ${b}, rooted at its top node
+with src {
+  map "map.fitd" {
+    | the original, too big for one page
+    | fitd split map.fitd [-o DIR], default map-pages/
+  }
+}
+with shared {
+  shared "map-shared.fitd" {
+    | layout, page, font, theme, styles
+  }
+}
+with sheet {
+  over "map.fitd (overview)" {
+    | root plus one stub per branch
+  }
+}
+for b in a, b, c {
+  with sheet {
+    p${b} "map-${b} : fitd" {
+      | branch ${b}, rooted at its top node
+    }
+  }
   map -> p${b} -> shared
-end
+}
 map -> over -> shared "include"
-rules "What crosses pages" color=#CF222E
-| an edge between pages is drawn on both, each time to a stub
-| of the far end whose body names its page
-| a group keeps each page's members
-| a chain keeps each run of links within one page
-| an align keeps each page's part of two or more nodes
-| a near or ordering between pages, or a node alone in an align,
-| is left out and listed as a warning
-| comments are not carried over
-edit "Ordinary source" color=#CF222E
-| every page includes the shared file, so each builds alone
-| and a style edited once changes every page
-| edit the split files freely; split again only from the original
+rules "What crosses pages" [color=#CF222E] {
+  | an edge between pages is drawn on both, each time to a stub
+  | of the far end whose body names its page
+  | a group keeps each page's members
+  | a chain keeps each run of links within one page
+  | an align keeps each page's part of two or more nodes
+  | a near or ordering between pages, or a node alone in an align,
+  | is left out and listed as a warning
+  | comments are not carried over
+}
+edit "Ordinary source" [color=#CF222E] {
+  | every page includes the shared file, so each builds alone
+  | and a style edited once changes every page
+  | edit the split files freely; split again only from the original
+}
 map ..> rules
 shared ..> edit
 group "map-pages/" over, pa, pb, pc, shared

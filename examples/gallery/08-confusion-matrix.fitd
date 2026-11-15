@@ -1,9 +1,12 @@
 // Confusion matrix / heat map (DocFigure: confusion matrix, heat map; ACL-Fig: confusion matrix).
 include "grid"
 page 1:1
-grid
-  cm "Predicted vs true"
-grid.head "cat; dog; fox"
-grid.heat cat "90 6 4"
-grid.heat dog "8 85 7"
-grid.heat fox "3 12 85"
+
+with grid {
+  cm "Predicted vs true" {
+    grid.head "cat; dog; fox"
+    grid.heat cat "90 6 4"
+    grid.heat dog "8 85 7"
+    grid.heat fox "3 12 85"
+  }
+}

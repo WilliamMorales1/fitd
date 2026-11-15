@@ -7,7 +7,14 @@ pub enum Tok {
     Num,
     Color,
     Body(String),
-    Cells(String),
+    /// Tilde starts a figure row; a `[` right after it switches the lexer to cells.
+    Tilde,
+    /// Cell is one raw comma-separated item of a `~ [...]` row, such as `%100"d 64"*4`.
+    Cell(String),
+    LBrace,
+    RBrace,
+    LBracket,
+    RBracket,
     Arrow,
     DashDash,
     DotArrow,
@@ -34,7 +41,12 @@ pub fn describe(t: &Tok) -> &'static str {
         Tok::Num => "a number",
         Tok::Color => "a color",
         Tok::Body(_) => "a body line",
-        Tok::Cells(_) => "a figure row",
+        Tok::Tilde => "`~`",
+        Tok::Cell(_) => "a cell",
+        Tok::LBrace => "`{`",
+        Tok::RBrace => "`}`",
+        Tok::LBracket => "`[`",
+        Tok::RBracket => "`]`",
         Tok::Arrow => "`->`",
         Tok::DashDash => "`--`",
         Tok::DotArrow => "`..>`",
@@ -59,6 +71,8 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
     let off = |i: usize| b.get(i).map(|&(o, _)| o).unwrap_or(text.len());
     let (mut toks, mut errs) = (Vec::new(), Vec::new());
     let mut line_start = true;
+    // depth counts open `(` and `[`, inside which newlines do not end a statement.
+    let mut depth = 0usize;
     let mut i = 0;
     while let Some(c) = at(i) {
         let start = i;
@@ -69,7 +83,9 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             })
         };
         if c == '\n' {
-            push(&mut toks, Tok::Newline, i + 1);
+            if depth == 0 {
+                push(&mut toks, Tok::Newline, i + 1);
+            }
             line_start = true;
             i += 1;
             continue;
@@ -89,7 +105,7 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             while at(i).is_some_and(|c| c != '\n') {
                 i += 1;
             }
-        } else if (c == '|' || c == '~') && first {
+        } else if c == '|' && first {
             i += 1;
             if at(i) == Some(' ') {
                 i += 1;
@@ -99,15 +115,16 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
                 i += 1;
             }
             let line = text[off(lo)..off(i)].trim_end().to_string();
-            push(
-                &mut toks,
-                if c == '|' {
-                    Tok::Body(line)
-                } else {
-                    Tok::Cells(line)
-                },
-                i,
-            );
+            push(&mut toks, Tok::Body(line), i);
+        } else if c == '~' && first {
+            i += 1;
+            push(&mut toks, Tok::Tilde, i);
+            while at(i).is_some_and(|c| c == ' ' || c == '\t') {
+                i += 1;
+            }
+            if at(i) == Some('[') {
+                i = cells(text, &b, i, &mut toks, &mut errs);
+            }
         } else if c == '"' {
             i += 1;
             let mut s = String::new();
@@ -164,11 +181,20 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
                 (',', _) => (Some(Tok::Comma), 1),
                 ('(', _) => (Some(Tok::LParen), 1),
                 (')', _) => (Some(Tok::RParen), 1),
+                ('[', _) => (Some(Tok::LBracket), 1),
+                (']', _) => (Some(Tok::RBracket), 1),
+                ('{', _) => (Some(Tok::LBrace), 1),
+                ('}', _) => (Some(Tok::RBrace), 1),
                 ('=', _) => (Some(Tok::Eq), 1),
                 ('.', _) => (Some(Tok::Dot), 1),
                 _ => (None, 1),
             };
             i += len;
+            match tok {
+                Some(Tok::LParen | Tok::LBracket) => depth += 1,
+                Some(Tok::RParen | Tok::RBracket) => depth = depth.saturating_sub(1),
+                _ => {}
+            }
             match tok {
                 Some(t) => push(&mut toks, t, i),
                 None => errs.push(
@@ -187,6 +213,69 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
         span: Span::new(text.len(), text.len()),
     });
     (toks, errs)
+}
+
+/// cells lexes a `[...]` figure row starting at char `i`, one `Cell` per comma-separated item, and gives the index after `]`.
+fn cells(
+    text: &str,
+    b: &[(usize, char)],
+    mut i: usize,
+    toks: &mut Vec<Token>,
+    errs: &mut Vec<Diag>,
+) -> usize {
+    let at = |i: usize| b.get(i).map(|&(_, c)| c);
+    let off = |i: usize| b.get(i).map(|&(o, _)| o).unwrap_or(text.len());
+    let open = i;
+    let tok = |toks: &mut Vec<Token>, tok, lo: usize, hi: usize| {
+        toks.push(Token {
+            tok,
+            span: Span::new(off(lo), off(hi)),
+        })
+    };
+    tok(toks, Tok::LBracket, i, i + 1);
+    i += 1;
+    loop {
+        match at(i) {
+            None => {
+                errs.push(
+                    Diag::error("E0002", "figure row has no closing `]`")
+                        .primary(Span::new(off(open), off(open + 1)), "row starts here"),
+                );
+                return i;
+            }
+            Some(c) if c.is_whitespace() => i += 1,
+            Some('/') if at(i + 1) == Some('/') => {
+                while at(i).is_some_and(|c| c != '\n') {
+                    i += 1;
+                }
+            }
+            Some(']') => {
+                tok(toks, Tok::RBracket, i, i + 1);
+                return i + 1;
+            }
+            Some(',') => {
+                tok(toks, Tok::Comma, i, i + 1);
+                i += 1;
+            }
+            Some(_) => {
+                let lo = i;
+                let mut quoted = false;
+                while let Some(c) = at(i) {
+                    match c {
+                        '"' => quoted = !quoted,
+                        '\\' if quoted => i += 1,
+                        ',' | ']' | '\n' if !quoted => break,
+                        '\n' => break,
+                        _ => {}
+                    }
+                    i += 1;
+                }
+                let raw = text[off(lo)..off(i)].trim_end().to_string();
+                let hi = lo + raw.chars().count();
+                tok(toks, Tok::Cell(raw), lo, hi);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -222,6 +311,28 @@ mod tests {
         assert_eq!(
             kinds("x color=#1565C0"),
             vec![Ident, Ident, Eq, Color, Newline, Eof]
+        );
+        assert_eq!(
+            kinds("~ [%100, \"d, 64\"*2,\n .] // c"),
+            vec![
+                Tilde,
+                LBracket,
+                Cell("%100".into()),
+                Comma,
+                Cell("\"d, 64\"*2".into()),
+                Comma,
+                Cell(".".into()),
+                RBracket,
+                Newline,
+                Eof
+            ]
+        );
+        assert_eq!(
+            kinds("a [k=1,\n j=2] {\n}"),
+            vec![
+                Ident, LBracket, Ident, Eq, Num, Comma, Ident, Eq, Num, RBracket, LBrace, Newline,
+                RBrace, Newline, Eof
+            ]
         );
         assert_eq!(
             kinds("| a = b // not a comment"),

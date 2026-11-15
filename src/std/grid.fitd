@@ -1,93 +1,93 @@
 // Grids drawn as figure rows: tables, heat maps, confusion matrices, Gantt bars, unit bar charts.
 // Each template writes one `~` row into the node declared above it.
 // Text lists split on `;`, number lists on spaces: "name; type; size", "90 5 5".
-style grid color=#0072B2 shape=box
+style grid [color=#0072B2, shape=box]
 
 // grid.head labels: a header row of outlined labels over the value columns, leaving the row-label column blank.
-def head(labels)
-cells _ ${labels} ";" "" 1
-end
+def head(labels) {
+  cells _ ${labels} ";" "" 1
+}
 
 // grid.row cells: one table row of outlined labelled cells.
-def row(cells)
-cells "" ${cells} ";" "" 1
-end
+def row(cells) {
+  cells "" ${cells} ";" "" 1
+}
 
 // grid.title_row cells: a table row of solid cells, for a header without a row-label column.
-def title_row(cells)
-cells "" ${cells} ";" "%100" 1
-end
+def title_row(cells) {
+  cells "" ${cells} ";" "%100" 1
+}
 
 // grid.heat label values: a heat-map row; values are percents 0..100 and each cell prints its value.
-def heat(label, values)
-heat_acc ${"\"" + label + "\""} ${values} 1
-end
+def heat(label, values) {
+  heat_acc ${"\"" + label + "\""} ${values} 1
+}
 
-def heat_acc(acc, values, i)
-if i > count(values, " ")
-~ ${acc}
-else
-heat_acc ${acc + " %" + part(values, " ", i) + "\"" + part(values, " ", i) + "\""} ${values} ${i + 1}
-end
-end
+def heat_acc(acc, values, i) {
+  if i > count(values, " ") {
+    ~ [${acc}]
+  } else {
+    heat_acc ${acc + ", %" + part(values, " ", i) + "\"" + part(values, " ", i) + "\""} ${values} ${i + 1}
+  }
+}
 
 // grid.shade label values: a heat-map row without numbers, for dense maps.
-def shade(label, values)
-shade_acc ${"\"" + label + "\""} ${values} 1
-end
+def shade(label, values) {
+  shade_acc ${"\"" + label + "\""} ${values} 1
+}
 
-def shade_acc(acc, values, i)
-if i > count(values, " ")
-~ ${acc}
-else
-shade_acc ${acc + " %" + part(values, " ", i)} ${values} ${i + 1}
-end
-end
+def shade_acc(acc, values, i) {
+  if i > count(values, " ") {
+    ~ [${acc}]
+  } else {
+    shade_acc ${acc + ", %" + part(values, " ", i)} ${values} ${i + 1}
+  }
+}
 
 // grid.bar label n: a unit bar chart row of n solid cells after its label.
-def bar(label, n)
-span ${"\"" + label + "\""} 0 ${n}
-end
+def bar(label, n) {
+  span ${"\"" + label + "\""} 0 ${n}
+}
 
 // grid.task label start len: a Gantt row; the bar covers columns start..start+len-1, counted from 1.
-def task(label, start, len)
-span ${"\"" + label + "\""} ${start - 1} ${len}
-end
+def task(label, start, len) {
+  span ${"\"" + label + "\""} ${start - 1} ${len}
+}
 
 // grid.scale first last: a Gantt header numbering the time columns first..last.
-def scale(first, last)
-cells _ ${names("", first, last)} "," "" 1
-end
+def scale(first, last) {
+  cells _ ${names("", first, last)} "," "" 1
+}
 
 // grid.layers names: a layer stack, one full-width solid row per name, top layer first.
-def layers(names)
-for i in 1..count(names, ";")
-~ %100"${part(names, ";", i)}"*4
-end
-end
+def layers(names) {
+  for i in 1..count(names, ";") {
+    ~ [%100"${part(names, ";", i)}"*4]
+  }
+}
 
-def span(acc, gaps, n)
-if gaps > 0
-span ${acc + " _"} ${gaps - 1} ${n}
-else if n > 1
-~ ${acc} %100*${n}
-else if n == 1
-~ ${acc} %100
-else
-~ ${acc}
-end
-end
+def span(acc, gaps, n) {
+  if gaps > 0 {
+    span ${acc + ", _"} ${gaps - 1} ${n}
+  } else if n > 1 {
+    ~ [${acc}, %100*${n}]
+  } else if n == 1 {
+    ~ [${acc}, %100]
+  } else {
+    ~ [${acc}]
+  }
+}
 
-def cells(acc, items, sep, shade, i)
-if i > count(items, sep)
-~ ${acc}
-else
-cells ${acc + " " + shade + "\"" + part(items, sep, i) + "\""} ${items} ${sep} ${shade} ${i + 1}
-end
-end
+def cells(acc, items, sep, shade, i) {
+  if i > count(items, sep) {
+    ~ [${acc}]
+  } else {
+    cells ${acc + ", " + shade + "\"" + part(items, sep, i) + "\""} ${items} ${sep} ${shade} ${i + 1}
+  }
+}
 
 // grid.quad tl tr bl br: a 2x2 matrix (SWOT, effort/impact) with the diagonal shaded darker.
-def quad(tl, tr, bl, br)
-~ %80"${tl}" %25"${tr}"
-~ %25"${bl}" %80"${br}"
-end
+def quad(tl, tr, bl, br) {
+  ~ [%80"${tl}", %25"${tr}"]
+  ~ [%25"${bl}", %80"${br}"]
+}

@@ -1,19 +1,21 @@
 title "From source to drawing"
-layout layered dir=down
-page 360x203mm margin=1cm
+layout layered [dir=down]
+page 360x203mm [margin=1cm]
 
-style front color=#0969DA
-style solver color=#8250DF
-style back color=#1A7F37
+style front [color=#0969DA]
+style solver [color=#8250DF]
+style back [color=#1A7F37]
 
-def stage(i, name, file, kind)
-  ${kind}
-    s${i} "${name}"
-    | ${file}
-  if i > 1
+def stage(i, name, file, kind) {
+  with ${kind} {
+    s${i} "${name}" {
+      | ${file}
+    }
+  }
+  if i > 1 {
     s${i - 1} -> s${i}
-  end
-end
+  }
+}
 
 stage 1 Include "include.rs: splice files line for line; a segment table maps every line back to its file" front
 stage 2 Expand "macros.rs: for, if, def, template calls within a step budget; each input line keeps one raw copy, generated lines map to their template line" front
@@ -28,13 +30,14 @@ stage 10 Emit "emit.rs: SVG, PNG via resvg, TikZ, all at absolute positions; non
 
 s7 ..> s1 "E0110 core at source lines"
 
-group "Front end" ${names("s", 1, 5)} color=#0969DA
-group "Layout" ${names("s", 6, 8)} color=#8250DF
-group "Output" s9, s10 color=#1A7F37
+group "Front end" ${names("s", 1, 5)} [color=#0969DA]
+group "Layout" ${names("s", 6, 8)} [color=#8250DF]
+group "Output" s9, s10 [color=#1A7F37]
 
-fonts "Fonts" color=#57606A
-| DejaVu Sans, Sans Bold, Math TeX Gyre compiled in
-| (embedded-fonts feature), so layout needs no fontconfig;
-| only a named family goes through fc-match
-| every SVG names each font file with an FNV-1a hash,
-| so a layout difference between machines traces to fonts
+fonts "Fonts" [color=#57606A] {
+  | DejaVu Sans, Sans Bold, Math TeX Gyre compiled in
+  | (embedded-fonts feature), so layout needs no fontconfig;
+  | only a named family goes through fc-match
+  | every SVG names each font file with an FNV-1a hash,
+  | so a layout difference between machines traces to fonts
+}

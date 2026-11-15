@@ -68,9 +68,19 @@ pub enum StmtKind {
         title: Option<(String, Span)>,
         classes: Vec<Name>,
         attrs: Vec<Attr>,
+        /// Set for a lone `ID`, which reopens the node when it is already declared.
+        bare: bool,
     },
-    Body(String),
-    Cells(String),
+    /// Body is a `|` text line of the node whose braces hold it.
+    Body {
+        text: String,
+        owner: Option<Name>,
+    },
+    /// Row is a `~` figure row of the node whose braces hold it.
+    Row {
+        row: Row,
+        owner: Option<Name>,
+    },
     Key {
         label: String,
         classes: Vec<Name>,
@@ -100,8 +110,14 @@ pub enum StmtKind {
         attrs: Vec<Attr>,
     },
     Include(String),
-    /// Open starts a style block; the nodes, edges, keys, and groups indented under it take the style.
+    /// Open is a `with STYLE` block; the nodes, edges, keys, and groups inside it take the style.
     Open(Name),
+}
+
+#[derive(Clone, Debug)]
+pub enum Row {
+    Cells(Vec<crate::graph::Cell>),
+    Image { path: String, attrs: Vec<Attr> },
 }
 
 #[derive(Clone, Debug)]

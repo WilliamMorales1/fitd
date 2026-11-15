@@ -424,16 +424,8 @@ pub fn symbols(doc: &Doc) -> Value {
 
 /// folds covers macro and style blocks, nodes with body lines, and runs of comments.
 pub fn folds(text: &str) -> Value {
-    let lines: Vec<&str> = text.lines().collect();
-    let styles: Vec<&str> = lines
-        .iter()
-        .filter_map(|l| l.trim().strip_prefix("style ")?.split_whitespace().next())
-        .collect();
     let mut out = Vec::new();
-    // Each open block notes whether it is a style block, which decides what a lone name means, and its indent.
-    let mut open: Vec<(usize, bool, usize)> = Vec::new();
-    let mut last = 0;
-    let mut node: Option<usize> = None;
+    let mut open: Vec<usize> = Vec::new();
     let mut comment: Option<usize> = None;
     let mut push = |lo: usize, hi: usize, kind: Option<&str>| {
         if hi > lo {
@@ -444,76 +436,65 @@ pub fn folds(text: &str) -> Value {
             out.push(r);
         }
     };
+    let lines: Vec<&str> = text.lines().collect();
     for (i, l) in lines.iter().enumerate() {
         let t = l.trim();
-        let w: String = t
-            .chars()
-            .take_while(|&c| c.is_alphanumeric() || c == '_')
-            .collect();
-        let body = t.starts_with('|') || t.starts_with('~');
-        if !body && let Some(n) = node.take() {
-            push(n, i - 1, None);
-        }
         if t.starts_with("//") {
             comment.get_or_insert(i);
+            continue;
         } else if let Some(c) = comment.take() {
             push(c, i - 1, Some("comment"));
         }
-        if !t.is_empty() && !t.starts_with("//") {
-            let col = l.len() - l.trim_start().len();
-            while let Some(&(lo, true, c)) = open.last()
-                && c >= col
-            {
-                open.pop();
-                push(lo, last, None);
-            }
-            last = i;
+        if t.starts_with('|') {
+            continue;
         }
-        let rest = &t[w.len()..];
-        let directive = !rest.starts_with('-') && !rest.trim_start().starts_with(['-', '.']);
-        let lone = !w.is_empty()
-            && (rest.is_empty()
-                || rest
-                    .strip_prefix('.')
-                    .is_some_and(|n| n.chars().all(|c| c.is_alphanumeric() || c == '_')));
-        let style_open = open.iter().any(|o| o.1);
-        match w.as_str() {
-            "for" | "if" | "def" if directive => open.push((i, false, 0)),
-            "end" if directive => {
-                if let Some((lo, ..)) = open.pop() {
-                    push(lo, i, None);
-                }
+        // A closing line keeps its `}` visible, so the fold ends on the line before it.
+        let (mut ups, mut downs) = (0, 0);
+        for c in code_part(t).chars() {
+            match c {
+                '{' => ups += 1,
+                '}' if ups > 0 => ups -= 1,
+                '}' => downs += 1,
+                _ => {}
             }
-            "else" if directive => {
-                if let Some((lo, ..)) = open.pop() {
-                    push(lo, i - 1, None);
-                }
-                open.push((i, false, 0));
-            }
-            _ if lone
-                && !crate::parse::KEYWORDS.contains(&w.as_str())
-                && (!style_open || styles.contains(&t)) =>
-            {
-                open.push((i, true, l.len() - l.trim_start().len()))
-            }
-            // Any other line may own the body lines after it, as `node a` or `step a` does.
-            _ if !w.is_empty() && !body && !t.starts_with("//") => node = Some(i),
-            _ => {}
         }
-    }
-    for (lo, style, _) in open.into_iter().rev() {
-        if style {
-            push(lo, last, None);
+        for _ in 0..downs {
+            if let Some(lo) = open.pop() {
+                push(lo, i - 1, None);
+            }
         }
-    }
-    let n = lines.len().saturating_sub(1);
-    if let Some(lo) = node {
-        push(lo, n, None);
+        for _ in 0..ups {
+            open.push(i);
+        }
     }
     if let Some(c) = comment {
-        push(c, n, Some("comment"));
+        push(c, lines.len().saturating_sub(1), Some("comment"));
     }
     Value::Array(out)
+}
+
+/// code_part drops strings, interpolations, and a trailing comment, leaving the braces that open or close blocks.
+fn code_part(t: &str) -> String {
+    let mut o = String::new();
+    let mut cs = t.chars().peekable();
+    let (mut quoted, mut interp) = (false, 0);
+    while let Some(c) = cs.next() {
+        match c {
+            '\\' if quoted => {
+                cs.next();
+            }
+            '"' if interp == 0 => quoted = !quoted,
+            '$' if cs.peek() == Some(&'{') => {
+                cs.next();
+                interp += 1;
+            }
+            '}' if interp > 0 => interp -= 1,
+            '/' if !quoted && interp == 0 && cs.peek() == Some(&'/') => break,
+            _ if quoted || interp > 0 => {}
+            _ => o.push(c),
+        }
+    }
+    o
 }
 
 fn hex(c: &str) -> Option<(f64, f64, f64)> {
@@ -865,6 +846,7 @@ fn statement(first: &str) -> &'static str {
         "include" => "include",
         "title" => "title",
         "root" => "root",
+        "with" => "with",
         w if docs::MACRO_WORDS.contains(&w) => "macro",
         _ => "edge",
     }
@@ -953,19 +935,7 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
             .iter()
             .any(|d| d.name.starts_with(&format!("{m}.")))
     {
-        let mut out: Vec<Value> = idx
-            .style_order
-            .iter()
-            .filter_map(|n| n.strip_prefix(&format!("{m}_")))
-            .map(|short| {
-                item(
-                    short,
-                    14,
-                    "style block",
-                    "Opens a block: lines up to `end` take this module style.",
-                )
-            })
-            .collect();
+        let mut out = Vec::new();
         out.extend(
             idx.defs
                 .iter()
@@ -987,6 +957,16 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                 .collect::<Vec<_>>(),
         );
         return Value::Array(out);
+    }
+    if stmt == "with" && words.len() == 2 && words[1].ends_with('.') {
+        let m = words[1].trim_end_matches('.');
+        return Value::Array(
+            idx.style_order
+                .iter()
+                .filter_map(|n| n.strip_prefix(&format!("{m}_")))
+                .map(|short| item(short, 7, "module style", ""))
+                .collect(),
+        );
     }
     if head.ends_with('.') && !head.ends_with("..") {
         return Value::Array(
@@ -1036,14 +1016,6 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
                 v
             })
             .collect();
-        out.extend(style_names(&idx).iter().map(|n| {
-            item(
-                n,
-                14,
-                "style block",
-                "Opens a block: lines up to `end` take this style.",
-            )
-        }));
         out.extend(idx.defs.iter().filter(|d| !d.name.contains('.')).map(|d| {
             let mut v = item(&d.name, 3, &signature(d), &d.doc);
             if snippets {
@@ -1080,6 +1052,17 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
         "node" if args.is_empty() => Vec::new(),
         "node" => attr_items("node"),
         "root" => node_items(&idx),
+        "with" if args.is_empty() => style_names(&idx)
+            .iter()
+            .map(|n| {
+                item(
+                    n,
+                    7,
+                    "style",
+                    "The lines inside the braces take this style.",
+                )
+            })
+            .collect(),
         "group" => {
             let mut v = node_items(&idx);
             if !args.is_empty() && !head.trim_end().ends_with(',') {

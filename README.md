@@ -6,30 +6,33 @@ fitd is a text-based diagram compiler. It converts `.fitd` source into SVG, PNG,
 
 ```fitd
 title "How fitd compiles a diagram"
-layout layered dir=right
-page 297x210mm margin=1cm
+layout layered [dir=right]
+page 297x210mm [margin=1cm]
 
-style io color=#009E73 shape=circle
+style io [color=#009E73, shape=circle]
 
-io
+with io {
   src "Source : fitd"
   out "SVG, PNG, TikZ"
+}
 parse "Parser"
-csp "CSP search"
-| largest font that fits
+csp "CSP search" {
+  | largest font that fits
+}
 bnb "Branch and bound"
-core "QuickXplain"
-| minimal unsat core
-checker "Checker" color=#F85149
+core "QuickXplain" {
+  | minimal unsat core
+}
+checker "Checker" [color=#F85149]
 
 src -> parse -> csp -> bnb, core
 bnb -> checker -> out
 core ..> src "points back at source"
 
-group "Solver" csp, bnb, core color=#AB7DF7
+group "Solver" csp, bnb, core [color=#AB7DF7]
 
-require bnb above core gap=2em
-prefer out at right weight=2
+require bnb above core [gap=2em]
+prefer out at right [weight=2]
 ```
 
 ![Compiler pipeline from source through layout and checking to output](docs/pipeline.png)
@@ -82,7 +85,7 @@ check "Valid?"
 output "Save"
 input -> check
 check -> output "yes"
-require input left-of check gap=2em
+require input left-of check [gap=2em]
 ```
 
 ## Documentation

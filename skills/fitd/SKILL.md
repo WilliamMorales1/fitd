@@ -44,34 +44,34 @@ If the user wants the source kept, write it to `NAME.fitd` and build with `fitd 
 
 ## Language features
 
-Syntax details are in `fitd guide`; `docs/language.md` is the full reference. What exists:
+Syntax details are in `fitd guide`; `docs/language.md` is the full reference. Blocks use braces, attributes go in brackets (`a "A" [shape=box, color=#0072B2] {` ... `}`); indentation is cosmetic. What exists:
 
-- Nodes: `ID "Title"`, `| body line` under it (leading spaces indent, `**bold**`), `wrap=24em`, `shape=box|circle|diamond|none`, `stack=N` (N copies, e.g. repeated layers), `color= fill= text=`, `row= col=` (grid placement: squares, 2x2 matrices, commutative diagrams), `place=aside` (layered: note strip beside the flow).
-- Children by indent: parent links to each indented node (`--` radial, `->` layered). Under a node, `-> x "label"` is an edge from it; a lone declared id reopens it.
-- Figure rows: `~ %100 %60 . _ LBL "two words" %100X*3` draws a grid of cells below the node text (strips, masks, heat maps, tensor bars, unit bars). `~ image "plot.png" width=10em` embeds PNG/JPEG, for plots inside diagrams.
+- Nodes: `ID "Title" [attrs]`, `| body line` inside its braces (leading spaces indent, `**bold**`), `wrap=24em`, `shape=box|circle|diamond|none`, `stack=N` (N copies, e.g. repeated layers), `color= fill= text=`, `row= col=` (grid placement: squares, 2x2 matrices, commutative diagrams), `place=aside` (layered: note strip beside the flow).
+- Children by nesting: a node links to each node inside its braces (`--` radial, `->` layered). Inside a node, `-> x "label"` is an edge from it; `ID {` reopens a declared node.
+- Figure rows: `~ [%100, %60, ., _, LBL, "two words", %100X*3]` draws a grid of cells below the node text (strips, masks, heat maps, tensor bars, unit bars). `~ image "plot.png" [width=10em]` embeds PNG/JPEG, for plots inside diagrams.
 - Edges: `->` flow, `--` undirected, `..>` dashed cross link that does not shape the layout, `..` undirected cross link. Chains and fans: `a, b -> c, d "label" -> e`. Attributes `color=`, `line=solid|dashed|dotted`, `head=` and `tail=` (`arrow|triangle|diamond|odiamond|crow|none`).
-- Groups: `group G "Title" a, b color=#hex` draws a frame; list inner members in the outer group to nest. A named group is an edge end (`x -> G`). `times=N` draws a dashed frame titled `Nx`.
-- Keys: `key "Label" color=... line=dashed head=...` adds a legend row at the bottom; `page ... keysize=20pt`.
-- Layouts: `radial root=ID` (default, mind maps), `layered dir=down|right bands=N order=source` (flows, trees; `order=source` keeps sibling order), `lanes dir= order=source` (each top-level group is a swimlane; `lane=ID` hangs a node on ID's lifeline, for sequence diagrams), `venn` (groups are set circles, up to three).
-- Page and font: `page a0..a4|WxHmm|16:9 portrait|landscape margin=1cm` (a ratio picks the smallest page of that shape), `font 8pt..30pt wrap=16em family="DejaVu Sans"`, `title "Text"`.
-- Theme: `theme paper|light|dark|mono` plus overrides `background text edge link label root palette gradient`. `paper` is black text on white with Okabe-Ito borders and light tints.
-- Styles: `style NAME attrs` declares; a line with only `NAME` opens a block, and every node, edge, group, and key indented under it takes the style (no `end`). Blocks nest.
-- Constraints: `require REL` (hard, E0110 if impossible) and `prefer REL weight=2` (soft, W0205 if unmet). REL: `a left-of|right-of|above|below b gap=2em` (chainable), `a near b within=4em`, `a at top-left|top|...|center|...|bottom-right`, `align row(a, b)|column(..)|top(..)|bottom(..)|left(..)|right(..)`.
+- Groups: `group G "Title" a, b [color=#hex]` draws a frame; list inner members in the outer group to nest. A named group is an edge end (`x -> G`). `[times=N]` draws a dashed frame titled `Nx`.
+- Keys: `key "Label" [color=..., line=dashed, head=...]` adds a legend row at the bottom; `page ... [keysize=20pt]`.
+- Layouts: `radial [root=ID]` (default, mind maps), `layered [dir=down|right, bands=N, order=source]` (flows, trees; `order=source` keeps sibling order), `lanes [dir=, order=source]` (each top-level group is a swimlane; `lane=ID` hangs a node on ID's lifeline, for sequence diagrams), `venn` (groups are set circles, up to three).
+- Page and font: `page a0..a4|WxHmm|16:9 portrait|landscape [margin=1cm]` (a ratio picks the smallest page of that shape), `font 8pt..30pt [wrap=16em, family="DejaVu Sans"]`, `title "Text"`.
+- Theme: `theme paper|light|dark|mono` plus overrides `[background=, text=, edge=, link=, label=, root=, palette=, gradient=]`. `paper` is black text on white with Okabe-Ito borders and light tints.
+- Styles: `style NAME [attrs]` declares; `with NAME {` ... `}` applies it to every node, edge, group, and key inside. Blocks nest.
+- Constraints: `require REL` (hard, E0110 if impossible) and `prefer REL [weight=2]` (soft, W0205 if unmet). REL: `a left-of|right-of|above|below b [gap=2em]` (chainable), `a near b [within=4em]`, `a at top-left|top|...|center|...|bottom-right`, `align row(a, b)|column(..)|top(..)|bottom(..)|left(..)|right(..)`.
 - Includes: `include "file.fitd"`, `include "MOD"` (bundled), `include "user/LIB"` (`LIB.fitd` beside the file or in a `FITD_PATH` directory; call as `LIB.name ARGS`).
-- Macros: `for i in 1..n` / `for i, x in a, b, c` ... `end`, `if EXPR` ... `end`, `def NAME(a, b)` ... `end` called as `NAME x "two words"` on its own line, `${expr}` in any line, `count(s, ";")`, `part(s, ";", i)`. Recursive templates should build a string and emit once. Errors on generated lines are reported at the call.
+- Macros: `for i in 1..n {` / `for i, x in a, b, c {` ... `}`, `if EXPR {` ... `} else {` ... `}`, `def NAME(a, b) {` ... `}` called as `NAME x "two words"` on its own line, `${expr}` in any line, `count(s, ";")`, `part(s, ";", i)`. Recursive templates should build a string and emit once. Errors on generated lines are reported at the call.
 
 ## Choosing a layout
 
 - Concept map or mind map (one topic branching out): the default, `layout radial`. Pick the center with `root=ID`.
-- Process, pipeline, timeline, decision flow, tree: `layout layered dir=down` or `dir=right`. Long flows wrap into bands; `bands=1` forbids wrapping. Trees (org chart, syntax tree): add `order=source` to keep children in edge order.
-- Swimlanes and UML sequence: `layout lanes order=source`, or `include "seq"`.
+- Process, pipeline, timeline, decision flow, tree: `layout layered [dir=down]` or `[dir=right]`. Long flows wrap into bands; `bands=1` forbids wrapping. Trees (org chart, syntax tree): add `order=source` to keep children in edge order.
+- Swimlanes and UML sequence: `layout lanes [order=source]`, or `include "seq"`.
 - Venn: `layout venn`, or `include "venn"`.
 - Cycle: a chain plus one back link. Fishbone: a tree into the effect. 2x2 or square: nodes with `row=`/`col=`.
 - `->` edges build the hierarchy or flow. Use `..>` for "relates to" links that should not change structure.
 
 ## Repetition
 
-When many nodes or edges share one style, write the style once as a block: `style step color=#0072B2`, then a line `step` and the lines indented under it. Declaration order does not change the layout (except with `order=source`), so put each style's nodes in one block. Module styles open blocks too (`nn.block`); so do templates (`tree.unit`, one call per indented row; a deeper row nests under the row above). Node lines need `node` only for keyword ids (`node font`). When many nodes share one shape (numbered steps, layers, recursion trees), use `for` or `def` instead of copying lines.
+When many nodes or edges share one style, write the style once as a block: `style step [color=#0072B2]`, then `with step {` around the lines. Declaration order does not change the layout (except with `order=source`), so put each style's nodes in one block. Module styles work the same (`with nn.block {`). Templates take blocks too: `tree.unit {` holds one call per row, and a row ending in `{` holds its children. Node lines need `node` only for keyword ids (`node font`). When many nodes share one shape (numbered steps, layers, recursion trees), use `for` or `def` instead of copying lines.
 
 ## Standard library
 

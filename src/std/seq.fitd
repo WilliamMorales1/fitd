@@ -1,31 +1,34 @@
 // UML sequence diagrams. Use with `layout lanes order=source`; messages keep source order.
 // Each message takes a unique step id, which names the points it joins on the lifelines.
-style seq.actor color=#0072B2 shape=box
-style seq.point shape=none
-style seq.msg head=arrow
-style seq.reply head=arrow line=dashed
+style seq.actor [color=#0072B2, shape=box]
+style seq.point [shape=none]
+style seq.msg [head=arrow]
+style seq.reply [head=arrow, line=dashed]
 
 // seq.actor id name: a participant heading its dashed lifeline.
-def actor(id, name)
-seq.actor
-  node ${id} "${name}"
-end
+def actor(id, name) {
+  with seq.actor {
+    node ${id} "${name}"
+  }
+}
 
 // seq.msg step a b text: a call from a to b, below every earlier message.
-def msg(step, a, b, text)
-arrow ${step} ${a} ${b} ${text} seq.msg
-end
+def msg(step, a, b, text) {
+  arrow ${step} ${a} ${b} ${text} seq.msg
+}
 
 // seq.reply step a b text: a dashed return from a to b.
-def reply(step, a, b, text)
-arrow ${step} ${a} ${b} ${text} seq.reply
-end
+def reply(step, a, b, text) {
+  arrow ${step} ${a} ${b} ${text} seq.reply
+}
 
-def arrow(step, a, b, text, kind)
-seq.point
-  node ${step}_from "" lane=${a}
-  node ${step}_to "" lane=${b}
-${kind}
-  ${step}_from -> ${step}_to "${text}"
-require align row(${step}_from, ${step}_to)
-end
+def arrow(step, a, b, text, kind) {
+  with seq.point {
+    node ${step}_from "" [lane=${a}]
+    node ${step}_to "" [lane=${b}]
+  }
+  with ${kind} {
+    ${step}_from -> ${step}_to "${text}"
+  }
+  require align row(${step}_from, ${step}_to)
+}

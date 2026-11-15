@@ -1,31 +1,38 @@
 title "Diagnostic codes"
-page 340x191mm margin=1cm
+page 340x191mm [margin=1cm]
 font 7pt..28pt
+
 root diag
 
-style front color=#0969DA
-style solve color=#CF222E
-style warn color=#BC4C00
+style front [color=#0969DA]
+style solve [color=#CF222E]
+style warn [color=#BC4C00]
 
-diag "Diagnostics"
-| rustc style, at the source lines that caused them
-| fitd explain CODE prints the long form
-| --short prints one line each
+diag "Diagnostics" {
+  | rustc style, at the source lines that caused them
+  | fitd explain CODE prints the long form
+  | --short prints one line each
+}
 
-front
+with front {
   front "E00xx: front end"
-solve
+}
+with solve {
   lay "E01xx: layout"
-warn
-  warn "W02xx: warnings"
-  | never block output
+}
+with warn {
+  warn "W02xx: warnings" {
+    | never block output
+  }
+}
 diag -> front, lay, warn
 
-def code(parent, c, text)
-  node ${c} "${c}"
-  | ${text}
+def code(parent, c, text) {
+  node ${c} "${c}" {
+    | ${text}
+  }
   ${parent} -> ${c}
-end
+}
 
 code front E0001 "unknown node, with a did-you-mean by edit distance"
 code front E0002 "syntax error"
@@ -41,7 +48,6 @@ code front E0011 "include cycle or unreadable file"
 code front E0012 "macro error: unknown variable or template, argument count, type, division by zero, nesting too deep"
 code front E0013 "macro expansion ran past --expand-budget steps"
 code front E0014 "image row names a missing file or one not PNG or JPEG"
-code front E0015 "style named after a keyword"
 code front E0016 "edge joins a group to itself, a member, or a nested group"
 
 code lay E0101 "checker: overlap"

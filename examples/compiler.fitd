@@ -1,60 +1,77 @@
 // The fitd pipeline itself, as a layered flowchart with layout constraints.
 title "How fitd compiles a diagram"
-layout layered dir=down
-page 240x360mm margin=1cm
-font 7pt..40pt wrap=16em
-theme dark link=#FFD54F
+layout layered [dir=down]
+page 240x360mm [margin=1cm]
+font 7pt..40pt [wrap=16em]
+theme dark [link=#FFD54F]
 
-style stage color=#42A5F5
-style check color=#EF5350
-style io color=#26A69A shape=circle
+style stage [color=#42A5F5]
+style check [color=#EF5350]
+style io [color=#26A69A, shape=circle]
 
-io
-  src "Source : fitd"
-  | one statement per line
+with io {
+  src "Source : fitd" {
+    | one statement per line
+  }
   output "SVG, PNG, TikZ"
-stage
-  lex "Lexer"
-  | tokens with byte spans
-  | newlines delimit statements
-  parse "Parser"
-  | recursive descent
-  | skips a bad line, keeps going
-  sema "Semantic analysis"
-  | names, styles, units
-  | ordering cycles (E0008)
-  | two passes allow forward references
-  plan "Strategy"
-  | radial or layered candidates
-  | real font metrics determine box sizes
-  measure "Text measurement"
-  | font files are shared by layout and rendering
-  | wrapping changes node geometry
-  quality "Layout polish"
-  | annealing reduces crossings and edge clutter
-  | never violates a hard constraint
-csp "CSP search"
-| FC-CBJ, binary search on font
-| candidate positions satisfy hard constraints
-bnb "Branch and bound"
-| soft `prefer` constraints
-| compares layouts at the best readable font
-core "QuickXplain"
-| minimal unsat core (E0110)
-| isolates a conflicting subset of `require`s
-check
-  checker "Checker"
-  | recomputes every constraint
-  | overlap, crossings, clipping, and overflow
-  diagnostics "Diagnostics"
-  | source spans point to the failing statement
-  | explain CODE prints the long form
-  failure "Failure paths"
-  | parse errors are reported and skipped
-  | unsatisfiable requirements stop output
+}
+with stage {
+  lex "Lexer" {
+    | tokens with byte spans
+    | newlines delimit statements
+  }
+  parse "Parser" {
+    | recursive descent
+    | skips a bad line, keeps going
+  }
+  sema "Semantic analysis" {
+    | names, styles, units
+    | ordering cycles (E0008)
+    | two passes allow forward references
+  }
+  plan "Strategy" {
+    | radial or layered candidates
+    | real font metrics determine box sizes
+  }
+  measure "Text measurement" {
+    | font files are shared by layout and rendering
+    | wrapping changes node geometry
+  }
+  quality "Layout polish" {
+    | annealing reduces crossings and edge clutter
+    | never violates a hard constraint
+  }
+}
+csp "CSP search" {
+  | FC-CBJ, binary search on font
+  | candidate positions satisfy hard constraints
+}
+bnb "Branch and bound" {
+  | soft `prefer` constraints
+  | compares layouts at the best readable font
+}
+core "QuickXplain" {
+  | minimal unsat core (E0110)
+  | isolates a conflicting subset of `require`s
+}
+with check {
+  checker "Checker" {
+    | recomputes every constraint
+    | overlap, crossings, clipping, and overflow
+  }
+  diagnostics "Diagnostics" {
+    | source spans point to the failing statement
+    | explain CODE prints the long form
+  }
+  failure "Failure paths" {
+    | parse errors are reported and skipped
+    | unsatisfiable requirements stop output
+  }
   failure ..> diagnostics "reported"
-emit "Emitter"
-| absolute positions; no downstream reflow
+}
+emit "Emitter" {
+  | absolute positions; no downstream reflow
+}
 
 src -> lex -> parse -> sema -> plan -> measure -> quality
 plan -> csp -> bnb, core
@@ -63,10 +80,10 @@ bnb -> checker -> diagnostics -> emit -> output
 core ..> sema "points back at source"
 
 group "Front end" lex, parse, sema
-group "Solver" csp, bnb, core color=#AB47BC
+group "Solver" csp, bnb, core [color=#AB47BC]
 
-require bnb left-of core gap=2em
+require bnb left-of core [gap=2em]
 require align row(bnb, core)
-prefer checker near bnb weight=2
+prefer checker near bnb [weight=2]
 prefer emit at bottom-right
-prefer diagnostics near checker within=14em weight=2
+prefer diagnostics near checker [within=14em, weight=2]

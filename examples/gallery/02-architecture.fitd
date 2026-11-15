@@ -1,17 +1,20 @@
 // Architecture / block diagram (Nickerson: 212 of 983, the largest genre; DocFigure block diagram).
 include "arch"
-layout layered dir=right
+layout layered [dir=right]
 page 16:9
+
 arch.client web "Web app"
-arch.service
+arch.service {
   api API
   work Worker
+}
 arch.queue q Jobs
 arch.store db Postgres
 arch.ext pay Stripe
 web -> api -> q -> work
 api -> db
 work -> db, pay
-arch.zone
+with arch.zone {
   group "Cloud" api, q, work, db
+}
 arch.key

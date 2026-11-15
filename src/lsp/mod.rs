@@ -584,26 +584,26 @@ mod tests {
 
     #[test]
     fn positions_count_utf16_units() {
-        let text = "node a \"⟨𝔾⟩\"\nnode b\n";
+        let text = "a \"⟨𝔾⟩\"\nb\n";
         let off = text.find('⟩').unwrap();
         let p = position(text, off);
-        assert_eq!(p, json!({ "line": 0, "character": 11 }));
+        assert_eq!(p, json!({ "line": 0, "character": 6 }));
         assert_eq!(offset(text, &p), off);
         assert_eq!(
-            offset(text, &json!({ "line": 1, "character": 5 })),
+            offset(text, &json!({ "line": 1, "character": 0 })),
             text.find("b\n").unwrap()
         );
     }
 
     #[test]
     fn definitions_and_completions_follow_names() {
-        let text = "style hot color=#C62828\nhot\n  node a\nnode b\na -> b\nrequire a left-of \n";
+        let text = "style hot [color=#C62828]\nwith hot {\n  a\n}\nb\na -> b\nrequire a left-of \n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str, k: usize| position(text, text.match_indices(s).nth(k).unwrap().0);
         assert_eq!(
             features::definition(&d, &at("b", 1))["range"]["start"],
-            json!({ "line": 3, "character": 5 })
+            json!({ "line": 4, "character": 0 })
         );
         assert_eq!(
             features::definition(&d, &at("hot", 1))["range"]["start"],
@@ -619,7 +619,7 @@ mod tests {
         assert!(
             labels(features::completion(
                 &d,
-                &json!({ "line": 1, "character": 0 }),
+                &json!({ "line": 1, "character": 5 }),
                 false
             ))
             .contains(&"hot".to_string())
@@ -648,12 +648,12 @@ mod tests {
         std::fs::create_dir_all(dir.join("parts")).unwrap();
         std::fs::write(
             dir.join("parts/more.fitd"),
-            "style hot color=#EF5350\nhot\n  far \"Far\"\nfar -> ghost\n",
+            "style hot [color=#EF5350]\nwith hot {\n  far \"Far\"\n}\nfar -> ghost\n",
         )
         .unwrap();
         let main = dir.join("main.fitd");
         let path = main.to_str().unwrap();
-        let text = "include \"parts/more.fitd\"\nnode a \"A\"\na -> far\n";
+        let text = "include \"parts/more.fitd\"\n\na \"A\"\na -> far\n";
         let none = |_: &str| None;
         let d = doc("file:///main", path, text, &none);
         let def = features::definition(&d, &position(text, text.rfind("far").unwrap()));
@@ -683,7 +683,7 @@ mod tests {
         assert!(
             inc.len() == 1
                 && inc[0]["code"] == "E0001"
-                && inc[0]["range"]["start"] == json!({ "line": 3, "character": 7 }),
+                && inc[0]["range"]["start"] == json!({ "line": 4, "character": 7 }),
             "{inc:?}"
         );
     }
@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn modern_requests_answer() {
-        let text = "style hot color=#C62828\n// Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nhot\n  node a \"A\"\nnode b\na -> b\npair c d\n";
+        let text = "style hot [color=#C62828]\n// Pair two nodes.\ndef pair(x, y) {\n  node ${x}\n  node ${y}\n}\nwith hot {\n  a \"A\"\n}\nb\na -> b\npair c d\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str| position(text, text.rfind(s).unwrap());
@@ -739,7 +739,7 @@ mod tests {
             h["contents"]["value"]
                 .as_str()
                 .unwrap()
-                .contains("style hot color=#C62828")
+                .contains("style hot [color=#C62828]")
         );
         let h = features::hover(&d, &at("pair"), &[]);
         assert!(
@@ -758,19 +758,19 @@ mod tests {
         let r = features::rename(&d, &at("b\n"), "bee").unwrap();
         assert_eq!(r["changes"]["file:///x.fitd"].as_array().unwrap().len(), 2);
         assert!(features::rename(&d, &at("b\n"), "1x").is_err());
-        let sig = features::signature_help(&d, &json!({ "line": 10, "character": 6 }));
+        let sig = features::signature_help(&d, &json!({ "line": 11, "character": 6 }));
         assert_eq!(sig["signatures"][0]["label"], "pair x y");
         assert_eq!(sig["activeParameter"], 0);
         let hints = features::inlay_hints(
             &d,
-            &json!({ "range": { "start": { "line": 0 }, "end": { "line": 11 } } }),
+            &json!({ "range": { "start": { "line": 0 }, "end": { "line": 12 } } }),
         );
         assert_eq!(hints[1]["label"], "y:");
         assert_eq!(
             features::folds(text)[0],
-            json!({ "startLine": 2, "endLine": 5 })
+            json!({ "startLine": 2, "endLine": 4 })
         );
-        assert_eq!(features::colors(text)[0]["range"]["start"]["character"], 16);
+        assert_eq!(features::colors(text)[0]["range"]["start"]["character"], 17);
         let syms = features::symbols(&d);
         let names: Vec<&str> = syms
             .as_array()
@@ -786,7 +786,7 @@ mod tests {
 
     #[test]
     fn module_classes_answer_by_qualified_name() {
-        let text = "style nn.block color=#CC79A7\nnn.block\n  a\n";
+        let text = "style nn.block [color=#CC79A7]\nwith nn.block {\n  a\n}\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = position(text, text.find("nn.block").unwrap() + 3);
@@ -798,19 +798,19 @@ mod tests {
 
     #[test]
     fn style_blocks_answer_like_classes() {
-        let text = "style step color=#0072B2\nstyle nn.block color=#CC79A7\nstep\n  a \"A\"\n  | body\n  nn.block\n    e\n  b \n\n";
+        let text = "style step [color=#0072B2]\nstyle nn.block [color=#CC79A7]\nwith step {\n  a \"A\" {\n    | body\n  }\n  with nn.block {\n    e\n  }\n  b [\n}\nwith \n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str| position(text, text.find(s).unwrap() + 1);
         assert_eq!(
-            features::definition(&d, &at("step\n"))["range"]["start"],
+            features::definition(&d, &at("step {"))["range"]["start"],
             json!({ "line": 0, "character": 6 })
         );
         assert_eq!(
-            features::definition(&d, &at("nn.block\n"))["range"]["start"],
+            features::definition(&d, &at("nn.block {"))["range"]["start"],
             json!({ "line": 1, "character": 6 })
         );
-        let h = features::hover(&d, &at("step\n"), &[]);
+        let h = features::hover(&d, &at("step {"), &[]);
         assert!(
             h["contents"]["value"]
                 .as_str()
@@ -826,14 +826,14 @@ mod tests {
                 .map(|v| v["label"].as_str().unwrap().to_string())
                 .collect()
         };
-        let start = labels(8, 0);
+        let start = labels(11, 5);
         assert!(
             start.iter().any(|l| l == "step") && start.iter().any(|l| l == "nn.block"),
             "{start:?}"
         );
-        assert!(labels(7, 4).iter().any(|l| l == "color"));
+        assert!(labels(9, 5).iter().any(|l| l == "color"));
         let folds = features::folds(text);
-        for (lo, hi) in [(3, 4), (5, 6), (2, 7)] {
+        for (lo, hi) in [(3, 4), (6, 7), (2, 9)] {
             assert!(
                 folds
                     .as_array()
@@ -871,9 +871,9 @@ mod tests {
             labels.contains(&"input") && labels.contains(&"layer"),
             "{labels:?}"
         );
-        let rows = "include \"nn\"\nnn.layer\n  e Enc d 2\nnn.step s Pool\n";
+        let rows = "include \"nn\"\nnn.layer {\n  e Enc d 2\n}\nnn.step s Pool\n";
         let d = doc("file:///r.fitd", "/r.fitd", rows, &none);
-        for line in [1, 3] {
+        for line in [1, 4] {
             let h = features::hover(&d, &json!({ "line": line, "character": 4 }), &[]);
             assert!(
                 h["contents"]["value"].as_str().unwrap().contains("nn."),

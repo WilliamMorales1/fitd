@@ -20,61 +20,67 @@ pub const KEYWORDS: &[Keyword] = &[
     (
         "layout",
         "layout ${1|layered,radial|}",
-        "layout NAME [attributes]",
+        "layout NAME [[k=v, ...]]",
         "Selects the layout algorithm: `layered` (flows; `dir`, `bands`, `order`) or `radial` (mind maps; `root`).",
     ),
     (
         "page",
         "page ${1|a4,a3,a2,a1,a0,16:9,4:3,1:1|} ${2|landscape,portrait|}",
-        "page SIZE [portrait|landscape] [margin=LEN] [keysize=LEN]",
+        "page SIZE [portrait|landscape] [[margin=LEN, keysize=LEN]]",
         "Selects page size and orientation. Sizes are `a0`..`a4`, `WIDTHxHEIGHT` with a unit such as `297x210mm`, or a ratio `W:H` such as `16:9`, which picks the smallest page of that shape that fits at the font floor.",
     ),
     (
         "font",
         "font ${1:9pt..28pt}",
-        "font SIZE|LO..HI [wrap=EM] [family=\"NAME\"]",
+        "font SIZE|LO..HI [[wrap=EM, family=\"NAME\"]]",
         "Sets the body font size, or the range the solver may search. Units: `pt`, `mm`, `cm`, `in`, `em`.",
     ),
     (
         "theme",
         "theme ${1|paper,light,dark,mono|}",
-        "theme [paper|light|dark|mono] [attributes]",
+        "theme [paper|light|dark|mono] [[k=v, ...]]",
         "Selects a color preset (default `paper`) and overrides single colors: `background`, `gradient`, `text`, `edge`, `link`, `label`, `root`, `palette`.",
     ),
     (
         "style",
-        "style ${1:name} color=#$2",
-        "style NAME attributes",
-        "Declares a reusable class. A line holding only NAME (or `nn.block`) opens a block: nodes, edges, groups, and keys indented under it take it, and node lines may drop `node`. Nested blocks apply outer first.",
+        "style ${1:name} [color=#$2]",
+        "style NAME [k=v, ...]",
+        "Declares a reusable class. Apply it to a block with `with NAME { ... }`.",
+    ),
+    (
+        "with",
+        "with ${1:name} {\n  $0\n}",
+        "with STYLE { ... }",
+        "Applies a style to the nodes, edges, groups, and keys inside the braces. Nested blocks apply outer first.",
     ),
     (
         "node",
         "node ${1:id} \"$2\"",
-        "node ID [\"TITLE\"] [attributes]",
-        "Declares a node. Without a title the id is shown. Follow with `| text` body lines, `~ cells` figure rows, or `~ image \"plot.png\" width=10em`.",
+        "[node] ID [\"TITLE\"] [[k=v, ...]] [{ ... }]",
+        "Declares a node; `node` is needed only when ID is a keyword. Without a title the id is shown. Braces hold `| text` body lines, `~ [a, b]` figure rows, `~ image \"plot.png\" [width=10em]`, and nested lines; `ID { ... }` reopens a node.",
     ),
     (
         "group",
         "group \"$1\" $2",
-        "group [\"TITLE\"] ID, ID... [color=] [times=N]",
+        "group [\"TITLE\"] ID, ID... [[color=, times=N]]",
         "Frames the listed nodes. To nest, list inner members in the outer group too. `times=N` marks a repeated stack.",
     ),
     (
         "key",
         "key \"$1\" $2",
-        "key \"LABEL\" [attributes]",
+        "key \"LABEL\" [[k=v, ...]]",
         "Adds a legend entry along the bottom of the page. `line=solid|dashed` draws an edge swatch.",
     ),
     (
         "require",
         "require ${1:a} ${2|left-of,right-of,above,below,near|} ${3:b}",
-        "require RELATION [gap=LEN] [within=LEN]",
+        "require RELATION [[gap=LEN, within=LEN]]",
         "Hard constraint: output fails if it cannot hold. Relations: `a left-of b`, `a at top`, `align row(a, b)`.",
     ),
     (
         "prefer",
         "prefer ${1:a} ${2|left-of,right-of,above,below,near|} ${3:b}",
-        "prefer RELATION [weight=N] [gap=LEN] [within=LEN]",
+        "prefer RELATION [[weight=N, gap=LEN, within=LEN]]",
         "Soft constraint, traded off by `weight`. An unmet preference gives W0205.",
     ),
     (
@@ -85,33 +91,32 @@ pub const KEYWORDS: &[Keyword] = &[
     ),
     (
         "for",
-        "for ${1:i} in ${2:1..3}\n\t$0\nend",
-        "for VAR in LO..HI | for VAR in a, b | for I, VAR in a, b",
-        "Repeats the block once per value, ending at `end`. Use `${VAR}` to interpolate.",
+        "for ${1:i} in ${2:1..3} {\n  $0\n}",
+        "for VAR in LO..HI { ... } | for VAR in a, b { ... } | for I, VAR in a, b { ... }",
+        "Repeats the block once per value. Use `${VAR}` to interpolate.",
     ),
     (
         "if",
-        "if ${1:cond}\n\t$0\nend",
-        "if EXPR ... [else if EXPR ...] [else ...] end",
+        "if ${1:cond} {\n  $0\n}",
+        "if EXPR { ... } [else if EXPR { ... }] [else { ... }]",
         "Keeps the first block whose condition is true. Zero and the empty string are false.",
     ),
     (
         "else",
-        "else",
-        "else | else if EXPR",
-        "Starts the fallback branch of an `if`.",
+        "} else {\n  $0\n}",
+        "} else { ... } | } else if EXPR { ... }",
+        "Starts the fallback branch of an `if`, on the line that closes the previous branch.",
     ),
-    ("end", "end", "end", "Closes a `for`, `if`, or `def` block."),
     (
         "def",
-        "def ${1:name}(${2:id})\n\t$0\nend",
-        "def NAME(PARAM, ...) ... end",
-        "Defines a template at top level. A `#` comment just above becomes its documentation.",
+        "def ${1:name}(${2:id}) {\n  $0\n}",
+        "def NAME(PARAM, ...) { ... }",
+        "Defines a template at top level. A `//` comment just above becomes its documentation.",
     ),
 ];
 
 /// MACRO_WORDS are the keywords that only the macro stage reads.
-pub const MACRO_WORDS: &[&str] = &["for", "if", "else", "end", "def"];
+pub const MACRO_WORDS: &[&str] = &["for", "if", "else", "def"];
 
 pub use crate::attrs::{Attr, attr, attrs};
 

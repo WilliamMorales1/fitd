@@ -2,13 +2,16 @@
 include "tree"
 layout layered
 page 4:3
-tree.q
+
+tree.q {
   out Outlook?
   hum Humidity?
-tree.leaf
+}
+tree.leaf {
   y1 Play
   n1 "Stay in"
   y2 Play
+}
 out -> hum "sunny"
 out -> y2 "overcast"
 hum -> n1 "high"

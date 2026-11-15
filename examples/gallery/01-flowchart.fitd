@@ -2,14 +2,19 @@
 include "flow"
 layout layered
 page 3:4
-flow.io
+
+with flow.io {
   req "Request"
-flow.decide
+}
+with flow.decide {
   auth "Signed in?"
-flow.step
+}
+with flow.step {
   login "Log in"
-flow.done
+}
+with flow.done {
   serve "Serve page"
+}
 req -> auth -> serve "yes"
 auth -> login "no" -> serve
 flow.key

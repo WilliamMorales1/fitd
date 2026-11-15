@@ -1,6 +1,8 @@
 layout layered
 page a4
-node a "Alpha"
-node b "Beta"
-| Linear B 𐀀 sign
+
+a "Alpha"
+b "Beta" {
+  | Linear B 𐀀 sign
+}
 a -> b

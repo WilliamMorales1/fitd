@@ -1,7 +1,8 @@
 use diag::{Diag, Level};
 use error::FitdResult;
 use fitd::{
-    attrs, check, compile, diag, emit, error, fix, fmt, geom, import, layout, lsp, metrics, split, stdlib,
+    attrs, check, compile, diag, emit, error, fix, fmt, geom, import, layout, lsp, metrics, split,
+    stdlib,
 };
 use geom::Rect;
 use std::process::ExitCode;
@@ -56,7 +57,9 @@ fn run(args: &[String]) -> FitdResult<ExitCode> {
                     }
                     fix::fix(path, &text)
                 } else if fmt::old(&text) {
-                    return Err(format!("{path}: indentation syntax; run `fitd fix {path}` first").into());
+                    return Err(
+                        format!("{path}: indentation syntax; run `fitd fix {path}` first").into(),
+                    );
                 } else {
                     fmt::fmt(&text)
                 };

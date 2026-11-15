@@ -1,55 +1,62 @@
 // System architecture and data-flow diagrams: clients, services, stores, queues, outside systems.
-style arch.client color=#56B4E9 shape=box
-style arch.service color=#0072B2 shape=box
-style arch.store color=#009E73 shape=box
-style arch.queue color=#E69F00 shape=box
-style arch.ext color=#888888 shape=box
-style arch.zone color=#888888
+style arch.client [color=#56B4E9, shape=box]
+style arch.service [color=#0072B2, shape=box]
+style arch.store [color=#009E73, shape=box]
+style arch.queue [color=#E69F00, shape=box]
+style arch.ext [color=#888888, shape=box]
+style arch.zone [color=#888888]
 
 // arch.client id name: a user-facing client.
-def client(id, name)
-arch.client
-  node ${id} "${name}"
-end
+def client(id, name) {
+  with arch.client {
+    node ${id} "${name}"
+  }
+}
 
 // arch.service id name: a service or process.
-def service(id, name)
-arch.service
-  node ${id} "${name}"
-end
+def service(id, name) {
+  with arch.service {
+    node ${id} "${name}"
+  }
+}
 
 // arch.store id name: a database, cache, or file store.
-def store(id, name)
-arch.store
-  node ${id} "${name}"
-end
+def store(id, name) {
+  with arch.store {
+    node ${id} "${name}"
+  }
+}
 
 // arch.queue id name: a queue, topic, or stream.
-def queue(id, name)
-arch.queue
-  node ${id} "${name}"
-end
+def queue(id, name) {
+  with arch.queue {
+    node ${id} "${name}"
+  }
+}
 
 // arch.ext id name: a system outside the boundary.
-def ext(id, name)
-arch.ext
-  node ${id} "${name}"
-end
+def ext(id, name) {
+  with arch.ext {
+    node ${id} "${name}"
+  }
+}
 
 // arch.layers id title names: a layer stack, top layer first, names split on `;`.
-def layers(id, title, names)
-arch.service
-  node ${id} "${title}"
-for i in 1..count(names, ";")
-~ %100"${part(names, ";", i)}"*4
-end
-end
+def layers(id, title, names) {
+  with arch.service {
+    node ${id} "${title}" {
+      for i in 1..count(names, ";") {
+        ~ [%100"${part(names, ";", i)}"*4]
+      }
+    }
+  }
+}
 
 // arch.key: a legend for the element kinds.
-def key()
-key "client" color=#56B4E9
-key "service" color=#0072B2
-key "store" color=#009E73
-key "queue" color=#E69F00
-key "external" color=#888888
-end
+def key() {
+  key "client" [color=#56B4E9]
+  key "service" [color=#0072B2]
+  key "store" [color=#009E73]
+  key "queue" [color=#E69F00]
+  key "external" [color=#888888]
+}

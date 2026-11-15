@@ -317,23 +317,21 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
         out: Index::default(),
         path: path.to_string(),
     };
-    let mut last: Option<(Kind, String)> = None;
     for st in &stmts {
         let k = &st.kind;
-        let bare = matches!(k, StmtKind::Node { .. }) && !b.text(st.span).starts_with("node");
-        if !bare
-            && !matches!(
-                k,
-                StmtKind::Body(_) | StmtKind::Cells(_) | StmtKind::Edge { .. } | StmtKind::Open(_)
-            )
-        {
+        let keyword = match k {
+            StmtKind::Node { .. } => b.text(st.span).starts_with("node"),
+            StmtKind::Body { .. } | StmtKind::Row { .. } | StmtKind::Edge { .. } => false,
+            _ => true,
+        };
+        if keyword {
             b.keyword(st.span);
         }
         match k {
-            StmtKind::Body(_) | StmtKind::Cells(_) => {
+            StmtKind::Body { owner, .. } | StmtKind::Row { owner, .. } => {
                 let line = b.text(st.span);
-                if let Some((Kind::Node, n)) = &last
-                    && let Some(i) = b.out.nodes.get_mut(n)
+                if let Some(o) = owner
+                    && let Some(i) = b.out.nodes.get_mut(&o.text)
                 {
                     i.text.push(line);
                 }
@@ -386,7 +384,6 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
                     .collect::<Vec<_>>()
                     .join(" ");
                 b.symbol(name.text.clone(), detail, 5, st.span, name.span);
-                last = Some((Kind::Style, name.text.clone()));
                 continue;
             }
             StmtKind::Node {
@@ -412,7 +409,6 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
                 }
                 let detail = title.as_ref().map_or(String::new(), |t| t.0.clone());
                 b.symbol(id.text.clone(), detail, 19, st.span, id.span);
-                last = fresh.then(|| (Kind::Node, id.text.clone()));
                 continue;
             }
             StmtKind::Key {
@@ -490,7 +486,6 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
                 }
             }
         }
-        last = None;
     }
     macro_lines(&mut b, path, text);
     let mut out = b.out;

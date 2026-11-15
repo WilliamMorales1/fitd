@@ -3,25 +3,30 @@ include "arch"
 include "time"
 include "flow"
 title "Checkout outage, 14 Nov"
-layout layered dir=right
+layout layered [dir=right]
 page 16:9
 font 8pt..24pt
+
 arch.client web "Web app"
 arch.service api API
 arch.store db Postgres
 arch.queue q Jobs
-time.event
+time.event {
   t1 14:02 deploy
   t2 14:09 errors
+}
 time.mile t3 14:31 rollback
-flow.decide
+with flow.decide {
   d "Schema change?"
-flow.step
+}
+with flow.step {
   fix "Revert migration"
+}
 web -> api -> db
 api -> q
 db ..> t2
 t1 -> t2 -> d "yes"
 d -> fix -> t3
-arch.zone
+with arch.zone {
   group "System" web, api, db, q
+}

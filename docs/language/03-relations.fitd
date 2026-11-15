@@ -1,41 +1,54 @@
 title "Relations: predicates on final boxes (y points up)"
-page 320x180mm margin=1cm
+page 320x180mm [margin=1cm]
+
 root rel
 
-style ord color=#0969DA
-style al color=#8250DF
-style kind color=#CF222E
+style ord [color=#0969DA]
+style al [color=#8250DF]
+style kind [color=#CF222E]
 
 rel "REL"
 
-ord
-  leftof "a left-of b gap=1em"
-  | a.right + gap <= b.left
-  | right-of swaps
-  above "a above b gap=1em"
-  | a.bottom >= b.top + gap
-  | below swaps
-  near "a near b within=4em"
-  | the space between the boxes is at most within
-  at "a at top-left|top|...|bottom-right|center"
-  | a's center lies in that third of the page
-al
-  align "align top|bottom|left|right(a, b, ...)"
-  | that edge is shared, within the grid tolerance
-  rowcol "align row(...) / column(...)"
-  | centers share y / x
-chain "Chains"
-| a left-of b left-of c means a left-of b and b left-of c
-| steps may mix: a above b near c
-| attributes apply to every step
-| each step is its own constraint, so diagnostics point at the failing one
+with ord {
+  leftof "a left-of b gap=1em" {
+    | a.right + gap <= b.left
+    | right-of swaps
+  }
+  above "a above b gap=1em" {
+    | a.bottom >= b.top + gap
+    | below swaps
+  }
+  near "a near b within=4em" {
+    | the space between the boxes is at most within
+  }
+  at "a at top-left|top|...|bottom-right|center" {
+    | a's center lies in that third of the page
+  }
+}
+with al {
+  align "align top|bottom|left|right(a, b, ...)" {
+    | that edge is shared, within the grid tolerance
+  }
+  rowcol "align row(...) / column(...)" {
+    | centers share y / x
+  }
+}
+chain "Chains" {
+  | a left-of b left-of c means a left-of b and b left-of c
+  | steps may mix: a above b near c
+  | attributes apply to every step
+  | each step is its own constraint, so diagnostics point at the failing one
+}
 
-kind
-  req "require"
-  | hard; satisfiable means on the strategy's grid of candidate positions,
-  | so a set may fail on the grid although a hand-placed layout meets it
-  pref "prefer weight=N"
-  | soft; unmet total weight minimized after the font is fixed: W0205
+with kind {
+  req "require" {
+    | hard; satisfiable means on the strategy's grid of candidate positions,
+    | so a set may fail on the grid although a hand-placed layout meets it
+  }
+  pref "prefer weight=N" {
+    | soft; unmet total weight minimized after the font is fixed: W0205
+  }
+}
 
 rel -> leftof, above, near, at, align, rowcol, chain, req, pref
 chain ..> leftof

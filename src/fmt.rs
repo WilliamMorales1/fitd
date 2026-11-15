@@ -313,7 +313,11 @@ fn join(text: &str) -> Vec<String> {
 
 /// hoist moves top-level header statements, with the comments directly above them, under the file's opening comments.
 fn hoist(lines: Vec<(usize, String)>) -> Vec<(usize, String)> {
-    let rank = |s: &str| HEADER.iter().position(|h| head(s) == *h && s.len() > h.len());
+    let rank = |s: &str| {
+        HEADER
+            .iter()
+            .position(|h| head(s) == *h && s.len() > h.len())
+    };
     let lead = lines
         .iter()
         .position(|(_, s)| !s.starts_with("//"))
@@ -325,7 +329,10 @@ fn hoist(lines: Vec<(usize, String)>) -> Vec<(usize, String)> {
         match rank(s) {
             Some(r) if *d == 0 => {
                 let mut notes = Vec::new();
-                while body.last().is_some_and(|(d, s)| *d == 0 && s.starts_with("//")) {
+                while body
+                    .last()
+                    .is_some_and(|(d, s)| *d == 0 && s.starts_with("//"))
+                {
                     notes.insert(0, body.pop().unwrap());
                 }
                 notes.push((0, s.clone()));
@@ -389,7 +396,10 @@ mod tests {
         assert!(out.starts_with("~ [\n  \"a"));
         assert!(out.ends_with("label\"\n]\n"));
         assert_eq!(fmt(&out), out);
-        assert_eq!(fmt(&format!("page 4:3\n{out}")), format!("page 4:3\n\n{out}"));
+        assert_eq!(
+            fmt(&format!("page 4:3\n{out}")),
+            format!("page 4:3\n\n{out}")
+        );
     }
 
     #[test]

@@ -1,12 +1,14 @@
 // Data-flow diagram (Nickerson: flow, 80 of 983).
 include "arch"
-layout layered dir=right
+layout layered [dir=right]
 page 3:1
+
 arch.ext sensor Sensors
-arch.service
+arch.service {
   clean Clean
   feat Featurize
   train Train
+}
 arch.store lake "Data lake"
 arch.client dash Dashboard
 sensor -> clean "raw" -> lake -> feat -> train -> dash "metrics"

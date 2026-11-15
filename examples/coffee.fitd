@@ -1,59 +1,77 @@
 // From cherry to cup: a radial map whose center fitd picks, colored by a custom palette.
 title "Coffee"
 page 280x190mm
-font 9pt..32pt wrap=15em
-theme palette="#6D4C41 #2E7D32 #EF6C00 #1565C0 #AD1457"
+font 9pt..32pt [wrap=15em]
+theme [palette="#6D4C41 #2E7D32 #EF6C00 #1565C0 #AD1457"]
 
-style method shape=box
-style hub color=#3E2723 fill=#3E2723 text=#FFE0B2
+style method [shape=box]
+style hub [color=#3E2723, fill=#3E2723, text=#FFE0B2]
 
-hub
-  coffee "Coffee"
-  | seed of the Coffea cherry
-coffee
-  farm "Growing"
-  | arabica above 1000 m
-  | robusta lower, hardier
-    altitude "Altitude"
-    | slower ripening, denser beans
-    cherry "Harvest"
-    | hand-picked or stripped
-  process "Processing"
-    washed "Washed"
-    | fruit removed before drying
-    | clean, bright acidity
-    natural "Natural"
-    | dried whole in the fruit
-    | heavy body, fruity notes
-  roast "Roasting"
-  | Maillard reactions, then caramelization
-    light "Light roast"
-    | origin flavors, more acidity
-    dark "Dark roast"
-    | roast flavors, more bitterness
-  brew "Brewing"
-  | extraction: 18-22% of the dose
-    method
-      espresso "Espresso"
-      | 9 bar, 25-30 s
-      filter "Pour-over"
-      | paper filter, 3-4 min
-      press "French press"
-      | full immersion, metal mesh
-  taste "Tasting"
+with hub {
+  coffee "Coffee" {
+    | seed of the Coffea cherry
+  }
+}
+coffee {
+  farm "Growing" {
+    | arabica above 1000 m
+    | robusta lower, hardier
+    altitude "Altitude" {
+      | slower ripening, denser beans
+    }
+    cherry "Harvest" {
+      | hand-picked or stripped
+    }
+  }
+  process "Processing" {
+    washed "Washed" {
+      | fruit removed before drying
+      | clean, bright acidity
+    }
+    natural "Natural" {
+      | dried whole in the fruit
+      | heavy body, fruity notes
+    }
+  }
+  roast "Roasting" {
+    | Maillard reactions, then caramelization
+    light "Light roast" {
+      | origin flavors, more acidity
+    }
+    dark "Dark roast" {
+      | roast flavors, more bitterness
+    }
+  }
+  brew "Brewing" {
+    | extraction: 18-22% of the dose
+    with method {
+      espresso "Espresso" {
+        | 9 bar, 25-30 s
+      }
+      filter "Pour-over" {
+        | paper filter, 3-4 min
+      }
+      press "French press" {
+        | full immersion, metal mesh
+      }
+    }
+  }
+  taste "Tasting" {
     acidity "Acidity"
     body "Body"
     sweet "Sweetness"
+  }
+}
 
 altitude .. acidity "denser beans, brighter cup"
 washed .. acidity
 natural .. body
 dark .. body "oils on the surface"
-espresso ..> body color=#AD1457
+espresso ..> body [color=#AD1457]
 
-group "Methods" espresso, filter, press color=#1565C0
+group "Methods" espresso, filter, press [color=#1565C0]
 
 // Hard placements in a radial map cost search; preferences keep it fast.
-prefer taste at right weight=3
+prefer taste at right [weight=3]
 prefer light left-of dark
 prefer align row(washed, natural)

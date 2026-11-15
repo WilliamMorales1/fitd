@@ -14,50 +14,50 @@ Grammar uses Extended Backus-Naur Form (EBNF). Terminals appear in double quotes
 
 ## Source representation
 
-A newline terminates a statement. End-of-file terminates final statement, if present. Blank lines and lines containing only comments are ignored. Statements do not continue across physical lines.
+A newline terminates a statement. End-of-file terminates final statement, if present. Blank lines and lines containing only comments are ignored. A statement continues onto the next line only inside `[...]` or `(...)`, so a long attribute list may wrap.
 
-`//` begins a comment that runs to the end of the line. `#` only begins a color token, written immediately after `=`. A line whose first non-whitespace character is `|` is a body line, and a line whose first non-whitespace character is `~` is a figure row; `//` has no comment meaning within either. Body lines and figure rows are associated with most recently declared node.
+`//` begins a comment that runs to the end of the line. `#` only begins a color token, written immediately after `=`. A line whose first non-whitespace character is `|` is a body line, and a line whose first non-whitespace character is `~` is a figure row; `//` has no comment meaning within either. Body lines and figure rows belong to the node whose braces hold them.
 
-Includes are expanded before macro processing. Included paths are resolved relative to including file. Diagnostics retain source locations through both preprocessing stages where available. A parser error is recovered at next line, allowing subsequent statements to be checked.
+Includes are expanded before macro processing. Included paths are resolved relative to including file. Diagnostics retain source locations through both preprocessing stages where available. A parser error is recovered at the next line or `}`, allowing subsequent statements to be checked. Indentation carries no meaning; `fitd fmt` indents each block by two spaces.
 
 ## Grammar
 
 ```ebnf
-Source          = { Newline | Statement, Newline } ;
+Source          = { Newline | Statement, Newline | "}", Newline } ;
 
 Statement       = Title | Root | Layout | Page | Font | Theme | Style
                 | Node | Body | Cells | Edge | Group | Key | Constraint | Include
-                | StyleBlock | NodeBlock ;
+                | With ;
 
 Title           = "title", String ;
 Root            = "root", Name ;
-Layout          = "layout", Name, { Attribute } ;
-Page            = "page", Value, { Name }, { Attribute } ;
-Font            = "font", Value, { Attribute } ;
-Theme           = "theme", [ Name ], { Attribute } ;
-Style           = "style", Name, { Attribute } ;
-StyleBlock      = QualName, Newline, Indent, { Statement, Newline }, Dedent ;
-Node            = [ "node" ], Name, [ String ], { Attribute } ;
-NodeBlock       = ( Node | Name ), Newline, Indent, { Statement | ScopedEdge, Newline }, Dedent ;
-ScopedEdge      = EdgeHop, { EdgeHop }, { Attribute } ;
+Layout          = "layout", Name, [ Attributes ] ;
+Page            = "page", Value, { Name }, [ Attributes ] ;
+Font            = "font", Value, [ Attributes ] ;
+Theme           = "theme", [ Name ], [ Attributes ] ;
+Style           = "style", QualName, [ Attributes ] ;
+With            = "with", QualName, [ "{" ] ;
+Node            = [ "node" ], Name, [ String ], [ Attributes ], [ "{" ] ;
 Body            = BodyLine ;
-Cells           = CellRow ;
-Group           = "group", [ [ Name ], String ], NameList, { Attribute } ;
-Key             = "key", String, { Attribute } ;
+Cells           = "~", ( CellList | "image", String, [ Attributes ] ) ;
+CellList        = "[", Cell, { ",", Cell }, "]" ;
+Group           = "group", [ [ Name ], String ], NameList, [ Attributes ] ;
+Key             = "key", String, [ Attributes ] ;
 Include         = "include", String ;
 
-Edge            = Name, EdgeHop, { EdgeHop }, { Attribute } ;
+Edge            = [ NameList ], EdgeHop, { EdgeHop }, [ Attributes ] ;
 EdgeHop         = EdgeOperator, TargetList, [ String ] ;
 EdgeOperator    = "->" | "--" | "..>" | ".." ;
 TargetList      = Name, { [ "," ], Name } ;
 NameList        = Name, { [ "," ], Name } ;
 
-Constraint      = ( "require" | "prefer" ), Relation, { Attribute } ;
+Constraint      = ( "require" | "prefer" ), Relation, [ Attributes ] ;
 Relation        = RelationChain | Alignment | Position ;
 RelationChain   = Name, Name, Name, { Name, Name } ;
 Alignment       = "align", Name, "(", NameList, ")" ;
 Position        = Name, "at", Name ;
 
+Attributes      = "[", [ Attribute, { ",", Attribute } ], "]" ;
 Attribute       = Name, "=", Value ;
 Value           = Atom, [ "..", Atom ] ;
 Atom            = Name | Number | Color | String ;
@@ -72,7 +72,7 @@ Color           = "#", HexDigit, { HexDigit } ;
 String          = '"', { StringCharacter | Escape }, '"' ;
 Escape          = "\\", ? any non-newline character ? ;
 BodyLine        = ? "|" at first non-whitespace position, then line contents ? ;
-CellRow         = ? "~" at first non-whitespace position, then cell tokens ? ;
+Cell            = ? text up to "," or "]"; see Figure rows ? ;
 Newline         = ? line ending or end-of-file ? ;
 
 IdentifierCharacter = ? Unicode alphanumeric character or "_" ? ;
@@ -81,6 +81,8 @@ AsciiLetter     = "A" … "Z" | "a" … "z" ;
 AsciiDigit      = "0" … "9" ;
 HexDigit        = AsciiDigit | "A" … "F" | "a" … "f" ;
 ```
+
+A node or `with` line that ends in `{` opens a block, and a line holding only `}` closes the innermost one. Statements inside a block take its scope, described under Node declarations and Style blocks. A `{` after any other statement, a `}` with no open block, and a `{` never closed are errors.
 
 `RelationChain` uses names for both node identifiers and relation operators. Valid operators are `left-of`, `right-of`, `above`, `below`, and `near`. Each operator relates adjacent nodes; for example, `a above b left-of c` specifies two relations. `Position` uses `at` followed by a supported position name.
 
@@ -98,44 +100,50 @@ Whitespace separates tokens. Spaces and tabs may appear between tokens. Whitespa
 
 ### Node declarations and body lines
 
-`ID ["title"] [attributes]` declares a node. When title is omitted, identifier is used as title. The `node` keyword is optional; it is needed only for an identifier that is also a statement keyword (`node font "Font"`) and for a lone untitled node outside any block (`node a`).
+`ID ["title"] [[attributes]]` declares a node. When title is omitted, identifier is used as title. The `node` keyword is optional; it is needed only for an identifier that is also a statement keyword (`node font "Font"`) and for an untitled node that should not reopen one declared earlier (`node a`).
 
-A node line indented under another node line is its child: the parent gets an edge to it, `--` in a radial layout (the default) and `->` in the others. A line that starts with an edge operator inside a node's scope is an edge from that node, so `-> b "yes"` under `a` means `a -> b "yes"`. A line holding only a declared node's identifier reopens it for more children and, when indented under another node, also links that node to it. Body and figure rows (`|`, `~`) never close a scope, and a style block indented under a node keeps the node's scope, so a whole branch can take a style:
+A node line ending in `{` opens the node's block. A node declared inside the block is its child: the parent gets an edge to it, `--` in a radial layout (the default) and `->` in the others. A line that starts with an edge operator inside a node's block is an edge from that node, so `-> b "yes"` inside `a { }` means `a -> b "yes"`. A line holding only a declared node's identifier reopens it (`a {` adds children to `a`) and, inside another node's block, also links that node to it. Body lines and figure rows inside the block describe the node. A `with` block inside a node keeps the node's scope, so a whole branch can take a style:
 
 ```fitd
-style method shape=box
-coffee "Coffee"
-  brew "Brewing"
-  | extraction: 18-22% of the dose
-    method
+style method [shape=box]
+coffee "Coffee" {
+  brew "Brewing" {
+    | extraction: 18-22% of the dose
+    with method {
       espresso "Espresso"
       -> crema "crema"
       filter "Pour-over"
+    }
+  }
   crema "Crema"
-coffee
+}
+coffee {
   roast "Roasting"
+}
 ```
 
-Only one hierarchy can follow indentation, so cross links, groups, and lanes stay explicit.
+Only one hierarchy can follow nesting, so cross links, groups, and lanes stay explicit.
 
-A line holding only a style name opens a style block. The lines indented deeper than it form the block, and the first line indented no deeper closes it (the off-side rule), so a block needs no `end`. Every node, edge, group, and key inside the block takes that style, so a style is written once for many lines. Module styles use qualified names: `nn.block` opens a block of that style. Blocks nest, and inner styles apply after outer ones. A lone name inside a block is a node unless it is a declared style, so a node and a style may share a name; a lone undeclared name outside any block is E0004. A block may hold `for`, `if`, and template calls, and may sit inside them. Macro bodies expand at the indent of their directive or call, so a template body opens and closes blocks relative to where it is used.
+`with STYLE {` opens a style block that ends at its `}`. Every node, edge, group, and key inside the block takes that style, so a style is written once for many lines. Module styles use qualified names: `with nn.block {`. Blocks nest, and inner styles apply after outer ones. A `with` naming an undeclared style is E0004. Because `with` marks the style, a node and a style may share a name. A block may hold `for`, `if`, and template calls, and may sit inside them.
 
-A body line begins with `|` in first non-whitespace position. It appends text to most recently declared node. Multiple body lines may follow one declaration. A body line without preceding node is invalid.
+A body line begins with `|` in first non-whitespace position. It appends text to the node whose block holds it. A node may hold many body lines. A body line outside any node block is invalid.
 
 Spaces after the one following `|` indent the line in box and frameless nodes, as in pseudocode; wrapped continuation lines keep that indent. In any node text, `**` toggles bold, so `**if** x **then**` sets the keywords in bold.
 
 ```fitd
-plant
-  leaf "Leaf" color=#2E7D32
-  | converts light into stored energy
+with plant {
+  leaf "Leaf" [color=#2E7D32] {
+    | converts light into stored energy
+  }
   root "Root"
+}
 ```
 
 ### Figure rows
 
-A figure row begins with `~` in first non-whitespace position. It appends one row of cells to most recently declared node. Consecutive rows form a grid drawn below the node's text, centered, using the node's accent color. A figure row without preceding node, or with no cells, is invalid.
+A figure row begins with `~` in first non-whitespace position. It appends one row of cells to the node whose block holds it. Consecutive rows form a grid drawn below the node's text, centered, using the node's accent color. A figure row outside any node block, or with no cells, is invalid.
 
-Cells are whitespace-separated. Each cell is `[SHADE][LABEL][*SPAN]`:
+Cells sit in brackets, separated by commas: `~ [%100, ., GLU]`. Each cell is `[SHADE][LABEL][*SPAN]`:
 
 | Cell                        | Meaning                                                      |
 | --------------------------- | ------------------------------------------------------------ |
@@ -151,22 +159,25 @@ A `*N` suffix is recognized only when digits end the cell, so a label such as `a
 Column width is the widest single-column cell in that column; a spanning cell that still does not fit widens the last column it covers. Row height is uniform. Rows need not have equal length. One primitive therefore covers sequence strips, attention masks and other heatmaps, tensor-shape bars, and unit-cell bar charts.
 
 ```fitd
-mask "Causal mask"
-~ %100 . . .
-~ %100 %100 . .
-~ %100 %100 %100 .
-~ %100 %100 %100 %100
+mask "Causal mask" {
+  ~ [%100, ., ., .]
+  ~ [%100, %100, ., .]
+  ~ [%100, %100, %100, .]
+  ~ [%100, %100, %100, %100]
+}
 
-bar "Attention weights"
-~ %90 %55 %20 %5
-~ %100"d_model = 64"*4
+bar "Attention weights" {
+  ~ [%90, %55, %20, %5]
+  ~ [%100"d_model = 64"*4]
+}
 ```
 
 An image row, `~ image "PATH" width=Nem`, puts a PNG or JPEG in the figure instead of cells. It is drawn the full figure width, centered, and its height follows the picture's pixel aspect ratio. `width=` takes an em length and defaults to `10em`, so the picture scales with the body font like everything else. The path is relative to the main file, even inside an included file; a file that cannot be read or is not a PNG or JPEG is error E0014. SVG output embeds the bytes as a data URI, PDF and PNG draw them, and TikZ writes `\includegraphics{PATH}`. This is how a plot from a plotting library goes inside a diagram.
 
 ```fitd
-eval "Validation"
-~ image "loss.png" width=9em
+eval "Validation" {
+  ~ image "loss.png" [width=9em]
+}
 ```
 
 ### Stacked nodes
@@ -174,8 +185,9 @@ eval "Validation"
 `stack=N` draws a node as N identical copies, offset up and to the right, with the frontmost copy carrying the text and figure. N ranges from 1 to 8. This is the conventional way to show a block repeated N times, such as N identical encoder layers.
 
 ```fitd
-enc "Encoder layer" stack=4
-~ %100"d 64"*4
+enc "Encoder layer" [stack=4] {
+  ~ [%100"d 64"*4]
+}
 ```
 
 ### Per-node wrap and aside placement
@@ -185,12 +197,13 @@ enc "Encoder layer" stack=4
 `place=aside` moves a node out of a layered flow into a strip after it (below the flow for `dir=right`, to the right for `dir=down`). The node keeps its `..>` links and sits as close as it can to the nodes it links to. It is meant for notes, training stages, and similar annotations. A `->` between two aside nodes orders the strip without joining the flow; a node on a `->` edge to a flow node, or in a group, stays in the flow and gets W0208. With `dir=right`, a strip node's `~` figure sits beside its text to keep the strip short. `place=flow` is the default.
 
 ```fitd
-layout layered dir=right
+layout layered [dir=right]
+
 a "Input"
 enc "Encoder"
 out "Output"
 a -> enc -> out
-pre "Pretraining" wrap=34em place=aside
+pre "Pretraining" [wrap=34em, place=aside]
 pre ..> enc "init"
 ```
 
@@ -208,31 +221,36 @@ An edge statement begins with one or more source node identifiers, separated by 
 Each target in a hop becomes a source for next hop. Thus `a -> b, c -> d` creates edges from `a` to `b` and `c`, then from both `b` and `c` to `d`. A source list fans in: `a, b -> c` creates `a -> c` and `b -> c`, each with the hop's label.
 
 ```fitd
-important
-  a -> b, c "produces" -- d color=#1565C0
+with important {
+  a -> b, c "produces" -- d [color=#1565C0]
+}
 ```
 
 Edges and edge styles take `color`, `head`, `tail`, and `line`. `head` marks the target end and `tail` the source end, each one of `arrow`, `triangle` (hollow), `diamond`, `odiamond` (hollow diamond), `crow` (crow's foot), or `none`. A directed edge defaults to `head=arrow`, an undirected one to none; `tail` defaults to none. `line=solid|dashed|dotted` sets the dash pattern; `..>` and `..` default to dashed. Marks sit inside the arrow clearance, so they never change the layout.
 
 ```fitd
-style is head=triangle
-is
+style is [head=triangle]
+with is {
   circle -> shape
-canvas -- shape tail=diamond line=dotted
+}
+canvas -- shape [tail=diamond, line=dotted]
 ```
 
 ### Groups
 
-`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn`. A group inside a style block takes its frame color from that style, so a group, its nodes, and its `key` entry can share one block.
+`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn`. A group inside a `with` block takes its frame color from that style, so a group, its nodes, and its `key` entry can share one block.
 
 `group ID "title" members` also names the group, so edges can start or end at it: the edge meets the frame instead of a member. An empty title, `group ID "" members`, gives a named group with no title. A group ID shares the node namespace, so a node and a group cannot have the same ID (E0003). For layout, the edge stands in for the group with a member: the last member of the flow when the group is the source, the first when it is the target. An edge from a group to itself, to one of its members, or to a group nested with it is E0016, as is a group edge under `layout venn` or `layout lanes`.
 
 ```fitd
 layout layered
-load "Load"
+
+load "Load" {
   clean "Clean"
-train "Train"
+}
+train "Train" {
   tune "Tune"
+}
 report "Report"
 group prep "Prep" load, clean
 group fit "Fit" train, tune
@@ -243,7 +261,7 @@ fit -> report
 `times=N` (2 to 99) marks the framed subgraph as repeated N times: the frame is drawn dashed and `Nx` is prefixed to its title, which is the conventional notation for a repeated stack of layers. A value outside the range, or a non-numeric one, produces E0006.
 
 ```fitd
-group "Layers" attn, ff times=2 color=#3949AB
+group "Layers" attn, ff [times=2, color=#3949AB]
 ```
 
 ### Keys
@@ -251,8 +269,8 @@ group "Layers" attn, ff times=2 color=#3949AB
 `key "LABEL" [attributes]` adds one legend entry. Entries are drawn in centered rows along the bottom of the page, wrapping when a row is full; the solver lays out the diagram in the space above. Swatches take `color`, `fill`, and `shape` from classes and attributes, as nodes do. `line=solid|dashed|dotted` draws a line swatch for edges instead of a node swatch, and `head=` adds a mark at its right end. A key whose classes are used only by groups draws an open frame swatch. `page ... keysize=20pt` sets the swatch and text size (default 0.85 of the chosen body font); line thickness scales with it. In split output, keys repeat on every page.
 
 ```fitd
-key "Investment" line=solid color=#4FC3E0
-key "Principal" shape=circle fill=#FFFFFF color=#222222
+key "Investment" [line=solid, color=#4FC3E0]
+key "Principal" [shape=circle, fill=#FFFFFF, color=#222222]
 ```
 
 ### Layout selection
@@ -262,13 +280,15 @@ key "Principal" shape=circle fill=#FFFFFF color=#222222
 `layout lanes` draws swimlanes and sequence diagrams. It takes `dir` and `order` like `layered`. Each top-level group is a lane, and lanes sit side by side in declaration order with frames that span the whole flow. Nodes stack along their lane in flow order, and edges cross between lanes. A node with `lane=ID` hangs on a dashed lifeline below ID, after the earlier nodes on that lane; ID heads the lane and its lane nodes share it. An empty `shape=none` node draws as a point on the lifeline. With `order=source`, heads take the first row and each later row holds one `align row` set, in declaration order, so messages keep source order:
 
 ```fitd
-layout lanes order=source
-style pt shape=none
+layout lanes [order=source]
+
+style pt [shape=none]
 c "Client"
 s "Server"
-pt
-  c1 "" lane=c
-  s1 "" lane=s
+with pt {
+  c1 "" [lane=c]
+  s1 "" [lane=s]
+}
 c1 -> s1 "GET /orders"
 require align row(c1, s1)
 ```
@@ -279,6 +299,7 @@ The `seq` module wraps this as `seq.actor`, `seq.msg`, and `seq.reply`.
 
 ```fitd
 layout venn
+
 py "Python"
 both "garbage collected"
 go "Go"
@@ -293,9 +314,9 @@ The `venn` module wraps this as `venn.two` and `venn.three`, which take each reg
 `page SIZE [FLAGS] [attributes]` selects page dimensions and orientation. Named paper sizes range from `a0` through `a4`; explicit dimensions use `WIDTHxHEIGHT` followed by unit. Supported page flags include `portrait` and `landscape`. Example:
 
 ```fitd
-page a4 portrait margin=12mm
-page 297x210mm margin=1cm
-page 16:9 margin=12pt
+page a4 portrait [margin=12mm]
+page 297x210mm [margin=1cm]
+page 16:9 [margin=12pt]
 ```
 
 A ratio `W:H` such as `16:9`, `4:3`, or `1.414:1` fixes only the page shape. fitd picks the smallest page of that shape on which the diagram fits at the font floor and meets as many checks and `prefer` constraints as it does on an unbounded page, then reports the size it chose (`note: page 16:9 fits on 845x475pt`). Since the page is as small as the floor allows, text comes out near the floor, so set `font` to the smallest size the reader should see (`font 10pt..30pt`). `portrait` and `landscape` turn the ratio; the page is never turned on its own. A `--stable` lock made for a page of the same shape keeps its size. Ratios beyond 20:1 are rejected.
@@ -306,7 +327,7 @@ A ratio `W:H` such as `16:9`, `4:3`, or `1.414:1` fixes only the page shape. fit
 
 ### Themes and styles
 
-`theme [PRESET] [attributes]` selects theme and applies overrides. Presets are `paper`, `light`, `dark`, and `mono`; default preset is `paper`. `style NAME attributes` declares reusable node or edge attributes. A declaration may use multiple classes; class attributes are applied in order. A style name cannot be a statement or macro keyword (`node`, `group`, `for`, ...), since a line holding only that name opens a style block; such a name is E0015.
+`theme [PRESET] [attributes]` selects theme and applies overrides. Presets are `paper`, `light`, `dark`, and `mono`; default preset is `paper`. `style NAME [attributes]` declares reusable node or edge attributes, applied with `with NAME { }`. Nested `with` blocks apply their styles outermost first.
 
 On nodes, edges, and groups, `color`, `fill`, and `text` specify border, fill, and text colors where supported. `shape` accepts `box`, `circle`, `diamond`, or `none` for nodes and styles, and `stack` accepts 1 to 8 copies for nodes and styles. `shape=none` draws the text and figure with no frame or fill, for margin annotations and lane labels; such a node still participates in layout, edges, and constraints. Attribute support depends on statement kind; unknown or ill-typed attributes produce diagnostics.
 
@@ -315,10 +336,12 @@ On nodes, edges, and groups, `color`, `fill`, and `text` specify border, fill, a
 `gradient=COLOR` on `theme` paints the page with a diagonal gradient from `background` to `COLOR`. `background` remains the solid color used behind labels.
 
 ```fitd
-theme light background=#FFFFFF text=#24292F
-style plant shape=box color=#2E7D32
-plant
+theme light [background=#FFFFFF, text=#24292F]
+
+style plant [shape=box, color=#2E7D32]
+with plant {
   leaf "Leaf"
+}
 ```
 
 ### Constraints
@@ -332,19 +355,20 @@ plant
 Binary relations are `left-of`, `right-of`, `above`, `below`, and `near`. `near` accepts optional `within=LENGTH`; ordering relations accept optional `gap=LENGTH`. `at` positions node at one of nine positions: `top-left`, `top`, `top-right`, `left`, `center`, `right`, `bottom-left`, `bottom`, and `bottom-right`. `align SIDE(nodes)` aligns nodes by `top`, `bottom`, `left`, `right`, `row`, or `column`.
 
 ```fitd
-require source left-of parser gap=2em
+require source left-of parser [gap=2em]
 require align row(parser, solver, checker)
-prefer output at right weight=2
+prefer output at right [weight=2]
 ```
 
 Nodes can also be placed on a grid with `row=R col=C`, counted from 1. Nodes with the same `row` share an `align row` and sit left to right by `col`; nodes with the same `col` share an `align column` and stack top to bottom by `row`. Both are hard constraints. In a layered layout, a hard `above` (`dir=down`) or `left-of` (`dir=right`) also orders layers, so unconnected nodes can stack. Two nodes in one cell give E0007.
 
 ```fitd
 layout layered
-a "A" row=1 col=1
-b "B" row=1 col=2
-c "C" row=2 col=1
-d "D" row=2 col=2
+
+a "A" [row=1, col=1]
+b "B" [row=1, col=2]
+c "C" [row=2, col=1]
+d "D" [row=2, col=2]
 a -> b, c
 b, c -> d
 ```
@@ -353,18 +377,22 @@ b, c -> d
 
 `include "PATH"` inserts source file before macro expansion and parsing. Path is resolved relative to including file. Every `include` must come before the file's other statements, as Go requires for `import`; comments may precede it. Include cycles, missing files, and a late `include` produce E0011.
 
-A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name ARGS` on a line of its own. Styles are global and keep the module prefix; open a block with `nn.layer` for style `nn.layer`. In your own files a lone `MOD.name` that is also a template calls the template.
+A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name ARGS` on a line of its own. Styles are global and keep the module prefix; `with nn.layer {` applies style `nn.layer`.
 
-`MOD.name a "Two words" 3` passes its words as arguments. A bare word is text, a run of digits is a number, quotes group text with spaces or symbols, and a word that is only `${expr}` passes the value itself, so `f ${n + 1}` passes a number. A template name followed by an edge operator is a node, not a call. A template name alone on a line opens a template block, which takes precedence over a style block of the same name: each line indented under it is one call, and a row may start with another template name to call that one instead. A row indented under another row is its child, linked the way a nested node line is, so trees need no edge lines:
+`MOD.name a "Two words" 3` passes its words as arguments. A bare word is text, a run of digits is a number, quotes group text with spaces or symbols, and a word that is only `${expr}` passes the value itself, so `f ${n + 1}` passes a number. A template name followed by an edge operator is a node, not a call. A call ending in `{` opens a template block, and `MOD.name {` opens one with no call of its own: each line inside it is one call, and a row may start with another template name to call that one instead. A row ending in `{` holds its children, linked the way a nested node line is, so trees need no edge lines:
 
 ```fitd
 include "tree"
-layout layered order=source
-tree.cat s S
-  np NP
+layout layered [order=source]
+
+tree.cat s S {
+  np NP {
     tree.word she she
-  vp VP
+  }
+  vp VP {
     tree.word saw saw
+  }
+}
 ```
 
 Rows are read after `${...}` substitution, so they work inside loops and templates.
@@ -389,10 +417,12 @@ Rows are read after `${...}` substitution, so they work inside loops and templat
 
 ```fitd
 include "nn"
+
 nn.input x Tokens "B x L"
 nn.layer e Encoder "d 64" 2
-nn.block
+with nn.block {
   block "Block"
+}
 nn.mask m "Causal mask" 4 1
 x -> e -> m
 ```
@@ -401,6 +431,7 @@ x -> e -> m
 
 ```fitd
 include "user/runbook"
+
 runbook.check deploy "Deploy in last hour?"
 runbook.act rollback "Roll back" on-call
 deploy -> rollback "yes"
@@ -410,22 +441,22 @@ deploy -> rollback "yes"
 
 ![Macro directives, expressions, scope, and expansion limits](language/05-macros.png)
 
-Macro processing provides `for`, `if`/`else if`/`else`, `def NAME(a, b)` templates, template calls and blocks (`NAME a b`, `MOD.name a b`, a lone `MOD.name` over indented rows), and `${expression}` interpolation. Macro blocks close with `end`. Their bodies expand at the indent of the directive or call line, keeping deeper indents, so style blocks inside them nest as written. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
+Macro processing provides `for`, `if`/`else if`/`else`, `def NAME(a, b)` templates, template calls and blocks (`NAME a b`, `MOD.name a b`, `MOD.name {` over rows), and `${expression}` interpolation. Macro blocks are braced: `for i in 1..3 {`, `if X {`, `} else if Y {`, `} else {`, `def f(a) {`, each closed by `}`. A template body may open blocks it closes itself; its output lands where it is called, inside any open node or `with` block. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
 
 Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for node lists. `count(s, sep)` gives the number of fields in `s`; `part(s, sep, i)` gives field `i`, counted from 1, without trailing spaces or the one space after the separator. Further leading spaces stay, so a `|` body line built from a field keeps its indent. A whitespace separator splits on runs of whitespace, and an empty string has no fields, so templates can take lists as one string:
 
 ```fitd
-def row(cells)
-  for i in 1..count(cells, ";")
-  | ${part(cells, ";", i)}
-  end
-end
+def row(cells) {
+  for i in 1..count(cells, ";") {
+    | ${part(cells, ";", i)}
+  }
+}
 ```
 
 ```fitd
-for i in 1..3
+for i in 1..3 {
   step${i} "Step ${i}"
-end
+}
 ```
 
 ## Semantic validation and diagnostics

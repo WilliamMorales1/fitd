@@ -148,8 +148,7 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
-- Style blocks: indents count characters, so a tab is one column; mixing tabs and spaces can close a block early.
-- Editor grammars: tree-sitter cannot tell a lone node, or a reopened one, from a block opener, so all parse as `block_statement`; template rows parse as `row_statement` only when they cannot be a node line, and a lone template name parses as a block. Nesting by indent is left to parse.rs and macros.rs.
+- Editor grammars: tree-sitter cannot tell a lone node, a reopened one, and a template called with no arguments apart, so all parse as `name_statement`; template rows parse as `row_statement` only when they cannot be a node line.
 
 ### 8. Dependency arcs and Sankey widths (low priority)
 

@@ -1,15 +1,17 @@
 // Cause-and-effect (Ishikawa) diagram (quality management), drawn as a tree into the effect.
-layout layered dir=right order=source
+layout layered [dir=right, order=source]
 page 16:9
-style cause shape=none
+
+style cause [shape=none]
 effect "Late release"
 people "People"
 process "Process"
 tools "Tools"
-cause
+with cause {
   p1 "on leave"
   p2 "no reviews"
   t1 "flaky CI"
+}
 p1 -> people
 p2 -> process
 t1 -> tools

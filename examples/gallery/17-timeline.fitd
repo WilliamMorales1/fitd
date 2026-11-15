@@ -1,12 +1,15 @@
 // Timeline (history, project reports).
 include "time"
-layout layered dir=right
+layout layered [dir=right]
 page 16:9
-time.event
+
+time.event {
   t1 1957 Sputnik
   t3 1990 Hubble
   t4 1998 ISS
-time.mile
+}
+time.mile {
   t2 1969 "Moon landing"
   t5 2021 JWST
+}
 time.chain "t1; t2; t3; t4; t5"

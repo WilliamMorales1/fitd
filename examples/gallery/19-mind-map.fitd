@@ -1,9 +1,13 @@
 // Mind map / concept map (education). Radial is the default layout.
 page 16:9
-ml "Machine learning"
-  sup "Supervised"
+
+ml "Machine learning" {
+  sup "Supervised" {
     cls "Classification"
     reg "Regression"
-  uns "Unsupervised"
+  }
+  uns "Unsupervised" {
     clu "Clustering"
+  }
   rl "Reinforcement"
+}

@@ -3,20 +3,21 @@ Every statement kind
 ================================================================================
 
 title "Map"   // comment
-layout radial root=core
-page a3 portrait margin=1cm
-font 7pt..40pt wrap=16em
-theme dark link=#FFD54F
-style stage color=#1565C0 shape=box
-node lex "Lexer" color=#fff
-| tokens with byte spans // not a comment
+layout radial [root=core]
+page a3 portrait [margin=1cm]
+font 7pt..40pt [wrap=16em]
+theme dark [link=#FFD54F]
+style stage [color=#1565C0, shape=box]
+node lex "Lexer" [color=#fff] {
+  | tokens with byte spans // not a comment
+}
 lex -> parse, sema "label"
 core ..> sema
-group fe "Front end" lex, parse color=#1565C0
-require bnb left-of core gap=2em
+group fe "Front end" lex, parse [color=#1565C0]
+require bnb left-of core [gap=2em]
 require a above b above c
 require align row(bnb, core)
-prefer emit at bottom-right weight=2
+prefer emit at bottom-right [weight=2]
 include "parts/x.fitd"
 
 --------------------------------------------------------------------------------
@@ -26,166 +27,183 @@ include "parts/x.fitd"
     (string))
   (comment)
   (layout_statement
-    kind: (name)
-    (attribute
-      key: (name)
-      value: (name)))
+    (name)
+    (attributes
+      (attribute
+        (name)
+        (name))))
   (page_statement
-    size: (name)
+    (name)
     (flag
       (name))
-    (attribute
-      key: (name)
-      value: (number)))
+    (attributes
+      (attribute
+        (name)
+        (number))))
   (font_statement
-    size: (number)
-    max: (number)
-    (attribute
-      key: (name)
-      value: (number)))
+    (number)
+    (number)
+    (attributes
+      (attribute
+        (name)
+        (number))))
   (theme_statement
-    preset: (name)
-    (attribute
-      key: (name)
-      value: (color)))
+    (name)
+    (attributes
+      (attribute
+        (name)
+        (color))))
   (style_statement
-    name: (name)
-    (attribute
-      key: (name)
-      value: (color))
-    (attribute
-      key: (name)
-      value: (name)))
+    (qualified_name
+      (name))
+    (attributes
+      (attribute
+        (name)
+        (color))
+      (attribute
+        (name)
+        (name))))
   (node_statement
-    id: (name)
-    title: (string)
-    (attribute
-      key: (name)
-      value: (color)))
-  (body)
+    (name)
+    (string)
+    (attributes
+      (attribute
+        (name)
+        (color)))
+    (block
+      (body)))
   (edge_statement
-    from: (name)
-    operator: (edge_operator)
-    to: (name)
-    to: (name)
-    label: (string))
+    (name)
+    (edge_operator)
+    (name)
+    (name)
+    (string))
   (edge_statement
-    from: (name)
-    operator: (edge_operator)
-    to: (name))
+    (name)
+    (edge_operator)
+    (name))
   (group_statement
-    id: (name)
-    title: (string)
-    to: (name)
-    to: (name)
-    (attribute
-      key: (name)
-      value: (color)))
+    (name)
+    (string)
+    (name)
+    (name)
+    (attributes
+      (attribute
+        (name)
+        (color))))
   (constraint_statement
     (chain
       (name)
-      relation: (relation
+      (relation
         (name))
       (name))
-    (attribute
-      key: (name)
-      value: (number)))
+    (attributes
+      (attribute
+        (name)
+        (number))))
   (constraint_statement
     (chain
       (name)
-      relation: (relation
+      (relation
         (name))
       (name)
-      relation: (relation
+      (relation
         (name))
       (name)))
   (constraint_statement
     (align
-      side: (name)
+      (name)
       (name)
       (name)))
   (constraint_statement
     (placement
       (name)
-      place: (name))
-    (attribute
-      key: (name)
-      value: (number)))
+      (name))
+    (attributes
+      (attribute
+        (name)
+        (number))))
   (include_statement
-    path: (string)))
+    (string)))
 
 ================================================================================
 Hash after equals is a color, slashes start a comment
 ================================================================================
 
-node a color=#fff // accent
+node a [color=#fff] // accent
 node b "x"
 
 --------------------------------------------------------------------------------
 
 (source_file
   (node_statement
-    id: (name)
-    (attribute
-      key: (name)
-      value: (color)))
+    (name)
+    (attributes
+      (attribute
+        (name)
+        (color))))
   (comment)
   (node_statement
-    id: (name)
-    title: (string)))
+    (name)
+    (string)))
 
 ================================================================================
-Macro lines
+Macro blocks
 ================================================================================
 
-for i, s in a, b
-node s${i} "Step ${i}"
-if i < n
-s${i} -> s${i}x
-else if i == 2
-else
-end
-def box(id, label)
-box a 1
+for i, s in a, b {
+  node s${i} "Step ${i}"
+  if i < n {
+    s${i} -> s${i}x
+  } else if i == 2 {
+  } else {
+  }
+}
+def box(id, label) {
+  box a 1
+}
 node in "Input"
-end -> in
+with -> in
 
 --------------------------------------------------------------------------------
 
 (source_file
   (for_statement
-    var: (name)
-    var: (name)
-    items: (expression))
-  (node_statement
-    id: (name)
-    title: (string))
-  (if_statement
-    condition: (expression))
-  (edge_statement
-    from: (name)
-    operator: (edge_operator)
-    to: (name))
-  (else_statement
-    condition: (expression))
-  (else_statement)
-  (end_statement)
+    (name)
+    (name)
+    (expression)
+    (block
+      (node_statement
+        (name)
+        (string))
+      (if_statement
+        (expression)
+        (block
+          (edge_statement
+            (name)
+            (edge_operator)
+            (name)))
+        (expression)
+        (block)
+        (block))))
   (def_statement
-    name: (name)
-    parameter: (name)
-    parameter: (name))
-  (row_statement
-    name: (qualified_name
-      (name))
-    argument: (name)
-    argument: (number))
+    (name)
+    (name)
+    (name)
+    (block
+      (row_statement
+        (qualified_name
+          (name))
+        (qualified_name
+          (name))
+        (number))))
   (node_statement
-    id: (name)
-    title: (string))
+    (name)
+    (string))
   (edge_statement
-    from: (name)
-    operator: (edge_operator)
-    to: (name)))
+    (name)
+    (edge_operator)
+    (name)))
 
 ================================================================================
 Arrow chains
@@ -197,122 +215,166 @@ a -> b, c "x" -- d
 
 (source_file
   (edge_statement
-    from: (name)
-    operator: (edge_operator)
-    to: (name)
-    to: (name)
-    label: (string)
-    operator: (edge_operator)
-    to: (name)))
+    (name)
+    (edge_operator)
+    (name)
+    (name)
+    (string)
+    (edge_operator)
+    (name)))
 
 ================================================================================
 Style blocks
 ================================================================================
 
-stage
+with stage {
   lex "Lexer"
-  parse color=#fff
+  parse [color=#fff]
   lex -> parse
-nn.block
+}
+with nn.block {
   node enc
+}
 flow.key
 font -> csp
 a, b -> c
-~ %100 %60 . "x y"
 
 --------------------------------------------------------------------------------
 
 (source_file
-  (block_statement
-    style: (qualified_name
-      (name)))
-  (node_statement
-    id: (name)
-    title: (string))
-  (node_statement
-    id: (name)
-    (attribute
-      key: (name)
-      value: (color)))
-  (edge_statement
-    from: (name)
-    operator: (edge_operator)
-    to: (name))
-  (block_statement
-    style: (qualified_name
+  (with_statement
+    (qualified_name
+      (name))
+    (block
+      (node_statement
+        (name)
+        (string))
+      (node_statement
+        (name)
+        (attributes
+          (attribute
+            (name)
+            (color))))
+      (edge_statement
+        (name)
+        (edge_operator)
+        (name))))
+  (with_statement
+    (qualified_name
+      (name)
+      (name))
+    (block
+      (node_statement
+        (name))))
+  (name_statement
+    (qualified_name
       (name)
       (name)))
+  (edge_statement
+    (name)
+    (edge_operator)
+    (name))
+  (edge_statement
+    (name)
+    (name)
+    (edge_operator)
+    (name)))
+
+================================================================================
+Attributes across lines
+================================================================================
+
+a "A" [
+  color=#fff,
+  shape=box
+]
+
+--------------------------------------------------------------------------------
+
+(source_file
   (node_statement
-    id: (name))
-  (block_statement
-    style: (qualified_name
-      (name)
-      (name)))
-  (edge_statement
-    from: (name)
-    operator: (edge_operator)
-    to: (name))
-  (edge_statement
-    from: (name)
-    from: (name)
-    operator: (edge_operator)
-    to: (name))
-  (figure))
+    (name)
+    (string)
+    (attributes
+      (attribute
+        (name)
+        (color))
+      (attribute
+        (name)
+        (name)))))
 
 ================================================================================
 Nested nodes
 ================================================================================
 
-coffee "Coffee"
-  brew "Brewing"
+coffee "Coffee" {
+  brew "Brewing" {
     -> crema "crema"
-coffee
+    ~ [%100, %60, ., "x y"]
+  }
+}
+coffee {
+  roast
+}
 
 --------------------------------------------------------------------------------
 
 (source_file
   (node_statement
-    id: (name)
-    title: (string))
-  (node_statement
-    id: (name)
-    title: (string))
-  (edge_statement
-    operator: (edge_operator)
-    to: (name)
-    label: (string))
-  (block_statement
-    style: (qualified_name
-      (name))))
+    (name)
+    (string)
+    (block
+      (node_statement
+        (name)
+        (string)
+        (block
+          (edge_statement
+            (edge_operator)
+            (name)
+            (string))
+          (figure)))))
+  (name_statement
+    (qualified_name
+      (name))
+    (block
+      (name_statement
+        (qualified_name
+          (name))))))
 
 ================================================================================
 Template rows
 ================================================================================
 
-tree.unit
-  ceo Ada CEO
+tree.unit {
+  ceo Ada CEO {
     web "Web team" 6
+  }
   adopt 2 +
+}
 
 --------------------------------------------------------------------------------
 
 (source_file
-  (block_statement
-    style: (qualified_name
+  (name_statement
+    (qualified_name
       (name)
-      (name)))
-  (row_statement
-    name: (qualified_name
       (name))
-    argument: (name)
-    argument: (name))
-  (row_statement
-    name: (qualified_name
-      (name))
-    argument: (string)
-    argument: (number))
-  (row_statement
-    name: (qualified_name
-      (name))
-    argument: (number)
-    argument: (word)))
+    (block
+      (row_statement
+        (qualified_name
+          (name))
+        (qualified_name
+          (name))
+        (qualified_name
+          (name))
+        (block
+          (row_statement
+            (qualified_name
+              (name))
+            (string)
+            (number))))
+      (row_statement
+        (qualified_name
+          (name))
+        (number)
+        (word)))))

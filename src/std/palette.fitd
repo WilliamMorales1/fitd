@@ -1,10 +1,10 @@
 // Okabe-Ito: eight hues that stay distinct for colour-blind readers.
 // Use as classes: node a "A"  : c1
-style c1 color=#0072B2
-style c2 color=#E69F00
-style c3 color=#009E73
-style c4 color=#D55E00
-style c5 color=#CC79A7
-style c6 color=#56B4E9
-style c7 color=#9A7D0A
-style c8 color=#444444
+style c1 [color=#0072B2]
+style c2 [color=#E69F00]
+style c3 [color=#009E73]
+style c4 [color=#D55E00]
+style c5 [color=#CC79A7]
+style c6 [color=#56B4E9]
+style c7 [color=#9A7D0A]
+style c8 [color=#444444]

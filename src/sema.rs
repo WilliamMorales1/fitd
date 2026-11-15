@@ -1,4 +1,4 @@
-use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
+use crate::ast::{Attr, Name, Rel, Row, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
 use crate::graph::{
     Cell, Constraint, Dash, Dir, Edge, EdgeKind, Graph, Head, Image, KeyEntry, LayoutKind, Length,
@@ -322,17 +322,12 @@ fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
 
 type Styles = HashMap<String, (Span, Vec<Attr>, bool)>;
 
-fn apply_styles(s: &mut Sema, styles: &mut Styles, classes: &[Name], l: &mut Look) {
+/// apply_styles skips unknown styles, which the `with` line reports once.
+fn apply_styles(styles: &mut Styles, classes: &[Name], l: &mut Look) {
     for c in classes {
-        match styles.get_mut(&c.text) {
-            Some(st) => {
-                st.2 = true;
-                look(&st.1, l, &mut Vec::new());
-            }
-            None => {
-                let names: Vec<&str> = styles.keys().map(String::as_str).collect();
-                s.diags.push(unknown("E0004", "style", c, &names));
-            }
+        if let Some(st) = styles.get_mut(&c.text) {
+            st.2 = true;
+            look(&st.1, l, &mut Vec::new());
         }
     }
 }
@@ -368,124 +363,10 @@ fn place(s: &str) -> Option<Place> {
         .map(|i| Place((i % 3) as u8, (i / 3) as u8))
 }
 
-/// span reads a `*N` column-span suffix, leaving the iterator untouched when there is none.
-fn span(it: &mut std::iter::Peekable<std::str::Chars>) -> usize {
-    if it.peek() != Some(&'*') {
-        return 1;
-    }
-    let mut look = it.clone();
-    look.next();
-    let mut n = String::new();
-    while look.peek().is_some_and(char::is_ascii_digit) {
-        n.push(look.next().unwrap());
-    }
-    match n.parse() {
-        Ok(k) if k >= 1 => {
-            *it = look;
-            k
-        }
-        _ => 1,
-    }
-}
-
-/// image_row reads `image "PATH" width=Nem`; None means the row is ordinary cells.
-fn image_row(line: &str) -> Option<Result<(String, f64), String>> {
-    let rest = line.trim().strip_prefix("image")?.trim_start();
-    let rest = rest.strip_prefix('"')?;
-    let Some((path, tail)) = rest.split_once('"') else {
-        return Some(Err("unclosed image path".into()));
-    };
-    let mut width = 10.0;
-    for word in tail.split_whitespace() {
-        let w = match word.strip_prefix("width=").map(|v| length(v, None)) {
-            Some(Ok(Length::Em(w))) if w > 0.0 => w,
-            Some(Ok(_)) => return Some(Err("image `width=` takes a positive em length".into())),
-            Some(Err(e)) => return Some(Err(e)),
-            None => return Some(Err(format!("unknown image attribute `{word}`"))),
-        };
-        width = w;
-    }
-    if path.is_empty() {
-        return Some(Err("image path is empty".into()));
-    }
-    Some(Ok((path.to_string(), width)))
-}
-
-/// cells splits one `~` figure row into cells: `%NN` shaded (`%100` solid), `.` outlined, `_` gap.
-fn cells(line: &str) -> Vec<Cell> {
-    let mut out = Vec::new();
-    let mut it = line.chars().peekable();
-    while let Some(&c) = it.peek() {
-        if c.is_whitespace() {
-            it.next();
-            continue;
-        }
-        let mut shade = 0.0;
-        if c == '%' {
-            let mut look = it.clone();
-            look.next();
-            let mut n = String::new();
-            while look.peek().is_some_and(char::is_ascii_digit) {
-                n.push(look.next().unwrap());
-            }
-            if let Ok(v) = n.parse::<f64>() {
-                shade = (v / 100.0).clamp(0.0, 1.0);
-                it = look;
-            }
-        }
-        let mut gap = false;
-        let mut cols = 1;
-        let label = match it.peek().copied() {
-            None => None,
-            Some(c) if c.is_whitespace() => None,
-            Some('"') => {
-                it.next();
-                let mut s = String::new();
-                for c in it.by_ref() {
-                    if c == '"' {
-                        break;
-                    }
-                    s.push(c);
-                }
-                cols = span(&mut it);
-                Some(s)
-            }
-            Some(_) => {
-                let mut s = String::new();
-                while let Some(&c) = it.peek() {
-                    if c.is_whitespace() {
-                        break;
-                    }
-                    s.push(c);
-                    it.next();
-                }
-                // `*N` is a span only when digits end the word, so a label like `a*t` survives.
-                if let Some(i) = s.rfind('*') {
-                    let tail = &s[i + 1..];
-                    if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) {
-                        cols = tail.parse().unwrap_or(1);
-                        s.truncate(i);
-                    }
-                }
-                match s.as_str() {
-                    "." | "" => None,
-                    "_" if shade == 0.0 => {
-                        gap = true;
-                        None
-                    }
-                    _ => Some(s),
-                }
-            }
-        };
-        out.push(Cell {
-            shade,
-            gap,
-            span: cols.clamp(1, 64),
-            label,
-            image: None,
-        });
-    }
-    out
+fn outside(at: Span, what: &str) -> Diag {
+    Diag::error("E0002", format!("{what} outside a node"))
+        .primary(at, "no node braces hold this line")
+        .help("put it inside the node's `{ }`")
 }
 
 /// nest_directed reports whether nested children get `->` edges: true unless the last `layout` is radial.
@@ -510,17 +391,20 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     };
     let mut styles: Styles = HashMap::new();
 
-    let mut last_node = None;
     let mut group_ids: HashMap<String, Span> = HashMap::new();
     for st in stmts {
         match &st.kind {
-            StmtKind::Node { id, title, .. } => {
+            StmtKind::Node {
+                id, title, bare, ..
+            } => {
+                if *bare && s.ids.contains_key(&id.text) {
+                    continue;
+                }
                 if let Some(&prev) = s.ids.get(&id.text) {
                     let d = Diag::error("E0003", format!("node `{}` declared twice", id.text))
                         .primary(id.span, "declared again here");
                     s.diags
                         .push(d.secondary(s.decl[prev], "first declared here"));
-                    last_node = None;
                     continue;
                 }
                 s.ids.insert(id.text.clone(), s.nodes.len());
@@ -528,7 +412,6 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     .as_ref()
                     .map(|t| t.0.clone())
                     .unwrap_or(id.text.clone());
-                last_node = Some(s.nodes.len());
                 s.nodes.push(Node {
                     id: id.text.clone(),
                     title,
@@ -546,11 +429,47 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 });
                 s.decl.push(st.span);
             }
-            StmtKind::Cells(text) => match last_node {
-                Some(v) if image_row(text).is_some() => match image_row(text).unwrap() {
-                    Ok((path, width_em)) => {
+            StmtKind::Row { row, owner } => {
+                let Some(v) = owner.as_ref().and_then(|o| s.ids.get(&o.text).copied()) else {
+                    s.diags.push(outside(st.span, "figure row"));
+                    continue;
+                };
+                match row {
+                    Row::Cells(cells) => s.nodes[v].figure.push(cells.clone()),
+                    Row::Image { path, attrs } => {
+                        let mut width_em = 10.0;
+                        for a in attrs {
+                            if a.key.text != "width" {
+                                s.diags.push(bad_attr(a, &["width"]));
+                                continue;
+                            }
+                            let msg = match &a.value {
+                                Value::Num(t, _) => match length(t, None) {
+                                    Ok(Length::Em(w)) if w > 0.0 => {
+                                        width_em = w;
+                                        continue;
+                                    }
+                                    Ok(_) => {
+                                        "image `width=` takes a positive em length".to_string()
+                                    }
+                                    Err(e) => e,
+                                },
+                                _ => "image `width=` takes a positive em length".to_string(),
+                            };
+                            s.diags.push(
+                                Diag::error("E0006", msg)
+                                    .primary(a.value.span(), "expected a length like `10em`"),
+                            );
+                        }
+                        if path.is_empty() {
+                            s.diags.push(
+                                Diag::error("E0006", "image path is empty")
+                                    .primary(st.span, "expected `~ image \"plot.png\"`"),
+                            );
+                            continue;
+                        }
                         let image = Image {
-                            path,
+                            path: path.clone(),
                             width_em,
                             span: st.span,
                             ..Image::default()
@@ -563,62 +482,31 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                             image: Some(std::sync::Arc::new(image)),
                         }]);
                     }
-                    Err(e) => s.diags.push(
-                        Diag::error("E0006", e)
-                            .primary(st.span, "expected `~ image \"plot.png\" width=10em`"),
-                    ),
-                },
-                Some(v) => {
-                    let row = cells(text);
-                    if row.is_empty() {
-                        s.diags.push(
-                            Diag::error("E0002", "figure row has no cells")
-                                .primary(st.span, "expected cells like `# . _ GLU`"),
-                        );
-                    } else {
-                        s.nodes[v].figure.push(row);
-                    }
                 }
-                None => s.diags.push(
-                    Diag::error("E0002", "figure row outside a node")
-                        .primary(st.span, "no `node` above this line"),
-                ),
-            },
-            StmtKind::Body(text) => match last_node {
-                Some(v) => s.nodes[v].body.push(text.clone()),
-                None => s.diags.push(
-                    Diag::error("E0002", "body line outside a node")
-                        .primary(st.span, "no `node` above this line"),
-                ),
-            },
+            }
+            StmtKind::Body { text, owner } => {
+                match owner.as_ref().and_then(|o| s.ids.get(&o.text).copied()) {
+                    Some(v) => s.nodes[v].body.push(text.clone()),
+                    None => s.diags.push(outside(st.span, "body line")),
+                }
+            }
             StmtKind::Style { name, attrs } => {
-                if crate::parse::KEYWORDS.contains(&name.text.as_str()) {
-                    s.diags.push(
-                        Diag::error("E0015", format!("style `{}` is named after a keyword", name.text))
-                            .primary(name.span, "keyword")
-                            .note("a line holding only a style name opens a style block, so the name cannot be a statement word")
-                            .help(format!("rename it, such as `{}_style`", name.text)),
-                    );
-                } else if let Some((prev, ..)) = styles.get(&name.text) {
+                if let Some((prev, ..)) = styles.get(&name.text) {
                     let d = Diag::error("E0003", format!("style `{}` declared twice", name.text))
                         .primary(name.span, "declared again here");
                     s.diags.push(d.secondary(*prev, "first declared here"));
                 } else {
                     styles.insert(name.text.clone(), (name.span, attrs.clone(), false));
                 }
-                last_node = None;
             }
-            // Body rows after a one-node block still belong to that node.
-            StmtKind::Open(_) => {}
             StmtKind::Group { id: Some(id), .. } => {
                 if let Some(prev) = group_ids.insert(id.text.clone(), id.span) {
                     let d = Diag::error("E0003", format!("group `{}` declared twice", id.text))
                         .primary(id.span, "declared again here");
                     s.diags.push(d.secondary(prev, "first declared here"));
                 }
-                last_node = None;
             }
-            _ => last_node = None,
+            _ => {}
         }
     }
     for (name, span) in &group_ids {
@@ -835,7 +723,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     continue;
                 }
                 let mut l = Look::default();
-                apply_styles(&mut s, &mut styles, classes, &mut l);
+                apply_styles(&mut styles, classes, &mut l);
                 on_other.extend(classes.iter().map(|c| c.text.clone()));
                 let (edge_only, own): (Vec<Attr>, Vec<Attr>) = attrs
                     .iter()
@@ -911,7 +799,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     EdgeKind::Tree
                 };
                 let mut l = Look::default();
-                apply_styles(&mut s, &mut styles, classes, &mut l);
+                apply_styles(&mut styles, classes, &mut l);
                 on_other.extend(classes.iter().map(|c| c.text.clone()));
                 for a in attrs {
                     let allowed = keys("edge");
@@ -955,7 +843,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 attrs,
             } => {
                 let mut l = Look::default();
-                apply_styles(&mut s, &mut styles, classes, &mut l);
+                apply_styles(&mut styles, classes, &mut l);
                 look(attrs, &mut l, &mut s.diags);
                 if l.dash.is_none() && !classes.is_empty() {
                     key_classes.push((key_entries.len(), classes.clone()));
@@ -979,7 +867,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             } => {
                 // Only a class's color applies; a group has no fill, shape, or stack.
                 let mut l = Look::default();
-                apply_styles(&mut s, &mut styles, classes, &mut l);
+                apply_styles(&mut styles, classes, &mut l);
                 on_group.extend(classes.iter().map(|c| c.text.clone()));
                 let (mut col, mut times) = (l.color, None);
                 for a in attrs {
@@ -1044,19 +932,10 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
             StmtKind::Open(c) => {
                 if !styles.contains_key(&c.text) {
                     let names: Vec<&str> = styles.keys().map(String::as_str).collect();
-                    let d = Diag::error("E0004", format!("unknown style `{}`", c.text))
-                        .primary(c.span, "not a statement or declared style");
-                    let d = match suggest(&c.text, names.iter().copied()) {
-                        Some(h) => d.help(h),
-                        None => d,
-                    };
-                    s.diags.push(d.note(format!(
-                        "to declare an unstyled node, write `node {}`",
-                        c.text
-                    )));
+                    s.diags.push(unknown("E0004", "style", c, &names));
                 }
             }
-            StmtKind::Body(_) | StmtKind::Cells(_) | StmtKind::Include(_) => {}
+            StmtKind::Body { .. } | StmtKind::Row { .. } | StmtKind::Include(_) => {}
         }
     }
     for (i, classes) in key_classes {
@@ -1680,19 +1559,22 @@ mod tests {
 
     #[test]
     fn image_rows_hold_one_image_cell() {
-        let (g, d) = run("node a\n~ image \"p.png\" width=6em\n~ %100 .\n");
+        let (g, d) = run("a {\n  ~ image \"p.png\" [width=6em]\n  ~ [%100, .]\n}\n");
         assert!(d.is_empty());
         let im = g.nodes[0].figure[0][0].image.as_ref().unwrap();
         assert_eq!((im.path.as_str(), im.width_em), ("p.png", 6.0));
         assert!(g.nodes[0].figure[1][0].image.is_none());
-        assert_eq!(codes("node a\n~ image \"p.png\" width=2cm\n"), ["E0006"]);
-        assert_eq!(codes("node a\n~ image \"p.png\" size=2em\n"), ["E0006"]);
+        assert_eq!(
+            codes("a {\n  ~ image \"p.png\" [width=2cm]\n}\n"),
+            ["E0006"]
+        );
+        assert_eq!(codes("a {\n  ~ image \"p.png\" [size=2em]\n}\n"), ["E0005"]);
     }
 
     #[test]
     fn grid_cells_lower_to_alignment_and_order() {
         let (g, d) =
-            run("node a row=1 col=1\nnode b row=1 col=2\nnode c row=2 col=1\nnode d row=2 col=2\n");
+            run("a [row=1, col=1]\nb [row=1, col=2]\nc [row=2, col=1]\nd [row=2, col=2]\n");
         assert!(d.is_empty());
         let count =
             |f: fn(&Relation) -> bool| g.constraints.iter().filter(|c| c.hard && f(&c.rel)).count();
@@ -1724,13 +1606,13 @@ mod tests {
             count(|r| matches!(r, Relation::Above { a: 1, b: 3, .. })),
             1
         );
-        assert_eq!(codes("node a row=1 col=1\nnode b row=1 col=1\n"), ["E0007"]);
-        assert_eq!(codes("node a row=0\n"), ["E0006"]);
+        assert_eq!(codes("a [row=1, col=1]\nb [row=1, col=1]\n"), ["E0007"]);
+        assert_eq!(codes("a [row=0]\n"), ["E0006"]);
     }
 
     #[test]
     fn page_ratios() {
-        let (g, d) = run("page 16:9 portrait margin=10pt\nnode a\n");
+        let (g, d) = run("page 16:9 portrait [margin=10pt]\n\na\n");
         assert!(
             d.is_empty(),
             "{:?}",
@@ -1738,16 +1620,16 @@ mod tests {
         );
         assert_eq!(g.settings.page_ratio, Some((9.0, 16.0)));
         assert!(g.settings.page.is_none() && g.settings.page_fixed);
-        let (g, _) = run("page 1.414:1\npage a3\nnode a\n");
+        let (g, _) = run("page 1.414:1\npage a3\n\na\n");
         assert!(g.settings.page_ratio.is_none() && g.settings.page.is_some());
-        assert_eq!(codes("page 3:0\nnode a\n"), ["E0006"]);
-        assert_eq!(codes("page 30:1\nnode a\n"), ["E0006"]);
+        assert_eq!(codes("page 3:0\n\na\n"), ["E0006"]);
+        assert_eq!(codes("page 30:1\n\na\n"), ["E0006"]);
     }
 
     #[test]
     fn resolves_forward_references_and_styles() {
         let (g, d) = run(
-            "a -> b\nstyle hub shape=circle color=#123456\nhub\n  node a\n| line\nnode b color=#abcdef shape=diamond\n",
+            "a -> b\nstyle hub [shape=circle, color=#123456]\nwith hub {\n  a {\n    | line\n  }\n}\nb [color=#abcdef, shape=diamond]\n",
         );
         assert!(d.is_empty());
         assert_eq!(g.edges.len(), 1);
@@ -1760,7 +1642,7 @@ mod tests {
     #[test]
     fn style_blocks_style_their_nodes() {
         let (g, d) = run(
-            "style radial color=#CC79A7\nradial\n  coffee \"Coffee\"\nnode radial\nradial -> coffee\n",
+            "style radial [color=#CC79A7]\nwith radial {\n  coffee \"Coffee\"\n}\nradial\nradial -> coffee\n",
         );
         assert!(
             d.is_empty(),
@@ -1771,17 +1653,15 @@ mod tests {
         let color = |id: &str| g.nodes.iter().find(|n| n.id == id).unwrap().color.clone();
         assert_eq!(color("coffee").as_deref(), Some("#CC79A7"));
         assert_eq!(color("radial"), None);
-        assert_eq!(codes("style node color=#f00\nnode a\n"), vec!["E0015"]);
-        assert_eq!(codes("style for color=#f00\nnode a\n"), vec!["E0015"]);
         assert_eq!(
-            codes("style step\nstp\n  a\nnode b\n"),
+            codes("style step\nwith stp {\n  a\n}\nb\n"),
             vec!["E0004", "W0203"]
         );
     }
 
     #[test]
     fn module_qualified_classes_map_to_prefixed_styles() {
-        let (g, d) = run("style nn.block color=#CC79A7\nnn.block\n  a\n");
+        let (g, d) = run("style nn.block [color=#CC79A7]\nwith nn.block {\n  a\n}\n");
         assert!(
             d.is_empty(),
             "{:?}",
@@ -1793,7 +1673,7 @@ mod tests {
     #[test]
     fn themes_and_node_colors() {
         let (g, d) = run(
-            "theme dark background=#000 palette=\"#f00, #0f0\"\nfont 7pt family=\"DejaVu Sans\"\nstyle s fill=#fff\ns\n  node a text=#123\n",
+            "font 7pt [family=\"DejaVu Sans\"]\ntheme dark [background=#000, palette=\"#f00, #0f0\"]\n\nstyle s [fill=#fff]\nwith s {\n  a [text=#123]\n}\n",
         );
         assert!(
             d.is_empty(),
@@ -1810,20 +1690,17 @@ mod tests {
             (g.nodes[0].fill.as_deref(), g.nodes[0].text.as_deref()),
             (Some("#fff"), Some("#123"))
         );
-        assert_eq!(codes("node a\ntheme drak\n"), vec!["E0009"]);
-        assert_eq!(codes("node a\ntheme edge=blue\n"), vec!["E0006"]);
-        assert_eq!(
-            codes("node a\ntheme palette=\"#f00 nope\"\n"),
-            vec!["E0006"]
-        );
-        assert_eq!(codes("node a\ntheme bg=#000\n"), vec!["E0005"]);
-        assert_eq!(codes("node a fill=#12345\n"), vec!["E0006"]);
+        assert_eq!(codes("theme drak\n\na\n"), vec!["E0009"]);
+        assert_eq!(codes("theme [edge=blue]\n\na\n"), vec!["E0006"]);
+        assert_eq!(codes("theme [palette=\"#f00 nope\"]\n\na\n"), vec!["E0006"]);
+        assert_eq!(codes("theme [bg=#000]\n\na\n"), vec!["E0005"]);
+        assert_eq!(codes("a [fill=#12345]\n"), vec!["E0006"]);
     }
 
     #[test]
     fn edge_colors_and_groups() {
         let (g, d) = run(
-            "style hot color=#f00 shape=circle\nnode a\nnode b\nnode c\nhot\n  a -> b\na -> c color=#00f\ngroup \"G\" b, c color=#0f0\n",
+            "style hot [color=#f00, shape=circle]\na\nb\nc\nwith hot {\n  a -> b\n}\na -> c [color=#00f]\ngroup \"G\" b, c [color=#0f0]\n",
         );
         assert!(
             d.is_empty(),
@@ -1837,9 +1714,9 @@ mod tests {
         assert!(
             matches!(&g.constraints[0], Constraint { rel: Relation::Group { items, title: Some(_), color: Some(_), .. }, hard: true, .. } if items == &[1, 2])
         );
-        assert_eq!(codes("node a\nnode b\na -> b width=2pt\n"), vec!["E0005"]);
+        assert_eq!(codes("a\nb\na -> b [width=2pt]\n"), vec!["E0005"]);
         let (g, d) = run(
-            "style is head=triangle\nnode a\nnode b\nis\n  a -> b\na -- b tail=diamond line=dotted\n",
+            "style is [head=triangle]\na\nb\nwith is {\n  a -> b\n}\na -- b [tail=diamond, line=dotted]\n",
         );
         assert!(d.is_empty());
         assert_eq!(
@@ -1850,88 +1727,80 @@ mod tests {
             (g.edges[1].tail, g.edges[1].dash),
             (Some(Head::Diamond), Some(Dash::Dotted))
         );
-        assert_eq!(codes("node a\nnode b\na -> b head=hook\n"), vec!["E0009"]);
-        assert_eq!(codes("node a head=crow\n"), vec!["E0005"]);
-        assert_eq!(
-            codes("node a\nnode b\nnode c\ngroup a, b\ngroup b, c\n"),
-            vec!["E0010"]
-        );
-        assert_eq!(
-            codes("node a\nnode b\ngroup a, b\ngroup b, a\n"),
-            vec!["E0010"]
-        );
-        let (g, d) =
-            run("node a\nnode b\nnode c\ngroup \"I\" b\ngroup \"O\" a, b, c\ngroup \"M\" b, c\n");
+        assert_eq!(codes("a\nb\na -> b [head=hook]\n"), vec!["E0009"]);
+        assert_eq!(codes("a [head=crow]\n"), vec!["E0005"]);
+        assert_eq!(codes("a\nb\nc\ngroup a, b\ngroup b, c\n"), vec!["E0010"]);
+        assert_eq!(codes("a\nb\ngroup a, b\ngroup b, a\n"), vec!["E0010"]);
+        let (g, d) = run("a\nb\nc\ngroup \"I\" b\ngroup \"O\" a, b, c\ngroup \"M\" b, c\n");
         assert!(d.is_empty());
         assert_eq!(g.constraints[1].rel.depth(), 3);
         assert!(
             matches!(&g.constraints[1].rel, Relation::Group { inner, .. } if inner.len() == 1 && inner[0].depth() == 2)
         );
-        assert_eq!(codes("node a\ngroup a, a\n"), vec!["E0007"]);
-        assert_eq!(codes("node a\ngroup a, ghost\n"), vec!["E0001"]);
+        assert_eq!(codes("a\ngroup a, a\n"), vec!["E0007"]);
+        assert_eq!(codes("a\ngroup a, ghost\n"), vec!["E0001"]);
     }
 
     #[test]
     fn keys_collect_entries() {
-        let (g, d) =
-            run("node a\nstyle s color=#f00\ns\n  key \"X\" line=dashed\nkey \"Y\" shape=circle\n");
+        let (g, d) = run(
+            "a\nstyle s [color=#f00]\nwith s {\n  key \"X\" [line=dashed]\n}\nkey \"Y\" [shape=circle]\n",
+        );
         assert!(d.is_empty());
         assert_eq!(g.key.len(), 2);
         assert_eq!(g.key[0].line, Some(Dash::Dashed));
         assert_eq!(g.key[1].shape, Some(Shape::Circle));
-        assert_eq!(codes("node a\nkey \"X\" line=wavy\n"), ["E0009"]);
+        assert_eq!(codes("a\nkey \"X\" [line=wavy]\n"), ["E0009"]);
     }
 
     #[test]
     fn suggests_close_names() {
-        let (_, d) = run("node cyclic\nnode b\ncyclc -> b\n");
+        let (_, d) = run("cyclic\nb\ncyclc -> b\n");
         assert_eq!(d[0].code, "E0001");
         assert_eq!(d[0].help.as_deref(), Some("did you mean `cyclic`?"));
     }
 
     #[test]
     fn types_values_and_units() {
+        assert_eq!(codes("a\nb\nrequire a left-of b [gap=3]\n"), vec!["E0006"]);
         assert_eq!(
-            codes("node a\nnode b\nrequire a left-of b gap=3\n"),
-            vec!["E0006"]
-        );
-        assert_eq!(
-            codes("node a\nnode b\nrequire a left-of b weight=3\n"),
+            codes("a\nb\nrequire a left-of b [weight=3]\n"),
             vec!["E0005"]
         );
-        assert_eq!(codes("node a\nfont 7pt..48pt wrap=2pt\n"), vec!["E0006"]);
+        assert_eq!(codes("font 7pt..48pt [wrap=2pt]\n\na\n"), vec!["E0006"]);
         assert_eq!(
-            codes("node a\npage 594x420mm portrait margin=1cm\n"),
+            codes("page 594x420mm portrait [margin=1cm]\n\na\n"),
             Vec::<&str>::new()
         );
-        assert_eq!(codes("nope\n  node a\nstyle x\n"), vec!["E0004", "W0203"]);
+        assert_eq!(
+            codes("with nope {\n  a\n}\nstyle x\n"),
+            vec!["E0004", "W0203"]
+        );
     }
 
     #[test]
     fn rejects_ordering_cycles() {
         assert_eq!(
-            codes(
-                "node a\nnode b\nnode c\nrequire a left-of b\nrequire b left-of c\nrequire c left-of a\n"
-            ),
+            codes("a\nb\nc\nrequire a left-of b\nrequire b left-of c\nrequire c left-of a\n"),
             vec!["E0008"]
         );
         assert_eq!(
-            codes("node a\nnode b\nrequire align row(a, b)\nrequire a above b\n"),
+            codes("a\nb\nrequire align row(a, b)\nrequire a above b\n"),
             vec!["E0008"]
         );
         assert_eq!(
-            codes("node a\nnode b\nrequire align column(a, b)\nrequire a above b\n"),
+            codes("a\nb\nrequire align column(a, b)\nrequire a above b\n"),
             Vec::<&str>::new()
         );
         assert_eq!(
-            codes("node a\nnode b\nprefer a left-of b\nprefer b left-of a\n"),
+            codes("a\nb\nprefer a left-of b\nprefer b left-of a\n"),
             Vec::<&str>::new()
         );
     }
 
     #[test]
     fn chains_expand_to_one_constraint_per_link() {
-        let (g, d) = run("node a\nnode b\nnode c\nrequire a left-of b above c gap=2em\n");
+        let (g, d) = run("a\nb\nc\nrequire a left-of b above c [gap=2em]\n");
         assert!(d.is_empty());
         assert!(matches!(
             g.constraints[..],
@@ -1956,19 +1825,19 @@ mod tests {
         ));
         assert_ne!(g.constraints[0].span, g.constraints[1].span);
         assert_eq!(
-            codes("node a\nnode b\nnode c\nrequire a left-of b left-of c left-of a\n"),
+            codes("a\nb\nc\nrequire a left-of b left-of c left-of a\n"),
             vec!["E0008"]
         );
         assert_eq!(
-            codes("node a\nnode b\nnode c\nrequire a left-of b near c within=2em\n"),
+            codes("a\nb\nc\nrequire a left-of b near c [within=2em]\n"),
             Vec::<&str>::new()
         );
         assert_eq!(
-            codes("node a\nnode b\nnode c\nrequire a near b near c gap=2em\n"),
+            codes("a\nb\nc\nrequire a near b near c [gap=2em]\n"),
             vec!["E0005"]
         );
         assert_eq!(
-            codes("node a\nnode b\nnode c\nrequire a left-of b sideways c\n"),
+            codes("a\nb\nc\nrequire a left-of b sideways c\n"),
             vec!["E0009"]
         );
     }
@@ -1976,7 +1845,7 @@ mod tests {
     #[test]
     fn group_edges_stand_in_members_and_name_frames() {
         let (g, d) = run(
-            "node l\nnode c\nnode t\nnode u\nnode r\ngroup p \"Prep\" l, c\ngroup f \"\" t, u\nl -> c\nt -> u\np -> f \"x\"\nf -> r\n",
+            "l\nc\nt\nu\nr\ngroup p \"Prep\" l, c\ngroup f \"\" t, u\nl -> c\nt -> u\np -> f \"x\"\nf -> r\n",
         );
         assert!(
             d.is_empty(),
@@ -2000,21 +1869,20 @@ mod tests {
         );
         let e = g.edges.iter().find(|e| id(e.b) == "r").unwrap();
         assert_eq!((id(e.a), e.groups[1]), ("u", None));
-        let base = "node a\nnode b\nnode z\ngroup o \"O\" a, b\ngroup i \"I\" a\n";
+        let base = "a\nb\nz\ngroup o \"O\" a, b\ngroup i \"I\" a\n";
         assert_eq!(codes(&format!("{base}o -> a\n")), ["E0016"]);
         assert_eq!(codes(&format!("{base}o -> o\n")), ["E0016"]);
         assert_eq!(codes(&format!("{base}i -> o\n")), ["E0016"]);
         assert!(codes(&format!("{base}z -> i\n")).is_empty());
         assert_eq!(codes(&format!("layout venn\n{base}z -> i\n")), ["E0016"]);
         assert_eq!(codes(&format!("{base}group o \"P\" z\n")), ["E0003"]);
-        assert_eq!(codes("node a\ngroup a \"A\" a\n"), ["E0003"]);
+        assert_eq!(codes("a\ngroup a \"A\" a\n"), ["E0003"]);
     }
 
     #[test]
     fn cycle_reports_every_constraint() {
-        let (_, d) = run(
-            "node a\nnode b\nnode c\nrequire align top(a, b)\nrequire b above c\nrequire c above a\n",
-        );
+        let (_, d) =
+            run("a\nb\nc\nrequire align top(a, b)\nrequire b above c\nrequire c above a\n");
         assert_eq!(d.len(), 1);
         assert_eq!(d[0].labels.len(), 3);
     }

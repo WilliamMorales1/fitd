@@ -151,6 +151,15 @@ fn strip_html(s: &str, dropped: &mut BTreeSet<String>) -> String {
     out + rest
 }
 
+/// bracket renders an attribute list, or nothing when it is empty.
+fn bracket(attrs: &[String]) -> String {
+    if attrs.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}]", attrs.join(", "))
+    }
+}
+
 impl Doc {
     fn write(mut self) -> (String, Vec<String>) {
         let names: Vec<&str> = self.nodes.iter().map(|n| n.id.as_str()).collect();
@@ -158,29 +167,25 @@ impl Doc {
         let mut o = String::from("// Imported by `fitd import`; positions come from the solver.\n");
         match self.down {
             Some(true) => o += "layout layered\n",
-            Some(false) => o += "layout layered dir=right\n",
+            Some(false) => o += "layout layered [dir=right]\n",
             None => match self.root {
-                Some(r) => o += &format!("layout radial root={}\n", ids[r]),
+                Some(r) => o += &format!("layout radial [root={}]\n", ids[r]),
                 None => o += "layout radial\n",
             },
         }
         o.push('\n');
         for (v, n) in self.nodes.iter().enumerate() {
-            o += &format!("node {}", ids[v]);
+            o += &ids[v];
             match &n.label {
                 Some(l) => o += &format!(" {}", quote(l)),
                 None if ids[v] != n.id => o += &format!(" {}", quote(&n.id)),
                 None => {}
             }
-            if let Some(c) = &n.color {
-                o += &format!(" color={c}");
-            }
-            if let Some(c) = &n.fill {
-                o += &format!(" fill={c}");
-            }
-            if let Some(s) = n.shape {
-                o += &format!(" shape={s}");
-            }
+            let mut attrs = Vec::new();
+            attrs.extend(n.color.as_ref().map(|c| format!("color={c}")));
+            attrs.extend(n.fill.as_ref().map(|c| format!("fill={c}")));
+            attrs.extend(n.shape.map(|s| format!("shape={s}")));
+            o += &bracket(&attrs);
             o.push('\n');
         }
         if !self.edges.is_empty() {
@@ -197,12 +202,9 @@ impl Doc {
             if let Some(l) = &e.label {
                 o += &format!(" {}", quote(l));
             }
-            if let Some(c) = &e.color {
-                o += &format!(" color={c}");
-            }
-            for a in &e.extra {
-                o += &format!(" {a}");
-            }
+            let mut attrs: Vec<String> = e.color.iter().map(|c| format!("color={c}")).collect();
+            attrs.extend(e.extra.iter().cloned());
+            o += &bracket(&attrs);
             o.push('\n');
         }
         let mut wrote_group = false;
@@ -1706,18 +1708,15 @@ mod tests {
             "2nd" -> "node";
         }"##;
         let (out, dropped) = import("x.dot", dot).unwrap();
-        assert!(out.contains("layout layered dir=right\n"), "{out}");
-        assert!(
-            out.contains("node parse \"Parser\\nwith recovery\"\n"),
-            "{out}"
-        );
+        assert!(out.contains("layout layered [dir=right]\n"), "{out}");
+        assert!(out.contains("parse \"Parser\\nwith recovery\"\n"), "{out}");
         assert!(
             out.contains("lex -> parse \"ast\"\nparse -> sema \"ast\"\n"),
             "{out}"
         );
-        assert!(out.contains("sema ..> out color=#C62828\n"), "{out}");
+        assert!(out.contains("sema ..> out [color=#C62828]\n"), "{out}");
         assert!(
-            out.contains("node n_2nd \"2nd\"\n") && out.contains("node n_node \"node\"\n"),
+            out.contains("n_2nd \"2nd\"\n") && out.contains("n_node \"node\"\n"),
             "{out}"
         );
         assert!(out.contains("group \"Front end\" lex, parse\n"), "{out}");
@@ -1729,11 +1728,11 @@ mod tests {
         let dot = "digraph { a -> b [arrowhead=empty]; b -> c [dir=both, arrowtail=diamond, arrowhead=crow]; c -> d [dir=back, arrowtail=odiamond]; d -> e [style=dotted]; e -> a [constraint=false]; a -> c [arrowhead=dot]; }";
         let (out, dropped) = import("x.dot", dot).unwrap();
         for want in [
-            "a -> b head=triangle\n",
-            "b -> c head=crow tail=diamond\n",
-            "d -> c head=odiamond\n",
-            "d ..> e line=dotted\n",
-            "e ..> a line=solid\n",
+            "a -> b [head=triangle]\n",
+            "b -> c [head=crow, tail=diamond]\n",
+            "d -> c [head=odiamond]\n",
+            "d ..> e [line=dotted]\n",
+            "e ..> a [line=solid]\n",
             "a -> c\n",
         ] {
             assert!(out.contains(want), "{want}: {out}");
@@ -1745,11 +1744,11 @@ mod tests {
     fn d2_carries_objects_connections_and_containers() {
         let d2 = "direction: right\nx: Start {shape: circle}\n'q a'.b -> c: go {style.stroke-dash: 3}\nc <- d\nk: {\n  m -> _.c\n  m.style.stroke: \"#c62828\"\n  m.label: |md\n    ## Main\n  |\n}\nk -> x\nclasses: { hot: { style.fill: \"#ffcdd2\"; shape: circle; icon: x }; cool.style: { stroke: \"#1565c0\" } }\nd.class: [cool; hot]\nc.class: ghost\n(d -> c)[0].class: hot\n";
         let (out, dropped) = import("x.d2", d2).unwrap();
-        assert!(out.contains("layout layered dir=right\n"), "{out}");
+        assert!(out.contains("layout layered [dir=right]\n"), "{out}");
         assert!(
-            out.contains("node x \"Start\" shape=circle\n")
-                && out.contains("node q_a_b \"b\"\n")
-                && out.contains("node k_m \"Main\" color=#C62828\n"),
+            out.contains("x \"Start\" [shape=circle]\n")
+                && out.contains("q_a_b \"b\"\n")
+                && out.contains("k_m \"Main\" [color=#C62828]\n"),
             "{out}"
         );
         assert!(
@@ -1761,7 +1760,7 @@ mod tests {
             "{out}"
         );
         assert!(
-            out.contains("node d color=#1565C0 fill=#FFCDD2 shape=circle\n"),
+            out.contains("d [color=#1565C0, fill=#FFCDD2, shape=circle]\n"),
             "{out}"
         );
         assert!(out.contains("k_m -> x\n"), "{out}");
@@ -1781,7 +1780,7 @@ mod tests {
         let d2 = "vars: {\n  svc: API\n  team: { lead: Ana }\n  d2-config: { theme-id: 4 }\n}\na: ${svc} gateway\nb: \"Owner: ${team.lead}\"\na -> b: ${svc} call ${nope}\nk: { m; n }\nk -> k.m\n";
         let (out, dropped) = import("x.d2", d2).unwrap();
         assert!(
-            out.contains("node a \"API gateway\"\n") && out.contains("node b \"Owner: Ana\"\n"),
+            out.contains("a \"API gateway\"\n") && out.contains("b \"Owner: Ana\"\n"),
             "{out}"
         );
         assert!(out.contains("a -> b \"API call ${nope}\"\n"), "{out}");
@@ -1823,26 +1822,24 @@ mod tests {
     fn mindmap_indentation_becomes_a_radial_tree() {
         let mmd = "mindmap\n  root((Mind maps))\n    Origins\n      Long history\n      ::icon(fa fa-book)\n      Popular\n    Research\n      On effectiveness<br/>and features\n      History\n    Tools\n      History\n      a[History]\n";
         let (out, dropped) = import("m.mmd", mmd).unwrap();
-        assert!(out.contains("layout radial root=n_root\n"), "{out}");
+        assert!(out.contains("layout radial [root=n_root]\n"), "{out}");
         assert!(
-            out.contains("node n_root \"Mind maps\" shape=circle\n"),
+            out.contains("n_root \"Mind maps\" [shape=circle]\n"),
             "{out}"
         );
         assert!(
-            out.contains("node Long_history \"Long history\"\n")
-                && out.contains("node History\n")
-                && out.contains("node History_11 \"History\"\n"),
+            out.contains("Long_history \"Long history\"\n")
+                && out.contains("History\n")
+                && out.contains("History_11 \"History\"\n"),
             "{out}"
         );
         assert!(
-            out.contains(
-                "node On_effectiveness_and_features \"On effectiveness\\nand features\"\n"
-            ),
+            out.contains("On_effectiveness_and_features \"On effectiveness\\nand features\"\n"),
             "{out}"
         );
         assert!(out.contains("n_root -> Origins\nOrigins -> Long_history\nOrigins -> Popular\nn_root -> Research\n"), "{out}");
         assert!(
-            out.contains("Tools -> a\n") && out.contains("node a \"History\"\n"),
+            out.contains("Tools -> a\n") && out.contains("a \"History\"\n"),
             "{out}"
         );
         assert_eq!(dropped, ["icons"]);
@@ -1857,17 +1854,17 @@ mod tests {
     fn mermaid_carries_shapes_labels_and_subgraphs() {
         let mmd = "flowchart LR\n  %% comment\n  A[Start] --> B{Is it?}\n  B -->|Yes| C((Done)) & D\n  B -- No --> E[\"Retry <br> later\"]\n  E -.-> A\n  subgraph S1 [Checks]\n    B\n  end\n  classDef hot fill:#f00\n";
         let (out, dropped) = import("x.mmd", mmd).unwrap();
-        assert!(out.contains("layout layered dir=right\n"), "{out}");
+        assert!(out.contains("layout layered [dir=right]\n"), "{out}");
         assert!(
-            out.contains("node A \"Start\"\n") && out.contains("node C \"Done\" shape=circle\n"),
+            out.contains("A \"Start\"\n") && out.contains("C \"Done\" [shape=circle]\n"),
             "{out}"
         );
-        assert!(out.contains("node B \"Is it?\" shape=diamond\n"), "{out}");
+        assert!(out.contains("B \"Is it?\" [shape=diamond]\n"), "{out}");
         assert!(
             out.contains("B -> C \"Yes\"\nB -> D \"Yes\"\nB -> E \"No\"\nE ..> A\n"),
             "{out}"
         );
-        assert!(out.contains("node E \"Retry \\n later\"\n"), "{out}");
+        assert!(out.contains("E \"Retry \\n later\"\n"), "{out}");
         assert!(out.contains("group \"Checks\" B\n"), "{out}");
         assert_eq!(dropped, ["`classDef` statements"]);
     }

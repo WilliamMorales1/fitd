@@ -1,12 +1,14 @@
 // Commutative diagram (mathematics): a square placed on a grid.
 layout layered
 page 1:1
-style obj shape=none
-obj
-  a "A" row=1 col=1
-  b "B" row=1 col=2
-  c "C" row=2 col=1
-  d "D" row=2 col=2
+
+style obj [shape=none]
+with obj {
+  a "A" [row=1, col=1]
+  b "B" [row=1, col=2]
+  c "C" [row=2, col=1]
+  d "D" [row=2, col=2]
+}
 a -> b "f"
 a -> c "g"
 b -> d "h"

@@ -1,46 +1,56 @@
 title "Three ways a layout is refused"
-layout layered dir=down
-page 320x180mm margin=1cm
+layout layered [dir=down]
+page 320x180mm [margin=1cm]
 
-style stat color=#0969DA
-style search color=#8250DF
-style after color=#1A7F37
+style stat [color=#0969DA]
+style search [color=#8250DF]
+style after [color=#1A7F37]
 
 src "Source with require, align, group"
 
-stat
-  classes "E0008: merge classes"
-  | before any search, each axis on its own
-  | top, bottom, row merge nodes vertically;
-  | left, right, column horizontally (union-find)
-  cycle "Find a contradiction"
-  | an ordering inside one class, or a cycle of orderings
-  | between classes, can never hold: boxes have positive size,
-  | gaps are non-negative
-  | BFS over (node, used-an-ordering) states, so the reported
-  | cycle is short and every constraint on it gets a label
+with stat {
+  classes "E0008: merge classes" {
+    | before any search, each axis on its own
+    | top, bottom, row merge nodes vertically;
+    | left, right, column horizontally (union-find)
+  }
+  cycle "Find a contradiction" {
+    | an ordering inside one class, or a cycle of orderings
+    | between classes, can never hold: boxes have positive size,
+    | gaps are non-negative
+    | BFS over (node, used-an-ordering) states, so the reported
+    | cycle is short and every constraint on it gets a label
+  }
+}
 
-search
-  grid "E0110: search fails"
-  | geometry: sizes, page bounds, candidate positions
-  core "Minimal core"
-  | QuickXplain: drop any one listed require and the rest hold
-  | groups appear in it like requires
-  proved "Proved or budgeted?"
-  | proved for every candidate position this layout considers,
-  | or a probe ran out of checks: the core may be an artifact
-  | of --budget, and a larger one is suggested
-  | no layout fits makes the same distinction
-  help "Help printed"
-  | remove one, turn it into prefer, or use a larger page;
-  | the default 9pt floor can be lowered with font
+with search {
+  grid "E0110: search fails" {
+    | geometry: sizes, page bounds, candidate positions
+  }
+  core "Minimal core" {
+    | QuickXplain: drop any one listed require and the rest hold
+    | groups appear in it like requires
+  }
+  proved "Proved or budgeted?" {
+    | proved for every candidate position this layout considers,
+    | or a probe ran out of checks: the core may be an artifact
+    | of --budget, and a larger one is suggested
+    | no layout fits makes the same distinction
+  }
+  help "Help printed" {
+    | remove one, turn it into prefer, or use a larger page;
+    | the default 9pt floor can be lowered with font
+  }
+}
 
-after
-  check "Checker"
-  | an independent pass over the finished drawing
-  | re-derives overlap, edges through nodes, crossings,
-  | off page, text overflow, font size: E0101-E0107
-  | any error stops output; --force writes it anyway
+with after {
+  check "Checker" {
+    | an independent pass over the finished drawing
+    | re-derives overlap, edges through nodes, crossings,
+    | off page, text overflow, font size: E0101-E0107
+    | any error stops output; --force writes it anyway
+  }
+}
 
 src -> classes, grid, check
 classes -> cycle

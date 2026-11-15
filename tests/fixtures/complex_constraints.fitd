@@ -3,14 +3,15 @@ title "Complex Constraints Test"
 layout layered
 page a4
 
-style highlight color=#FFD700
+style highlight [color=#FFD700]
 
-node a "Start"
-highlight
+a "Start"
+with highlight {
   b "Step 1"
   c "Step 2"
   d "Step 3"
-node e "End"
+}
+e "End"
 
 a -> b -> c -> d -> e
 
@@ -19,8 +20,8 @@ require align row(b, c, d)
 require b left-of c left-of d
 
 // Test weights: prefer d at bottom-right strongly, but e at bottom-right weakly
-prefer d at bottom-right weight=10
-prefer e at bottom-right weight=1
+prefer d at bottom-right [weight=10]
+prefer e at bottom-right [weight=1]
 
 // Test gap constraints
-require a left-of b gap=50pt
+require a left-of b [gap=50pt]

@@ -1,24 +1,28 @@
-use crate::ast::{Attr, Name, Rel, Stmt, StmtKind, Value};
+use crate::ast::{Attr, Name, Rel, Row, Stmt, StmtKind, Value};
 use crate::diag::{Diag, Span};
+use crate::graph::Cell;
 use crate::lex::{Tok, Token, describe, lex};
+
+/// Frame is one open `{` block: a node's children, a `with STYLE` block, or a block after an error.
+enum Frame {
+    Node(Name),
+    Style(Name),
+    Other,
+}
 
 struct Parser<'a> {
     text: &'a str,
     toks: Vec<Token>,
     pos: usize,
-    styles: std::collections::HashSet<String>,
-    open: Vec<(Name, usize)>,
-    /// scope holds the node lines that later, deeper lines nest under, with their columns.
-    scope: Vec<(Name, usize)>,
-    known: std::collections::HashSet<String>,
+    frames: Vec<(Frame, Span)>,
 }
 
 type PResult<T> = Result<T, Diag>;
 
-/// KEYWORDS are the words that start a statement or macro directive, so no style may take one.
+/// KEYWORDS are the reserved words that start a statement or macro directive; a node so named needs `node`.
 pub const KEYWORDS: &[&str] = &[
     "title", "root", "layout", "page", "font", "theme", "style", "node", "key", "group", "include",
-    "require", "prefer", "for", "if", "else", "end", "def",
+    "require", "prefer", "with", "for", "if", "else", "def",
 ];
 
 impl Parser<'_> {
@@ -64,10 +68,10 @@ impl Parser<'_> {
     }
 
     fn class_name(&mut self) -> PResult<Name> {
-        let mut name = self.name("a class name")?;
+        let mut name = self.name("a style name")?;
         if *self.peek() == Tok::Dot {
             self.bump();
-            let part = self.name("a class name after `.`")?;
+            let part = self.name("a style name after `.`")?;
             name.text.push('.');
             name.text.push_str(&part.text);
             name.span = name.span.to(part.span);
@@ -80,7 +84,7 @@ impl Parser<'_> {
     }
 
     fn at_end(&self) -> bool {
-        matches!(self.peek(), Tok::Newline | Tok::Eof)
+        matches!(self.peek(), Tok::Newline | Tok::Eof | Tok::RBrace)
     }
 
     fn expect(&mut self, t: Tok) -> PResult<Span> {
@@ -88,6 +92,13 @@ impl Parser<'_> {
             return Err(self.unexpected(describe(&t)));
         }
         Ok(self.bump().span)
+    }
+
+    fn string(&mut self) -> Option<(String, Span)> {
+        match self.peek().clone() {
+            Tok::Str(s) => Some((s, self.bump().span)),
+            _ => None,
+        }
     }
 
     fn value(&mut self) -> PResult<Value> {
@@ -113,24 +124,32 @@ impl Parser<'_> {
         Ok(v)
     }
 
+    /// attrs reads an optional `[key=value, ...]` list.
     fn attrs(&mut self) -> PResult<Vec<Attr>> {
         let mut out = Vec::new();
-        while !self.at_end() {
+        if *self.peek() != Tok::LBracket {
+            return Ok(out);
+        }
+        self.bump();
+        while *self.peek() != Tok::RBracket {
             let key = self.name("an attribute like `key=value`")?;
             self.expect(Tok::Eq)?;
             out.push(Attr {
                 key,
                 value: self.value()?,
             });
+            if *self.peek() != Tok::Comma {
+                break;
+            }
+            self.bump();
         }
+        self.expect(Tok::RBracket)?;
         Ok(out)
     }
 
     fn targets(&mut self) -> PResult<Vec<Name>> {
         let mut out = vec![self.name("a node name")?];
-        while (*self.peek() == Tok::Ident && *self.peek_at(1) != Tok::Eq)
-            || *self.peek() == Tok::Comma
-        {
+        while matches!(self.peek(), Tok::Ident | Tok::Comma) {
             if *self.peek() == Tok::Comma {
                 self.bump();
             }
@@ -149,12 +168,36 @@ impl Parser<'_> {
         }
     }
 
+    /// classes gives the styles of the open `with` blocks, innermost last.
+    fn classes(&self) -> Vec<Name> {
+        self.frames
+            .iter()
+            .filter_map(|(f, _)| match f {
+                Frame::Style(c) => Some(c.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// owner gives the node whose braces hold the current statement.
+    fn owner(&self) -> Option<&Name> {
+        self.frames.iter().rev().find_map(|(f, _)| match f {
+            Frame::Node(n) => Some(n),
+            _ => None,
+        })
+    }
+
     fn edge(&mut self) -> PResult<Vec<StmtKind>> {
-        let mut froms = match self.scope.last() {
-            Some((n, _)) if self.arrow().is_some() => vec![Name {
+        let mut froms = match self.owner() {
+            Some(n) if self.arrow().is_some() => vec![Name {
                 text: n.text.clone(),
                 span: self.span(),
             }],
+            None if self.arrow().is_some() => {
+                return Err(Diag::error("E0002", "edge without a source")
+                    .primary(self.span(), "no node encloses this line")
+                    .help("write `a -> b`, or put `-> b` inside `a { }`"));
+            }
             _ => vec![self.name("a node name")?],
         };
         while *self.peek() == Tok::Comma {
@@ -162,17 +205,10 @@ impl Parser<'_> {
             froms.push(self.name("a node name")?);
         }
         let mut hops = Vec::new();
-        while self.arrow().is_some() {
-            let (link, directed) = self.arrow().unwrap();
+        while let Some((link, directed)) = self.arrow() {
             self.bump();
             let to = self.targets()?;
-            let label = match self.peek().clone() {
-                Tok::Str(s) => {
-                    self.bump();
-                    Some(s)
-                }
-                _ => None,
-            };
+            let label = self.string().map(|s| s.0);
             hops.push((froms, link, directed, to.clone(), label));
             froms = to;
         }
@@ -195,40 +231,6 @@ impl Parser<'_> {
             }
         }
         Ok(out)
-    }
-
-    /// classes gives the styles of the open blocks, innermost last.
-    fn classes(&self) -> Vec<Name> {
-        self.open
-            .iter()
-            .map(|(c, _)| c)
-            .filter(|c| self.is_style(&c.text))
-            .cloned()
-            .collect()
-    }
-
-    /// is_style reports whether `name` is declared anywhere in the file.
-    fn is_style(&self, name: &str) -> bool {
-        self.styles.contains(name)
-    }
-
-    /// col gives the indent of the current token's line in characters.
-    fn col(&self) -> usize {
-        let lo = self.span().lo;
-        lo - self.text[..lo].rfind('\n').map_or(0, |k| k + 1)
-    }
-
-    /// lone_name gives the token count of a line that holds only a name or `MOD.name`.
-    fn lone_name(&self) -> Option<usize> {
-        if *self.peek() != Tok::Ident || KEYWORDS.contains(&self.text(self.span())) {
-            return None;
-        }
-        let k = if *self.peek_at(1) == Tok::Dot && *self.peek_at(2) == Tok::Ident {
-            3
-        } else {
-            1
-        };
-        matches!(self.peek_at(k), Tok::Newline | Tok::Eof).then_some(k)
     }
 
     fn rel(&mut self) -> PResult<Rel> {
@@ -254,15 +256,16 @@ impl Parser<'_> {
         }
         let mut nodes = vec![a, self.name("a node name")?];
         let mut ops = vec![op];
-        while *self.peek() == Tok::Ident && *self.peek_at(1) != Tok::Eq {
+        while *self.peek() == Tok::Ident {
             ops.push(self.name("a relation like `left-of`")?);
             nodes.push(self.name("a node name")?);
         }
         Ok(Rel::Chain { nodes, ops })
     }
 
-    /// edge_at reports whether an edge (`a, b -> c ...`) starts at token offset i.
-    fn edge_at(&self, mut i: usize) -> bool {
+    /// edge_at reports whether an edge (`a, b -> c ...`) starts here.
+    fn edge_at(&self) -> bool {
+        let mut i = 0;
         while *self.peek_at(i) == Tok::Ident && *self.peek_at(i + 1) == Tok::Comma {
             i += 2;
         }
@@ -273,145 +276,155 @@ impl Parser<'_> {
             )
     }
 
-    /// nest records a node line at `col` and gives the edge from the node it is indented under.
-    fn nest(&mut self, id: &Name, col: usize) -> Option<StmtKind> {
-        let edge = self.scope.last().map(|(parent, _)| StmtKind::Edge {
-            from: Name {
-                text: parent.text.clone(),
-                span: id.span,
-            },
-            link: false,
-            directed: None,
-            to: vec![id.clone()],
-            label: None,
-            classes: Vec::new(),
-            attrs: Vec::new(),
-        });
-        self.scope.push((id.clone(), col));
-        edge
-    }
-
-    fn stmt(&mut self) -> PResult<Vec<StmtKind>> {
-        if self.edge_at(0) || (self.arrow().is_some() && !self.scope.is_empty()) {
-            return self.edge();
-        }
-        let col = self.col();
-        if self.lone_name().is_some() {
-            let at = self.pos;
-            let name = self.class_name()?;
-            if self.known.contains(&name.text) && !self.is_style(&name.text) {
-                return Ok(self.nest(&name, col).into_iter().collect());
-            }
-            if self.is_style(&name.text) || (self.open.is_empty() && self.scope.is_empty()) {
-                self.open.push((name.clone(), col));
-                return Ok(vec![StmtKind::Open(name)]);
-            }
-            self.pos = at;
-        }
-        let bare = *self.peek() == Tok::Ident
-            && !KEYWORDS.contains(&self.text(self.span()))
-            && (matches!(self.peek_at(1), Tok::Str(_) | Tok::Newline | Tok::Eof)
-                || (*self.peek_at(1) == Tok::Ident && *self.peek_at(2) == Tok::Eq));
-        if bare || self.keyword_is(0, "node") {
-            if !bare {
-                self.bump();
-            }
-            let node = self.node()?;
-            let StmtKind::Node { id, .. } = &node else {
-                unreachable!()
-            };
-            self.known.insert(id.text.clone());
-            let id = id.clone();
-            return Ok(self.nest(&id, col).into_iter().chain([node]).collect());
-        }
-        self.stmt1().map(|k| vec![k])
-    }
-
-    fn node(&mut self) -> PResult<StmtKind> {
+    /// node reads `ID ["Title"] [attrs]`, preceded by the edge from the node whose braces hold it.
+    fn node(&mut self, keyword: bool) -> PResult<(Vec<StmtKind>, Option<Frame>)> {
         let id = self.name("a node name")?;
-        let title = match self.peek().clone() {
-            Tok::Str(s) => Some((s, self.bump().span)),
-            _ => None,
-        };
-        Ok(StmtKind::Node {
-            id,
+        let title = self.string();
+        let attrs = self.attrs()?;
+        let bare = !keyword && title.is_none() && attrs.is_empty();
+        let mut out: Vec<StmtKind> = self
+            .owner()
+            .map(|parent| StmtKind::Edge {
+                from: Name {
+                    text: parent.text.clone(),
+                    span: id.span,
+                },
+                link: false,
+                directed: None,
+                to: vec![id.clone()],
+                label: None,
+                classes: Vec::new(),
+                attrs: Vec::new(),
+            })
+            .into_iter()
+            .collect();
+        out.push(StmtKind::Node {
+            id: id.clone(),
             title,
             classes: self.classes(),
-            attrs: self.attrs()?,
-        })
+            attrs,
+            bare,
+        });
+        Ok((out, Some(Frame::Node(id))))
     }
 
-    fn stmt1(&mut self) -> PResult<StmtKind> {
-        match self.peek().clone() {
-            Tok::Body(s) => {
-                self.bump();
-                return Ok(StmtKind::Body(s));
+    fn row(&mut self) -> PResult<Row> {
+        if *self.peek() == Tok::LBracket {
+            let open = self.bump().span;
+            let mut cells = Vec::new();
+            loop {
+                match self.peek().clone() {
+                    Tok::Cell(raw) => {
+                        cells.push(cell(&raw));
+                        self.bump();
+                    }
+                    Tok::Comma => {
+                        self.bump();
+                    }
+                    Tok::RBracket => {
+                        self.bump();
+                        break;
+                    }
+                    _ => return Err(self.unexpected("a cell or `]`")),
+                }
             }
-            Tok::Cells(s) => {
+            if cells.is_empty() {
+                return Err(Diag::error("E0002", "figure row has no cells")
+                    .primary(open, "expected cells like `[%100, ., _, GLU]`"));
+            }
+            return Ok(Row::Cells(cells));
+        }
+        if self.keyword_is(0, "image") {
+            self.bump();
+            let Some((path, _)) = self.string() else {
+                return Err(self.unexpected("a quoted image path"));
+            };
+            return Ok(Row::Image {
+                path,
+                attrs: self.attrs()?,
+            });
+        }
+        Err(self.unexpected("`[` cells or `image \"PATH\"`"))
+    }
+
+    /// stmt reads one statement and the block it may open with `{`.
+    fn stmt(&mut self) -> PResult<(Vec<StmtKind>, Option<Frame>)> {
+        let owner = self.owner().cloned();
+        match self.peek().clone() {
+            Tok::Body(text) => {
                 self.bump();
-                return Ok(StmtKind::Cells(s));
+                return Ok((vec![StmtKind::Body { text, owner }], None));
+            }
+            Tok::Tilde => {
+                self.bump();
+                let row = self.row()?;
+                return Ok((vec![StmtKind::Row { row, owner }], None));
             }
             _ => {}
         }
+        if self.edge_at() || self.arrow().is_some() {
+            return Ok((self.edge()?, None));
+        }
+        if *self.peek() == Tok::Ident && !KEYWORDS.contains(&self.text(self.span())) {
+            return self.node(false);
+        }
         let kw = self.name("a statement")?;
-        Ok(match kw.text.as_str() {
-            "title" => match self.peek().clone() {
-                Tok::Str(s) => {
-                    self.bump();
-                    StmtKind::Title(s)
-                }
-                _ => return Err(self.unexpected("a quoted title")),
+        let one = |k| Ok((vec![k], None));
+        match kw.text.as_str() {
+            "node" => self.node(true),
+            "with" => {
+                let name = self.class_name()?;
+                Ok((vec![StmtKind::Open(name.clone())], Some(Frame::Style(name))))
+            }
+            "title" => match self.string() {
+                Some((s, _)) => one(StmtKind::Title(s)),
+                None => Err(self.unexpected("a quoted title")),
             },
-            "root" => StmtKind::Root(self.name("a node name")?),
-            "layout" => StmtKind::Layout {
+            "root" => one(StmtKind::Root(self.name("a node name")?)),
+            "layout" => one(StmtKind::Layout {
                 kind: self.name("a layout like `radial`")?,
                 attrs: self.attrs()?,
-            },
+            }),
             "page" => {
                 let size = self.value()?;
                 let mut flags = Vec::new();
-                while *self.peek() == Tok::Ident && *self.peek_at(1) != Tok::Eq {
+                while *self.peek() == Tok::Ident {
                     flags.push(self.name("a flag")?);
                 }
-                StmtKind::Page {
+                one(StmtKind::Page {
                     size,
                     flags,
                     attrs: self.attrs()?,
-                }
+                })
             }
-            "font" => StmtKind::Font {
+            "font" => one(StmtKind::Font {
                 size: self.value()?,
                 attrs: self.attrs()?,
-            },
+            }),
             "theme" => {
-                let preset = if *self.peek() == Tok::Ident && *self.peek_at(1) != Tok::Eq {
-                    Some(self.name("a theme")?)
-                } else {
-                    None
+                let preset = match self.peek() {
+                    Tok::Ident => Some(self.name("a theme")?),
+                    _ => None,
                 };
-                StmtKind::Theme {
+                one(StmtKind::Theme {
                     preset,
                     attrs: self.attrs()?,
-                }
+                })
             }
-            "style" => StmtKind::Style {
+            "style" => one(StmtKind::Style {
                 name: self.class_name()?,
                 attrs: self.attrs()?,
-            },
+            }),
             "key" => {
-                let label = match self.peek().clone() {
-                    Tok::Str(s) => {
-                        self.bump();
-                        s
-                    }
-                    _ => return Err(self.unexpected("a quoted key label")),
+                let Some((label, _)) = self.string() else {
+                    return Err(self.unexpected("a quoted key label"));
                 };
                 let (classes, attrs) = (self.classes(), self.attrs()?);
-                StmtKind::Key {
+                one(StmtKind::Key {
                     label,
                     classes,
                     attrs,
-                }
+                })
             }
             "group" => {
                 let named = *self.peek() == Tok::Ident && matches!(self.peek_at(1), Tok::Str(_));
@@ -420,111 +433,169 @@ impl Parser<'_> {
                 } else {
                     None
                 };
-                let title = match self.peek().clone() {
-                    Tok::Str(s) => {
-                        self.bump();
-                        Some(s)
-                    }
-                    _ => None,
-                };
+                let title = self.string().map(|s| s.0);
                 let items = self.targets()?;
                 let (classes, attrs) = (self.classes(), self.attrs()?);
-                StmtKind::Group {
+                one(StmtKind::Group {
                     id,
                     title,
                     items,
                     classes,
                     attrs,
-                }
+                })
             }
-            "include" => match self.peek().clone() {
-                Tok::Str(s) => {
-                    self.bump();
-                    StmtKind::Include(s)
-                }
-                _ => return Err(self.unexpected("a quoted file name")),
+            "include" => match self.string() {
+                Some((s, _)) => one(StmtKind::Include(s)),
+                None => Err(self.unexpected("a quoted file name")),
             },
-            "require" | "prefer" => StmtKind::Constraint {
+            "require" | "prefer" => one(StmtKind::Constraint {
                 hard: kw.text == "require",
                 rel: self.rel()?,
                 attrs: self.attrs()?,
-            },
+            }),
             _ => {
                 let d = Diag::error("E0002", format!("unknown statement `{}`", kw.text))
                     .primary(kw.span, "not a statement");
-                return Err(d.help("statements: title, root, layout, page, font, theme, style, node, `|` body, `a -> b`, `a ..> b`, group, key, require, prefer, include"));
+                Err(d.help("statements: title, root, layout, page, font, theme, style, node, with, `|` body, `~` row, `a -> b`, group, key, require, prefer, include"))
             }
-        })
+        }
+    }
+
+    /// recover skips to the end of the line, opening a block for a skipped `{` so its `}` still matches.
+    fn recover(&mut self) {
+        while !matches!(self.peek(), Tok::Newline | Tok::Eof | Tok::RBrace) {
+            if *self.peek() == Tok::LBrace {
+                self.frames.push((Frame::Other, self.span()));
+            }
+            self.bump();
+        }
+    }
+}
+
+/// cell reads one figure cell: `%NN` shaded (`%100` solid), `.` outlined, `_` gap, a label, and a `*N` span.
+pub fn cell(raw: &str) -> Cell {
+    let mut s = raw.trim();
+    let mut shade = 0.0;
+    if let Some(r) = s.strip_prefix('%') {
+        let n = r.bytes().take_while(u8::is_ascii_digit).count();
+        if let Ok(v) = r[..n].parse::<f64>() {
+            shade = (v / 100.0).clamp(0.0, 1.0);
+            s = &r[n..];
+        }
+    }
+    let mut cols = 1;
+    let mut gap = false;
+    let label = if let Some(r) = s.strip_prefix('"') {
+        let (l, tail) = r.split_once('"').unwrap_or((r, ""));
+        if let Some(n) = tail.strip_prefix('*').and_then(|n| n.parse().ok()) {
+            cols = n;
+        }
+        Some(l.to_string())
+    } else {
+        let mut w = s;
+        // `*N` is a span only when digits end the word, so a label like `a*t` survives.
+        if let Some(i) = w.rfind('*') {
+            let tail = &w[i + 1..];
+            if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) {
+                cols = tail.parse().unwrap_or(1);
+                w = &w[..i];
+            }
+        }
+        match w {
+            "." | "" => None,
+            "_" if shade == 0.0 => {
+                gap = true;
+                None
+            }
+            _ => Some(w.to_string()),
+        }
+    };
+    Cell {
+        shade,
+        gap,
+        span: cols.clamp(1, 64),
+        label,
+        image: None,
     }
 }
 
 pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
     let (toks, mut errs) = lex(text);
-    let styles = (0..toks.len())
-        .filter(|&i| i == 0 || toks[i - 1].tok == Tok::Newline)
-        .filter(|&i| {
-            toks[i].tok == Tok::Ident && &text[toks[i].span.lo..toks[i].span.hi] == "style"
-        })
-        .filter_map(|i| {
-            toks.get(i + 1)
-                .filter(|t| t.tok == Tok::Ident)
-                .map(|t| (i + 1, t))
-        })
-        .map(|(k, t)| match (toks.get(k + 1), toks.get(k + 2)) {
-            (Some(d), Some(p)) if d.tok == Tok::Dot && p.tok == Tok::Ident => {
-                text[t.span.lo..p.span.hi].to_string()
-            }
-            _ => text[t.span.lo..t.span.hi].to_string(),
-        })
-        .collect();
     let mut p = Parser {
         text,
         toks,
         pos: 0,
-        styles,
-        open: Vec::new(),
-        scope: Vec::new(),
-        known: Default::default(),
+        frames: Vec::new(),
     };
     let mut stmts = Vec::new();
     loop {
-        while *p.peek() == Tok::Newline {
-            p.bump();
-        }
-        if *p.peek() == Tok::Eof {
-            break;
+        match p.peek() {
+            Tok::Newline => {
+                p.bump();
+                continue;
+            }
+            Tok::Eof => break,
+            Tok::RBrace => {
+                let at = p.bump().span;
+                if p.frames.pop().is_none() {
+                    errs.push(
+                        Diag::error("E0002", "`}` closes no block").primary(at, "no `{` to close"),
+                    );
+                }
+                continue;
+            }
+            _ => {}
         }
         let lo = p.span().lo;
-        // Off-side rule: a line indented no deeper than a block's opener closes that block.
-        let col = p.col();
-        if !matches!(p.peek(), Tok::Body(_) | Tok::Cells(_)) {
-            while p.open.last().is_some_and(|&(_, c)| c >= col) {
-                p.open.pop();
-            }
-            while p.scope.last().is_some_and(|&(_, c)| c >= col) {
-                p.scope.pop();
-            }
-        }
         match p.stmt() {
-            Ok(kinds) if p.at_end() => {
+            Ok((kinds, frame)) => {
                 let hi = p.toks[p.pos - 1].span.hi;
                 stmts.extend(kinds.into_iter().map(|kind| Stmt {
                     kind,
                     span: Span::new(lo, hi),
                 }));
+                if *p.peek() == Tok::LBrace {
+                    let at = p.bump().span;
+                    match frame {
+                        Some(f) => p.frames.push((f, at)),
+                        None => {
+                            errs.push(
+                                Diag::error("E0002", "this statement takes no block")
+                                    .primary(at, "unexpected `{`")
+                                    .help("only nodes and `with STYLE` open a block"),
+                            );
+                            p.frames.push((Frame::Other, at));
+                        }
+                    }
+                } else if !p.at_end() {
+                    let head = &p.text[lo..p.toks[p.pos - 1].span.hi];
+                    let bare = head
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || "_-.".contains(c));
+                    let d = if bare && *p.peek() == Tok::Ident {
+                        // `pill a A`: a misspelt keyword or a template called without its module.
+                        Diag::error("E0002", format!("unknown statement `{head}`"))
+                            .primary(Span::new(lo, lo + head.len()), "not a statement or template")
+                            .help("a node line is `ID \"Title\" [attrs]`; call a library template as `MOD.name`")
+                    } else {
+                        Diag::error(
+                            "E0002",
+                            format!("{} after the statement", describe(p.peek())),
+                        )
+                        .primary(p.span(), "expected end of line")
+                    };
+                    errs.push(d);
+                    p.recover();
+                }
             }
-            Ok(_) => errs.push(
-                Diag::error(
-                    "E0002",
-                    format!("unexpected {} after statement", describe(p.peek())),
-                )
-                .primary(p.span(), "expected end of line"),
-            ),
-            Err(d) => errs.push(d),
+            Err(d) => {
+                errs.push(d);
+                p.recover();
+            }
         }
-        while !p.at_end() {
-            p.bump();
-        }
+    }
+    for (_, at) in p.frames.drain(..).rev() {
+        errs.push(Diag::error("E0002", "`{` is never closed").primary(at, "block opens here"));
     }
     (stmts, errs)
 }
@@ -535,7 +606,7 @@ mod tests {
 
     #[test]
     fn parses_relation_chains() {
-        let (stmts, errs) = parse("require a left-of b left-of c gap=2em\n");
+        let (stmts, errs) = parse("require a left-of b left-of c [gap=2em]\n");
         assert!(errs.is_empty());
         assert!(
             matches!(&stmts[0].kind, StmtKind::Constraint { rel: Rel::Chain { nodes, ops }, attrs, .. }
@@ -565,7 +636,7 @@ mod tests {
 
     #[test]
     fn parses_every_statement() {
-        let src = "title \"T\"\nlayout radial root=a\npage a1 portrait margin=24pt\nfont 7pt..48pt wrap=24em family=\"DejaVu Sans\"\ntheme dark background=#000 palette=\"#f00 #0f0\"\nstyle hub shape=circle\nnode a \"A\" color=#123456\n| body\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c gap=2em\nprefer align top(b, c) weight=3\nrequire a at top-left\ngroup \"G\" b, c color=#123\nhub\n  a -> c \"x\" color=#f00\n";
+        let src = "title \"T\"\nlayout radial [root=a]\npage a1 portrait [margin=24pt]\nfont 7pt..48pt [wrap=24em, family=\"DejaVu Sans\"]\ntheme dark [background=#000, palette=\"#f00 #0f0\"]\n\nstyle hub [shape=circle]\na \"A\" [color=#123456] {\n  | body\n}\na -> b, c \"why\"\na -- b c\na .. b\nrequire b left-of c [gap=2em]\nprefer align top(b, c) [weight=3]\nrequire a at top-left\ngroup \"G\" b, c [color=#123]\nwith hub {\n  a -> c \"x\" [color=#f00]\n}\n";
         let (stmts, errs) = parse(src);
         assert!(
             errs.is_empty(),
@@ -620,7 +691,8 @@ mod tests {
 
     #[test]
     fn parses_arrow_chains() {
-        let (stmts, errs) = parse("style hub\nhub\n  a -> b, c \"x\" -- d color=#f00\n");
+        let (stmts, errs) =
+            parse("style hub\nwith hub {\n  a -> b, c \"x\" -- d [color=#f00]\n}\n");
         assert!(errs.is_empty());
         assert_eq!(stmts.len(), 5);
         assert!(
@@ -634,7 +706,7 @@ mod tests {
 
     #[test]
     fn style_blocks_apply_to_lines() {
-        let src = "style step\nstyle nn.block\nstyle radial\nstep\n  a \"A\" color=#f00\n  nn.block\n    e\n  a -> e\nnode radial\nradial -> a\n";
+        let src = "style step\nstyle nn.block\nstyle radial\nwith step {\n  a \"A\" [color=#f00]\n  with nn.block {\n    e\n  }\n  a -> e\n}\nradial\nradial -> a\n";
         let (stmts, errs) = parse(src);
         assert!(errs.is_empty());
         let classes = |k: &StmtKind| match k {
@@ -696,35 +768,31 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
         };
-        let src = "style s\nr \"R\"\n  | body\n    a \"A\"\n    s\n      b\n  c\n    -> a \"L\"\nr\n  d\n";
+        let src = "style s\nr \"R\" {\n  | body\n  a \"A\"\n  with s {\n    b\n  }\n  c {\n    -> a \"L\"\n  }\n}\nr {\n  d\n}\n";
         assert_eq!(edges(src), ["r~a", "r~b", "r~c", "c>aL", "r~d"]);
         // The layout decides the nested kind in sema, wherever the `layout` line sits.
         let nd = |src: &str| crate::sema::nest_directed(&parse(src).0);
-        assert!(nd("node a\n  b\nlayout layered\n"));
-        assert!(!nd("layout radial\na \"A\"\n  b\n"));
-        assert!(!nd("a \"A\"\n  b\n"));
+        assert!(nd("layout layered\n\na {\n  b\n}\n"));
+        assert!(!nd("layout radial\n\na \"A\" {\n  b\n}\n"));
+        assert!(!nd("a \"A\" {\n  b\n}\n"));
     }
 
     #[test]
     fn style_block_errors() {
-        assert_eq!(
-            parse("node a\nnode b\na -> b : x\n").1.len(),
-            1,
-            "`: NAME` is gone"
-        );
-        let (stmts, errs) = parse("style s\ns\nnode a\n");
+        assert_eq!(parse("a\nb\na -> b : x\n").1.len(), 1, "`: NAME` is gone");
+        let (stmts, errs) = parse("style s\nwith s {\n  b\n}\na\n");
         assert!(errs.is_empty());
         assert!(
-            matches!(&stmts[2].kind, StmtKind::Node { classes, .. } if classes.is_empty()),
-            "dedent closes"
+            matches!(&stmts.last().unwrap().kind, StmtKind::Node { classes, .. } if classes.is_empty()),
+            "a closing brace ends the block"
         );
-        assert_eq!(parse("node a\nend\n").1.len(), 1, "stray `end`");
+        assert_eq!(parse("a\n}\n").1.len(), 1, "stray closing brace");
     }
 
     #[test]
     fn recovers_after_bad_line() {
-        let (stmts, errs) = parse("node a\nnode = b\nnode c\nfrobnicate x\n");
-        assert_eq!(stmts.len(), 2);
+        let (stmts, errs) = parse("a\nnode = b\nc\nfrobnicate x\n");
+        assert_eq!(stmts.len(), 3, "a, c, and frobnicate");
         assert_eq!(errs.len(), 2);
     }
 }

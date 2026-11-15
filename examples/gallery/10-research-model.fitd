@@ -1,14 +1,16 @@
 // Research model with hypotheses (Nickerson: models, 101 of 983).
 include "model"
-layout layered dir=right
+layout layered [dir=right]
 page 16:9
+
 model.iv ease "Ease of use"
 model.med use Usefulness
 model.dv adopt Adoption
 model.mod exp Experience
-model.hyp
+model.hyp {
   ease use 1 +
   use adopt 2 +
   ease adopt 3 +
+}
 exp ..> adopt "H4"
 model.key

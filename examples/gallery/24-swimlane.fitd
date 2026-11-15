@@ -2,17 +2,22 @@
 include "flow"
 layout lanes
 page 4:3
-flow.io
+
+with flow.io {
   order "Place order"
-flow.step
+}
+with flow.step {
   pay "Take payment"
   ship "Pack and ship"
   refund "Refund"
   receipt "Send receipt"
-flow.decide
+}
+with flow.decide {
   stock "In stock?"
-flow.done
+}
+with flow.done {
   done "Receive parcel"
+}
 order -> pay -> stock -> ship "yes"
 stock -> refund "no"
 ship -> receipt -> done

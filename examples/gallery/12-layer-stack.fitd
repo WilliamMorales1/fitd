@@ -1,4 +1,5 @@
 // Layer / stack diagram (Nickerson: layers).
 include "arch"
 page 3:4
+
 arch.layers osi "Internet stack" "Application; Transport; Network; Link"

@@ -11,11 +11,11 @@ use crate::metrics::Fonts;
 pub const EXPLAIN: &[(&str, &str)] = &[
     (
         "E0001",
-        "An edge, constraint, or `root` names a node id that is never declared with `node`.",
+        "An edge, constraint, or `root` names a node id that is never declared.",
     ),
     (
         "E0002",
-        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes|venn`, `page`, `font`, `theme [PRESET] k=v`, `style NAME k=v`, `node ID \"Title\" [: NAME] [k=v]`, `| body`, `A -> B, C [\"label\"] [: NAME] [color=#hex]`, `A ..> B`, `group [ID] [\"Title\"] A, B`, `key \"Label\" [: NAME] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`.",
+        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes|venn`, `page`, `font`, `theme [PRESET] [k=v]`, `style NAME [k=v]`, `with NAME { ... }`, `ID \"Title\" [: NAME] [k=v] { ... }`, `| body` and `~ [a, b]` inside a node's braces, `A -> B, C \"label\" [color=#hex]`, `A ..> B`, `group [ID] [\"Title\"] A, B`, `key \"Label\" [: NAME] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`. Blocks open with `{` at the end of a line and close with `}`.",
     ),
     (
         "E0003",
@@ -64,10 +64,6 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     (
         "E0014",
         "An `~ image \"PATH\"` row names a file that cannot be read or is not a PNG or JPEG. Paths are relative to the main file, not to an included one.",
-    ),
-    (
-        "E0015",
-        "A `style` is named after a statement or macro keyword such as `node`, `group`, or `for`. A line holding only a style name opens a style block, so the name cannot share a statement word. Rename the style.",
     ),
     (
         "E0016",

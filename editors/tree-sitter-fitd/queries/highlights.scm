@@ -1,11 +1,11 @@
 ; A later pattern overrides an earlier one, so the catch-all comes first.
 (name) @variable
 
-["title" "root" "layout" "page" "font" "theme" "style" "node" "key" "group" "require" "prefer" "include" "align" "at"] @keyword
-["for" "in" "if" "else" "end" "def"] @keyword.control
+["title" "root" "layout" "page" "font" "theme" "style" "node" "with" "key" "group" "require" "prefer" "include" "align" "at"] @keyword
+["for" "in" "if" "else" "def"] @keyword.control
 
 (edge_operator) @operator
-["=" ".." "." "," "(" ")"] @punctuation.delimiter
+["=" ".." "." "," "(" ")" "[" "]" "{" "}"] @punctuation.delimiter
 
 (comment) @comment
 (string) @string
@@ -15,8 +15,9 @@
 (color) @constant
 
 (attribute key: (name) @property)
-(block_statement style: (qualified_name (name) @type))
-(style_statement name: (name) @type)
+(with_statement style: (qualified_name (name) @type))
+(name_statement name: (qualified_name (name) @label))
+(style_statement name: (qualified_name (name) @type))
 (flag (name) @constant.builtin)
 (relation (name) @keyword.operator)
 (align side: (name) @keyword.operator)

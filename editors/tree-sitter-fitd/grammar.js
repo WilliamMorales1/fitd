@@ -1,9 +1,9 @@
 /**
  * Tree-sitter grammar for fitd diagram sources. Mirrors parse.rs and the macro lines of macros.rs: one
- * statement per line, `//` comments; `#` right after `=` starts a color.
+ * statement per line, blocks in `{ }`, attributes in `[ ]`, `//` comments; `#` right after `=` starts a color.
  */
 const KEYWORDS = ['title', 'root', 'layout', 'page', 'font', 'theme', 'style', 'node', 'key', 'group',
-  'include', 'require', 'prefer', 'for', 'if', 'else', 'end', 'def'];
+  'include', 'require', 'prefer', 'with', 'for', 'if', 'else', 'def'];
 
 module.exports = grammar({
   name: 'fitd',
@@ -12,12 +12,14 @@ module.exports = grammar({
 
   word: $ => $.name,
 
-  // A name after a target or chain link may be the next one or an attribute key; only the
-  // `=` after it tells, one token too late for LR(1), so both are explored.
-  conflicts: $ => [[$._targets], [$.chain], [$.node_statement, $.qualified_name]],
+  // A lone id may be a node or a qualified name; the token after it tells.
+  conflicts: $ => [[$.node_statement, $.qualified_name]],
 
   rules: {
-    source_file: $ => seq(repeat(seq(optional($._statement), $._newline)), optional($._statement)),
+    source_file: $ => seq(repeat($._line), optional($._statement)),
+    _line: $ => seq(optional($._statement), $._newline),
+    // A block may end with a statement on the `}` line, as in `a { b }`.
+    block: $ => seq('{', repeat($._line), optional($._statement), '}'),
 
     _newline: _ => '\n',
 
@@ -31,7 +33,8 @@ module.exports = grammar({
       $.style_statement,
       $.key_statement,
       $.node_statement,
-      $.block_statement,
+      $.name_statement,
+      $.with_statement,
       $.body,
       $.figure,
       $.edge_statement,
@@ -40,53 +43,56 @@ module.exports = grammar({
       $.include_statement,
       $.for_statement,
       $.if_statement,
-      $.else_statement,
-      $.end_statement,
       $.def_statement,
       $.row_statement,
     ),
 
     title_statement: $ => seq('title', $.string),
     root_statement: $ => seq('root', field('node', $.name)),
-    layout_statement: $ => seq('layout', field('kind', $.name), repeat($.attribute)),
-    page_statement: $ => seq('page', field('size', $._value), repeat(choice($.flag, $.attribute))),
-    font_statement: $ => seq('font', field('size', $._value), optional(seq('..', field('max', $._value))), repeat($.attribute)),
-    theme_statement: $ => seq('theme', optional(field('preset', $.name)), repeat($.attribute)),
-    key_statement: $ => seq('key', field('label', $.string), repeat($.attribute)),
-    style_statement: $ => seq('style', field('name', $.name), repeat($.attribute)),
-    // A node line may drop `node` when a title or attribute follows the id; indentation nests it, which only parse.rs tracks.
-    node_statement: $ => choice(
-      seq('node', field('id', $.name), optional(field('title', $.string)), repeat($.attribute)),
-      seq(field('id', $.name), choice(seq(field('title', $.string), repeat($.attribute)), repeat1($.attribute))),
+    layout_statement: $ => seq('layout', field('kind', $.name), optional($.attributes)),
+    page_statement: $ => seq('page', field('size', $._value), repeat($.flag), optional($.attributes)),
+    font_statement: $ => seq('font', field('size', $._value), optional(seq('..', field('max', $._value))), optional($.attributes)),
+    theme_statement: $ => seq('theme', optional(field('preset', $.name)), optional($.attributes)),
+    key_statement: $ => seq('key', field('label', $.string), optional($.attributes)),
+    style_statement: $ => seq('style', field('name', $.qualified_name), optional($.attributes)),
+    // A node line may drop `node` when a title or attributes follow the id.
+    node_statement: $ => seq(
+      choice(
+        seq('node', field('id', $.name), optional(field('title', $.string)), optional($.attributes)),
+        seq(field('id', $.name), choice(seq(field('title', $.string), optional($.attributes)), $.attributes)),
+      ),
+      optional($.block),
     ),
-    // A lone name opens a style block over the lines indented under it; inside a block an undeclared one is a node, which only sema knows.
-    block_statement: $ => field('style', $.qualified_name),
+    // A lone name is a bare node, a reopened one, or a template called without arguments; only sema and macros.rs know which.
+    name_statement: $ => seq(field('name', $.qualified_name), optional($.block)),
+    with_statement: $ => seq('with', field('style', $.qualified_name), optional($.block)),
     body: _ => token(seq('|', /[^\n]*/)),
     figure: _ => token(seq('~', /[^\n]*/)),
     edge_statement: $ => seq(
       // A node may be named like a keyword; the edge operator after it tells. No source: from the node above.
       optional(seq($._source, repeat(seq(',', $._source)))),
       repeat1($._hop),
-      repeat($.attribute),
+      optional($.attributes),
     ),
     // A hop's targets feed the next hop: `a -> b, c "x" -- d`.
     _source: $ => field('from', choice($.name, alias(choice(...KEYWORDS), $.name))),
     _hop: $ => seq(field('operator', $.edge_operator), $._targets, optional(field('label', $.string))),
-    group_statement: $ => seq('group', optional(seq(optional(field('id', $.name)), field('title', $.string))), $._targets, repeat($.attribute)),
-    constraint_statement: $ => seq(choice('require', 'prefer'), $._relation, repeat($.attribute)),
+    group_statement: $ => seq('group', optional(seq(optional(field('id', $.name)), field('title', $.string))), $._targets, optional($.attributes)),
+    constraint_statement: $ => seq(choice('require', 'prefer'), $._relation, optional($.attributes)),
     include_statement: $ => seq('include', field('path', $.string)),
 
-    // Statements stay flat, one per line; nesting is left to `end` for macros and indentation for style blocks.
-    for_statement: $ => seq('for', field('var', $.name), optional(seq(',', field('var', $.name))), 'in', field('items', $.expression)),
-    if_statement: $ => seq('if', field('condition', $.expression)),
-    else_statement: $ => seq('else', optional(seq('if', field('condition', $.expression)))),
-    end_statement: _ => 'end',
-    def_statement: $ => seq('def', field('name', $.name), '(', optional(seq(field('parameter', $.name), repeat(seq(',', field('parameter', $.name))))), ')'),
+    for_statement: $ => seq('for', field('var', $.name), optional(seq(',', field('var', $.name))), 'in', field('items', $.expression), $.block),
+    if_statement: $ => seq(
+      'if', field('condition', $.expression), $.block,
+      repeat(seq('else', 'if', field('condition', $.expression), $.block)),
+      optional(seq('else', $.block)),
+    ),
+    def_statement: $ => seq('def', field('name', $.name), '(', optional(seq(field('parameter', $.name), repeat(seq(',', field('parameter', $.name))))), ')', $.block),
     // A template call, or a row of a template block; only macros.rs knows which names are templates.
-    row_statement: $ => prec.dynamic(-1, seq(field('name', choice($.qualified_name, $.string, $.number, $.word)), repeat1(field('argument', $._row_word)))),
-    _row_word: $ => choice($.name, $.string, $.number, $.word),
-    word: _ => token(prec(-1, /[^\s"#=.]+(\.[^\s"#=.]+)*/)),
-    expression: _ => token(prec(-1, /([^\n\/]|\/[^\n\/])+/)),
+    row_statement: $ => prec.dynamic(-1, seq(field('name', choice($.qualified_name, $.string, $.number, $.word)), repeat1(field('argument', $._row_word)), optional($.block))),
+    _row_word: $ => choice($.qualified_name, $.string, $.number, $.word),
+    word: _ => token(prec(-1, /[^\s"#=.{}\[\]]+(\.[^\s"#=.{}\[\]]+)*/)),
+    expression: _ => token(prec(-1, /([^\n\/{]|\/[^\n\/{])+/)),
 
     edge_operator: _ => choice('->', '--', '..>', '..'),
     _targets: $ => seq(field('to', $.name), repeat(seq(optional(','), field('to', $.name)))),
@@ -99,6 +105,8 @@ module.exports = grammar({
 
     flag: $ => $.name,
     qualified_name: $ => seq($.name, optional(seq('.', $.name))),
+    // Newlines inside brackets do not end the statement.
+    attributes: $ => seq('[', repeat($._newline), optional(seq($.attribute, repeat(seq(',', repeat($._newline), $.attribute)), repeat($._newline))), ']'),
     attribute: $ => seq(field('key', $.name), '=', field('value', choice($._value, $.color))),
     _value: $ => choice($.name, $.string, $.number),
 

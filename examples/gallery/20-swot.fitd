@@ -1,12 +1,17 @@
 // 2x2 matrix such as SWOT (business, strategy), with nodes placed on a grid.
 layout layered
 page 16:9
-s "Strengths" row=1 col=1
-| loyal users
-| fast support
-w "Weaknesses" row=1 col=2
-| slow builds
-o "Opportunities" row=2 col=1
-| new markets
-t "Threats" row=2 col=2
-| cheaper rivals
+
+s "Strengths" [row=1, col=1] {
+  | loyal users
+  | fast support
+}
+w "Weaknesses" [row=1, col=2] {
+  | slow builds
+}
+o "Opportunities" [row=2, col=1] {
+  | new markets
+}
+t "Threats" [row=2, col=2] {
+  | cheaper rivals
+}

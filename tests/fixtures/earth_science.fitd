@@ -1,68 +1,92 @@
 title "The water cycle"
-layout radial root=water
+layout radial [root=water]
 page a4 portrait
-font 8pt..34pt wrap=16em
-theme light root=#0D47A1 link=#546E7A
+font 8pt..34pt [wrap=16em]
+theme light [root=#0D47A1, link=#546E7A]
 
-style reservoir color=#1565C0
-style process color=#2E7D32
-style atmosphere color=#6A1B9A
-style impact color=#C62828
+style reservoir [color=#1565C0]
+style process [color=#2E7D32]
+style atmosphere [color=#6A1B9A]
+style impact [color=#C62828]
 
-reservoir
-  water "Water"
-  | solid, liquid, and vapor
-  | mass is conserved as state changes
-  ocean "Ocean"
-  | largest active reservoir
-  | stores heat and dissolved salts
-  ice "Ice and snow"
-  | glaciers, ice caps, and seasonal snow
-  | high albedo reflects solar radiation
-  ground "Groundwater"
-  | water stored in pores and fractures
-  | residence time can be centuries
-atmosphere
-  node atmosphere "Atmospheric vapor"
-  | small reservoir with rapid turnover
-  | transports water between regions
-process
-  evaporation "Evaporation"
-  | liquid -> vapor using solar energy
-  | latent heat leaves the surface
-atmosphere
-  condensation "Condensation"
-  | vapor -> cloud droplets
-  | requires cooling or saturation
-  precipitation "Precipitation"
-  | rain, snow, sleet, or hail
-  | gravity returns water to the surface
-process
-  runoff "Runoff"
-  | water flows over land to rivers
-  | depends on slope, soil, and vegetation
-  infiltration "Infiltration"
-  | water enters soil and aquifers
-  | permeability controls the rate
-  transpiration "Transpiration"
-  | plants release water vapor
-  | stomata couple carbon and water exchange
-reservoir
-  storage "Surface storage"
-  | lakes, wetlands, and soil moisture
-  | buffers floods and droughts
-impact
-  human "Human withdrawals"
-  | irrigation and pumping move water
-  | use can exceed natural recharge
-process
-  balance "Water balance"
-  | input - output = change in storage
-  | basin budgets expose unsustainable use
-impact
-  climate "Climate feedback" fill=#FFEBEE
-  | warming changes vapor capacity and ice melt
-  | circulation shifts precipitation patterns
+with reservoir {
+  water "Water" {
+    | solid, liquid, and vapor
+    | mass is conserved as state changes
+  }
+  ocean "Ocean" {
+    | largest active reservoir
+    | stores heat and dissolved salts
+  }
+  ice "Ice and snow" {
+    | glaciers, ice caps, and seasonal snow
+    | high albedo reflects solar radiation
+  }
+  ground "Groundwater" {
+    | water stored in pores and fractures
+    | residence time can be centuries
+  }
+}
+with atmosphere {
+  atmosphere "Atmospheric vapor" {
+    | small reservoir with rapid turnover
+    | transports water between regions
+  }
+}
+with process {
+  evaporation "Evaporation" {
+    | liquid -> vapor using solar energy
+    | latent heat leaves the surface
+  }
+}
+with atmosphere {
+  condensation "Condensation" {
+    | vapor -> cloud droplets
+    | requires cooling or saturation
+  }
+  precipitation "Precipitation" {
+    | rain, snow, sleet, or hail
+    | gravity returns water to the surface
+  }
+}
+with process {
+  runoff "Runoff" {
+    | water flows over land to rivers
+    | depends on slope, soil, and vegetation
+  }
+  infiltration "Infiltration" {
+    | water enters soil and aquifers
+    | permeability controls the rate
+  }
+  transpiration "Transpiration" {
+    | plants release water vapor
+    | stomata couple carbon and water exchange
+  }
+}
+with reservoir {
+  storage "Surface storage" {
+    | lakes, wetlands, and soil moisture
+    | buffers floods and droughts
+  }
+}
+with impact {
+  human "Human withdrawals" {
+    | irrigation and pumping move water
+    | use can exceed natural recharge
+  }
+}
+with process {
+  balance "Water balance" {
+    | input - output = change in storage
+    | basin budgets expose unsustainable use
+  }
+}
+with impact {
+  climate "Climate feedback" [fill=#FFEBEE] {
+    | warming changes vapor capacity and ice melt
+    | circulation shifts precipitation patterns
+  }
+}
 
 water -> ocean
 water -> ice
@@ -78,15 +102,16 @@ precipitation -> infiltration
 runoff -> ocean
 infiltration -> ground
 runoff -> storage -> evaporation
-impact
+with impact {
   human ..> ground "pumping"
   human ..> storage "withdrawal"
   climate ..> evaporation "warming"
   climate ..> ice "melting"
+}
 ocean ..> balance "reservoir"
 ground ..> balance "reservoir"
 
 require water at center
-prefer condensation at top weight=2
-prefer precipitation at bottom weight=2
-prefer balance near human within=18em weight=2
+prefer condensation at top [weight=2]
+prefer precipitation at bottom [weight=2]
+prefer balance near human [within=18em, weight=2]

@@ -1,9 +1,13 @@
 // Network graph (Lohse et al.: networks; ACL-Fig: graph). Radial layout, no library needed.
 page 1:1
-a "Alice"
-  b "Bob"
+
+a "Alice" {
+  b "Bob" {
     e "Eli"
-  c "Cara"
+  }
+  c "Cara" {
     f "Fay"
+  }
   d "Dev"
+}
 d .. e

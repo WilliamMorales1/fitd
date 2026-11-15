@@ -1,82 +1,107 @@
 // FREN 4014 Exam 1: external history of French, from Gaulish to the standard (course notes, termes_examen_1).
 title "Histoire externe du français"
-layout layered dir=down
+layout layered [dir=down]
 page a4 portrait
-font 6pt..34pt wrap=12em
+font 6pt..34pt [wrap=12em]
 
-style selection color=#2E7D32
-style codification color=#1565C0
-style elaboration color=#EF6C00
-style diffusion color=#6A1B9A
+style selection [color=#2E7D32]
+style codification [color=#1565C0]
+style elaboration [color=#EF6C00]
+style diffusion [color=#6A1B9A]
 
-node gaulois "Les Gaulois"
-| peuple celte, arrivé vers 400 av. J.-C.
-| substrat : une centaine de mots (chêne, druide)
-node latin "Conquête romaine"
-| IIe–Ier s. av. J.-C.
-| le latin vulgaire remplace le gaulois
-node francs "Invasions germaniques"
-| Ve–VIIIe s. : Wisigoths, Burgondes, Francs
-| superstrat francique : 10 % du lexique, h aspiré
-node roman "Roman (gallo-roman)"
-| le latin parlé s'éloigne du latin écrit
-node tours "Concile de Tours (813)"
-| prêcher en rustica romana lingua
-| diglossie : latin écrit, roman oral
-node strasbourg "Serments de Strasbourg (842)"
-| premier texte écrit en roman
+gaulois "Les Gaulois" {
+  | peuple celte, arrivé vers 400 av. J.-C.
+  | substrat : une centaine de mots (chêne, druide)
+}
+latin "Conquête romaine" {
+  | IIe–Ier s. av. J.-C.
+  | le latin vulgaire remplace le gaulois
+}
+francs "Invasions germaniques" {
+  | Ve–VIIIe s. : Wisigoths, Burgondes, Francs
+  | superstrat francique : 10 % du lexique, h aspiré
+}
+roman "Roman (gallo-roman)" {
+  | le latin parlé s'éloigne du latin écrit
+}
+tours "Concile de Tours (813)" {
+  | prêcher en rustica romana lingua
+  | diglossie : latin écrit, roman oral
+}
+strasbourg "Serments de Strasbourg (842)" {
+  | premier texte écrit en roman
+}
 
-node dialectes "Ancien français"
-| oïl, oc, franco-provençal
-| cas sujet et cas régime
-selection
-  francien "Île-de-France (XIIe s.)"
-  | roi, Cour, démographie, littérature
-  | le francien gagne en prestige
+dialectes "Ancien français" {
+  | oïl, oc, franco-provençal
+  | cas sujet et cas régime
+}
+with selection {
+  francien "Île-de-France (XIIe s.)" {
+    | roi, Cour, démographie, littérature
+    | le francien gagne en prestige
+  }
+}
 
-node relatin "Relatinisation"
-| doublets : chose / cause, frêle / fragile
-| orthographe étymologique (temps)
-elaboration
-  villers "Villers-Cotterêts (1539)"
-  | français, langue de l'administration
-  | et de la justice, à la place du latin
-codification
-  palsgrave "Palsgrave, Estienne"
-  | 1530 : grammaire pour étrangers
-  | 1539 : premier dictionnaire
-elaboration
-  dubellay "Du Bellay (1549)"
-  | Défense et illustration de la langue
-  | enrichir : emprunts, néologismes
-node italien "Emprunts à l'italien"
-| guerres d'Italie, Catherine de Médicis
-| balcon, soldat, banque, sonnet
+relatin "Relatinisation" {
+  | doublets : chose / cause, frêle / fragile
+  | orthographe étymologique (temps)
+}
+with elaboration {
+  villers "Villers-Cotterêts (1539)" {
+    | français, langue de l'administration
+    | et de la justice, à la place du latin
+  }
+}
+with codification {
+  palsgrave "Palsgrave, Estienne" {
+    | 1530 : grammaire pour étrangers
+    | 1539 : premier dictionnaire
+  }
+}
+with elaboration {
+  dubellay "Du Bellay (1549)" {
+    | Défense et illustration de la langue
+    | enrichir : emprunts, néologismes
+  }
+}
+italien "Emprunts à l'italien" {
+  | guerres d'Italie, Catherine de Médicis
+  | balcon, soldat, banque, sonnet
+}
 
-codification
-  malherbe "Malherbe"
-  | clarté, pureté, précision
-  | contre archaïsmes et emprunts
-  academie "Académie française (1635)"
-  | Richelieu ; prescriptive
-  | premier dictionnaire en 1694
-  vaugelas "Vaugelas (1647)"
-  | le bon usage : la plus saine
-  | partie de la Cour et des auteurs
-diffusion
-  revolution "Révolution (1789)"
-  | une nation, une langue
-  | abbé Grégoire : anéantir les patois
-  ferry "Lois Ferry"
-  | école gratuite, obligatoire, laïque
-  | uniquement en français standard
-node francophonie "Francophonie"
-| plusieurs normes : Québec, Belgique,
-| Suisse, Afrique
+with codification {
+  malherbe "Malherbe" {
+    | clarté, pureté, précision
+    | contre archaïsmes et emprunts
+  }
+  academie "Académie française (1635)" {
+    | Richelieu ; prescriptive
+    | premier dictionnaire en 1694
+  }
+  vaugelas "Vaugelas (1647)" {
+    | le bon usage : la plus saine
+    | partie de la Cour et des auteurs
+  }
+}
+with diffusion {
+  revolution "Révolution (1789)" {
+    | une nation, une langue
+    | abbé Grégoire : anéantir les patois
+  }
+  ferry "Lois Ferry" {
+    | école gratuite, obligatoire, laïque
+    | uniquement en français standard
+  }
+}
+francophonie "Francophonie" {
+  | plusieurs normes : Québec, Belgique,
+  | Suisse, Afrique
+}
 
-group "Ancien français, 842–1350" dialectes, francien color=#8D6E63
-group "Moyen français, 1350–1600" relatin, villers, palsgrave, dubellay, italien color=#00838F
-group "Français moderne, 1600–" malherbe, academie, vaugelas, revolution, ferry, francophonie color=#3949AB
+group "Ancien français, 842–1350" dialectes, francien [color=#8D6E63]
+group "Moyen français, 1350–1600" relatin, villers, palsgrave, dubellay, italien [color=#00838F]
+group "Français moderne, 1600–" malherbe, academie, vaugelas, revolution, ferry, francophonie [color=#3949AB]
 
 gaulois -> latin -> francs, roman
 francs -> roman "superstrat" -> tours -> strasbourg -> dialectes -> francien -> relatin, villers
@@ -84,7 +109,7 @@ villers -> palsgrave, dubellay
 relatin -> italien
 palsgrave -> malherbe -> academie, vaugelas
 vaugelas -> revolution -> ferry -> francophonie
-dubellay ..> malherbe "l'opposé" color=#C62828
+dubellay ..> malherbe "l'opposé" [color=#C62828]
 palsgrave ..> vaugelas "norme régionale, puis sociale"
 
 prefer gaulois at top

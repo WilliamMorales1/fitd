@@ -1,11 +1,16 @@
 // Syntax tree (ACL-Fig: NLP grammar examples, trees).
 include "tree"
-layout layered order=source
+layout layered [order=source]
 page 4:3
-tree.cat s S
-  np NP
+
+tree.cat s S {
+  np NP {
     tree.word she she
-  vp VP
+  }
+  vp VP {
     tree.word saw saw
-    np2 NP
+    np2 NP {
       tree.word it it
+    }
+  }
+}

@@ -398,7 +398,7 @@ fn no_room(
                 "  = note: the longest path has {layers} layers, which need {need:.0}pt along the flow; the page gives {have:.0}pt\n"
             );
             out += &format!(
-                "  = help: use `layout layered dir={other}`, a page that is more {along}, or fewer steps on the longest path\n"
+                "  = help: use `layout layered [dir={other}]`, a page that is more {along}, or fewer steps on the longest path\n"
             );
         }
         _ => {

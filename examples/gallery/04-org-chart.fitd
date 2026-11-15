@@ -1,9 +1,12 @@
 // Tree / hierarchy, here an org chart (DocFigure tree diagram; ACL-Fig trees).
 include "tree"
-layout layered order=source
+layout layered [order=source]
 page 16:9
-tree.unit ceo Ada CEO
-  cto Lin CTO
+
+tree.unit ceo Ada CEO {
+  cto Lin CTO {
     web "Web team" "6 people"
     ml "ML team" "4 people"
+  }
   cfo Sam CFO
+}

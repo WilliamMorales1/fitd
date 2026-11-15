@@ -21,11 +21,7 @@ fn fitd(args: &[&str]) -> (bool, String) {
 #[test]
 fn edge_source_lists_fan_in() {
     let src = tmp("fan.fitd");
-    std::fs::write(
-        &src,
-        "layout layered\nnode a\nnode b\nnode c\nnode d\na, b -> c, d \"x\"\n",
-    )
-    .unwrap();
+    std::fs::write(&src, "layout layered\n\na\nb\nc\nd\na, b -> c, d \"x\"\n").unwrap();
     let out = tmp("fan.svg");
     let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", out.to_str().unwrap()]);
     assert!(ok && log.contains("4 nodes, 4 edges"), "{log}");
@@ -33,10 +29,10 @@ fn edge_source_lists_fan_in() {
 
 #[test]
 fn moving_declarations_keeps_the_layout() {
-    let head = "layout layered\nstyle a color=#0072B2\nstyle b color=#D55E00\n";
+    let head = "layout layered\n\nstyle a [color=#0072B2]\nstyle b [color=#D55E00]\n";
     let bodies = [
-        "a\n  x \"X\"\n  y \"Y\"\nb\n  z \"Z\"\nx -> z -> y\n",
-        "b\n  z \"Z\"\na\n  y \"Y\"\n  x \"X\"\nx -> z -> y\n",
+        "with a {\n  x \"X\"\n  y \"Y\"\n}\nwith b {\n  z \"Z\"\n}\nx -> z -> y\n",
+        "with b {\n  z \"Z\"\n}\nwith a {\n  y \"Y\"\n  x \"X\"\n}\nx -> z -> y\n",
     ];
     let svgs: Vec<String> = bodies
         .iter()
@@ -57,7 +53,7 @@ fn unconnected_grid_nodes_stack_in_layered() {
     let src = tmp("grid.fitd");
     std::fs::write(
         &src,
-        "layout layered\nnode a row=1 col=1\nnode b row=1 col=2\nnode c row=2 col=1\nnode d row=2 col=2\n",
+        "layout layered\n\na [row=1, col=1]\nb [row=1, col=2]\nc [row=2, col=1]\nd [row=2, col=2]\n",
     )
     .unwrap();
     let out = tmp("grid.svg");
@@ -122,7 +118,7 @@ fn image_rows_embed_pictures_and_report_missing_files() {
         assert!(ok, "{log}");
     }
     let src = tmp("missing.fitd");
-    std::fs::write(&src, "node a\n~ image \"nope.png\"\n").unwrap();
+    std::fs::write(&src, "a {\n  ~ image \"nope.png\"\n}\n").unwrap();
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
         "-o",
@@ -171,7 +167,7 @@ fn builds_example_with_zero_errors() {
 #[test]
 fn general_graph_with_cycle_and_no_root() {
     let src = tmp("cycle.fitd");
-    std::fs::write(&src, "node a \"Alpha\"\nnode b \"Beta\"\n| detail\nnode c \"Gamma\"\nnode d \"Delta\"\na -- b\nb -- c\nc -- a\nc -- d\n").unwrap();
+    std::fs::write(&src, "a \"Alpha\"\nb \"Beta\" {\n  | detail\n}\nc \"Gamma\"\nd \"Delta\"\na -- b\nb -- c\nc -- a\nc -- d\n").unwrap();
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
         "-o",
@@ -188,7 +184,7 @@ fn general_graph_with_cycle_and_no_root() {
 fn radial_tree_edges_keep_their_labels() {
     // `d` is reachable only by its link, which becomes its tree edge.
     let src = tmp("labels.fitd");
-    std::fs::write(&src, "layout radial root=a\nnode a \"Alpha\"\nnode b \"Beta\"\nnode c \"Gamma\"\nnode d \"Delta\"\na -> b \"feeds\"\na -> c\nd ..> c \"pumps\"\n").unwrap();
+    std::fs::write(&src, "layout radial [root=a]\n\na \"Alpha\"\nb \"Beta\"\nc \"Gamma\"\nd \"Delta\"\na -> b \"feeds\"\na -> c\nd ..> c \"pumps\"\n").unwrap();
     let svg = tmp("labels.svg");
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
@@ -208,7 +204,7 @@ fn radial_tree_edges_keep_their_labels() {
 #[test]
 fn labeled_arrows_get_room_between_layers() {
     let src = tmp("bill.fitd");
-    std::fs::write(&src, "layout layered dir=down\npage a4\nnode a \"Bill Introduced\"\nnode b \"Committee Review\"\nnode c \"Floor Vote\"\nnode d \"President\"\na -> b\nb -> c \"approved\"\nc -> d\n").unwrap();
+    std::fs::write(&src, "layout layered [dir=down]\npage a4\n\na \"Bill Introduced\"\nb \"Committee Review\"\nc \"Floor Vote\"\nd \"President\"\na -> b\nb -> c \"approved\"\nc -> d\n").unwrap();
     let svg = tmp("bill.svg");
     let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
     assert!(ok && log.contains(" 0 warnings"), "{log}");
@@ -270,7 +266,7 @@ fn impossible_page_is_rejected() {
 #[test]
 fn parse_errors_point_at_line() {
     let src = tmp("bad.fitd");
-    std::fs::write(&src, "node a\na -> ghost\n").unwrap();
+    std::fs::write(&src, "a\na -> ghost\n").unwrap();
     let (ok, log) = fitd(&[src.to_str().unwrap()]);
     assert!(!ok);
     assert!(
@@ -304,7 +300,7 @@ fn layered_example_meets_required_constraints() {
 #[test]
 fn groups_frame_members_and_edges_take_colors() {
     let src = tmp("group.fitd");
-    std::fs::write(&src, "layout layered\npage a4\nstyle hot color=#C62828\nnode a\nnode b\nnode c\nnode d\nhot\n  a -> b\nb -> c, d\nc ..> a color=#2E7D32\ngroup \"Pair\" c, d color=#1565C0\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\n\nstyle hot [color=#C62828]\na\nb\nc\nd\nwith hot {\n  a -> b\n}\nb -> c, d\nc ..> a [color=#2E7D32]\ngroup \"Pair\" c, d [color=#1565C0]\n").unwrap();
     let (svg, tex) = (tmp("group.svg"), tmp("group.tex"));
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
@@ -328,7 +324,7 @@ fn groups_frame_members_and_edges_take_colors() {
     );
     assert!(std::fs::read_to_string(&tex).unwrap().contains("Pair"));
     // A class gives the frame its color, so a group and its key entry share one style.
-    std::fs::write(&src, "layout layered\npage a4\nstyle d1 color=#E69F00\nnode a\nnode b\na -> b\nd1\n  group \"D1\" a, b\n  key \"design\"\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\n\nstyle d1 [color=#E69F00]\na\nb\na -> b\nwith d1 {\n  group \"D1\" a, b\n  key \"design\"\n}\n").unwrap();
     let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
     assert!(ok && log.contains(" 0 errors, 0 warnings"), "{log}");
     let s = std::fs::read_to_string(&svg).unwrap();
@@ -337,11 +333,11 @@ fn groups_frame_members_and_edges_take_colors() {
         "{s}"
     );
     // A group whose members must sit around a non-member cannot hold.
-    std::fs::write(&src, "layout layered\npage a4\nnode a\nnode b\nnode c\na -> b\nb -> c\ngroup a, c\nrequire align column(a, b, c)\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\n\na\nb\nc\na -> b\nb -> c\ngroup a, c\nrequire align column(a, b, c)\n").unwrap();
     let (ok, log) = fitd(&[src.to_str().unwrap(), "-o", svg.to_str().unwrap()]);
     assert!(!ok);
     assert!(
-        log.contains("error[E0110]: these 2 constraints") && log.contains("8 | group a, c"),
+        log.contains("error[E0110]: these 2 constraints") && log.contains("9 | group a, c"),
         "{log}"
     );
 }
@@ -349,10 +345,10 @@ fn groups_frame_members_and_edges_take_colors() {
 #[test]
 fn nested_groups_draw_inner_frames_inside_outer() {
     let src = tmp("nested.fitd");
-    let body = "node a\nnode b\nnode c\nnode d\nnode e\na -> b\nb -> c\nc -> d\nd -> e\ngroup \"Outer\" b, c, d color=#1565C0\ngroup \"Inner\" b, c color=#2E7D32\n";
+    let body = "a\nb\nc\nd\ne\na -> b\nb -> c\nc -> d\nd -> e\ngroup \"Outer\" b, c, d [color=#1565C0]\ngroup \"Inner\" b, c [color=#2E7D32]\n";
     for layout in [
         "layout layered\npage a4\n",
-        "layout radial root=a\npage a4\n",
+        "layout radial [root=a]\npage a4\n",
     ] {
         std::fs::write(&src, format!("{layout}{body}")).unwrap();
         let svg = tmp("nested.svg");
@@ -378,7 +374,7 @@ fn nested_groups_draw_inner_frames_inside_outer() {
 fn unsat_constraints_report_minimal_core() {
     let src = tmp("core.fitd");
     let text = "layout layered\npage 420x300pt\nnode a\nnode b\nnode c\nnode d\na -> b, c\nc -> d\n\
-                require b at left\nrequire align column(c, d)\nrequire c at left\nrequire d at bottom-left\nrequire b left-of c gap=20em\n";
+                require b at left\nrequire align column(c, d)\nrequire c at left\nrequire d at bottom-left\nrequire b left-of c [gap=20em]\n";
     std::fs::write(&src, text).unwrap();
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
@@ -388,7 +384,8 @@ fn unsat_constraints_report_minimal_core() {
     assert!(!ok);
     assert!(log.contains("error[E0110]: these 2 constraints"), "{log}");
     assert!(
-        log.contains("11 | require c at left") && log.contains("13 | require b left-of c gap=20em"),
+        log.contains("11 | require c at left")
+            && log.contains("13 | require b left-of c [gap=20em]"),
         "{log}"
     );
     assert!(
@@ -418,7 +415,7 @@ fn chained_orderings_fit_and_overlong_chains_fail_fast() {
     let base = std::fs::read_to_string("tests/fixtures/cell_biology.fitd").unwrap();
     let chain = |gaps: &[(&str, &str)], gap: u32| {
         gaps.iter()
-            .map(|(a, b)| format!("require {a} above {b} gap={gap}em\n"))
+            .map(|(a, b)| format!("require {a} above {b} [gap={gap}em]\n"))
             .collect::<String>()
     };
     let links = [
@@ -454,7 +451,7 @@ fn contradictory_orderings_fail_before_search() {
     let src = tmp("cycle-order.fitd");
     std::fs::write(
         &src,
-        "node a\nnode b\nnode c\nrequire a left-of b\nrequire b left-of c\nrequire c left-of a\n",
+        "a\nb\nc\nrequire a left-of b\nrequire b left-of c\nrequire c left-of a\n",
     )
     .unwrap();
     let (ok, log) = fitd(&[src.to_str().unwrap()]);
@@ -495,7 +492,7 @@ fn png_is_cropped_to_drawing() {
 #[test]
 fn theme_colors_reach_svg_and_tikz() {
     let src = tmp("theme.fitd");
-    std::fs::write(&src, "theme dark background=#102030 palette=\"#FFB74D #4DD0E1\"\nnode c\nnode a fill=#FFE0B2 text=#3E2723\nnode b\nc -> a, b\n").unwrap();
+    std::fs::write(&src, "theme dark [background=#102030, palette=\"#FFB74D #4DD0E1\"]\n\nc\na [fill=#FFE0B2, text=#3E2723]\nb\nc -> a, b\n").unwrap();
     let (svg, tex) = (tmp("theme.svg"), tmp("theme.tex"));
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
@@ -681,7 +678,7 @@ fn fixtures_fail_or_build_as_designed() {
         tmp("glyph.svg").to_str().unwrap(),
     ]);
     assert!(
-        ok && log.contains("warning[W0202]") && log.contains("missing_glyph.fitd:4:6"),
+        ok && log.contains("warning[W0202]") && log.contains("missing_glyph.fitd:5:1"),
         "{log}"
     );
 }
@@ -786,7 +783,7 @@ fn open_orientation_turns_and_flags_fix_it() {
         &src,
         std::fs::read_to_string("examples/compiler.fitd")
             .unwrap()
-            .replace("page 240x360mm margin=1cm", "page a3 margin=1cm"),
+            .replace("page 240x360mm [margin=1cm]", "page a3 [margin=1cm]"),
     )
     .unwrap();
     let src = src.to_str().unwrap();
@@ -805,7 +802,7 @@ fn open_orientation_turns_and_flags_fix_it() {
 #[test]
 fn row_alignment_merges_layers_in_flowchart() {
     let src = tmp("row.fitd");
-    std::fs::write(&src, "layout layered\npage a4\nnode a\nnode b\nnode c\nnode d\na -> b\nb -> c\nc -> d\nrequire align row(b, c, d)\nrequire b left-of c left-of d\n").unwrap();
+    std::fs::write(&src, "layout layered\npage a4\n\na\nb\nc\nd\na -> b\nb -> c\nc -> d\nrequire align row(b, c, d)\nrequire b left-of c left-of d\n").unwrap();
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
         "-o",
@@ -836,7 +833,7 @@ fn output_directories_are_created() {
 fn undirected_edges_have_no_arrowheads() {
     let src = tmp("undirected.fitd");
     let (svg, tex) = (tmp("undirected.svg"), tmp("undirected.tex"));
-    std::fs::write(&src, "layout layered dir=down\nnode a \"A\"\nnode b \"B\"\nnode c \"C\"\nnode d \"D\"\na -> b\na -- c\nb ..> d\nc .. d\n").unwrap();
+    std::fs::write(&src, "layout layered [dir=down]\n\na \"A\"\nb \"B\"\nc \"C\"\nd \"D\"\na -> b\na -- c\nb ..> d\nc .. d\n").unwrap();
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
         "-o",
@@ -937,9 +934,10 @@ fn layers_that_exactly_fill_the_page_fit_and_crowded_flows_say_why() {
         ("veto", "Veto", "President rejects bill"),
         ("override", "Veto Override", "2/3 vote in both chambers"),
     ];
-    let mut text = String::from("layout layered dir=down\npage a4 portrait\nfont 8pt wrap=10em\n");
+    let mut text =
+        String::from("layout layered [dir=down]\npage a4 portrait\nfont 8pt [wrap=10em]\n");
     for (id, title, body) in nodes {
-        text += &format!("node {id} \"{title}\"\n| {body}\n");
+        text += &format!("{id} \"{title}\" {{\n  | {body}\n}}\n");
     }
     text += "intro -> committee\ncommittee -> floor\nfloor -> other\nother -> conference\nconference -> president\npresident -> law, veto\nveto -> override\noverride -> law\n";
     let down = tmp("bill-down.fitd");
@@ -963,7 +961,7 @@ fn layers_that_exactly_fill_the_page_fit_and_crowded_flows_say_why() {
         "{log}"
     );
     // `bands=1` and `--bands 1` keep the flow in one line, which does not fit here.
-    std::fs::write(&right, text.replace("dir=down", "dir=right bands=1")).unwrap();
+    std::fs::write(&right, text.replace("dir=down", "dir=right, bands=1")).unwrap();
     let (ok, log) = fitd(&[
         right.to_str().unwrap(),
         "-o",
@@ -1006,7 +1004,7 @@ fn layers_that_exactly_fill_the_page_fit_and_crowded_flows_say_why() {
 #[test]
 fn watch_rebuilds_on_change() {
     let (src, svg) = (tmp("watch.fitd"), tmp("watch.svg"));
-    std::fs::write(&src, "node a \"Alpha\"\nnode b \"Beta\"\na -> b\n").unwrap();
+    std::fs::write(&src, "a \"Alpha\"\nb \"Beta\"\na -> b\n").unwrap();
     let _ = std::fs::remove_file(&svg);
     let mut child = Command::new(env!("CARGO_BIN_EXE_fitd"))
         .args([
@@ -1031,7 +1029,7 @@ fn watch_rebuilds_on_change() {
     let first = wait_for(">Beta<");
     // Some filesystems keep whole-second modification times.
     std::thread::sleep(std::time::Duration::from_millis(1100));
-    std::fs::write(&src, "node a \"Alpha\"\nnode b \"Gamma\"\na -> b\n").unwrap();
+    std::fs::write(&src, "a \"Alpha\"\nb \"Gamma\"\na -> b\n").unwrap();
     let second = wait_for(">Gamma<");
     child.kill().unwrap();
     child.wait().unwrap();
@@ -1082,7 +1080,7 @@ fn watch_cancels_a_slow_build_on_change() {
     }
     // The draft is out; the full build starts after the idle time and runs for seconds.
     std::thread::sleep(std::time::Duration::from_millis(2000));
-    std::fs::write(&src, "node a \"Alpha\"\nnode b \"Swapped\"\na -> b\n").unwrap();
+    std::fs::write(&src, "a \"Alpha\"\nb \"Swapped\"\na -> b\n").unwrap();
     let start = std::time::Instant::now();
     while !std::fs::read_to_string(&svg).is_ok_and(|s| s.contains(">Swapped<"))
         && start.elapsed().as_secs() < 30
@@ -1133,7 +1131,7 @@ impl Lsp {
 
     fn send(&mut self, body: String) {
         use std::io::Write;
-        write!(self.stdin, "Content-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+        write!(self.stdin, "Content-Length: {}\n\n{body}", body.len()).unwrap();
     }
 
     fn recv(&mut self) -> String {
@@ -1194,7 +1192,7 @@ fn esc(s: &str) -> String {
 #[test]
 fn language_server_reports_and_navigates() {
     let src = tmp("lsp.fitd");
-    let text = "node a \"Alpha\"\nnode b \"Beta\"\na -> b\na -> ghost\n";
+    let text = "a \"Alpha\"\nb \"Beta\"\na -> b\na -> ghost\n";
     std::fs::write(&src, text).unwrap();
     let uri = file_uri(&src);
     let mut l = Lsp::start();
@@ -1206,9 +1204,9 @@ fn language_server_reports_and_navigates() {
     );
     l.send(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":2,"character":5}}}}}}"#));
     let def = l.recv();
-    assert!(def.contains(r#""start":{"character":5,"line":1}"#), "{def}");
+    assert!(def.contains(r#""start":{"character":0,"line":1}"#), "{def}");
     // Fixed on disk and saved: the full layout finds only the uncovered glyph.
-    let fixed = "node a \"Alpha\"\nnode b \"Beta 𐀀\"\na -> b\n";
+    let fixed = "a \"Alpha\"\nb \"Beta 𐀀\"\na -> b\n";
     std::fs::write(&src, fixed).unwrap();
     l.change(&uri, fixed);
     assert!(l.recv().contains(r#""diagnostics":[]"#));
@@ -1226,8 +1224,8 @@ fn language_server_follows_includes() {
     let dir = tmp("lsp-inc");
     std::fs::create_dir_all(&dir).unwrap();
     let (main, part) = (dir.join("main.fitd"), dir.join("part.fitd"));
-    std::fs::write(&part, "node far \"Far 𐀀\"\nfar -> ghost\n").unwrap();
-    let text = "include \"part.fitd\"\nnode a \"A\"\na -> far\n";
+    std::fs::write(&part, "far \"Far 𐀀\"\nfar -> ghost\n").unwrap();
+    let text = "include \"part.fitd\"\n\na \"A\"\na -> far\n";
     std::fs::write(&main, text).unwrap();
     let (uri, part_uri) = (file_uri(&main), file_uri(&part));
     let mut l = Lsp::start();
@@ -1242,14 +1240,14 @@ fn language_server_follows_includes() {
         inc.contains(&part_uri) && inc.contains("E0001") && inc.contains(r#""line":1"#),
         "{inc}"
     );
-    l.send(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":2,"character":6}}}}}}"#));
+    l.send(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{{"textDocument":{{"uri":"{uri}"}},"position":{{"line":3,"character":6}}}}}}"#));
     let def = l.recv();
     assert!(
-        def.contains(&part_uri) && def.contains(r#""start":{"character":5,"line":0}"#),
+        def.contains(&part_uri) && def.contains(r#""start":{"character":0,"line":0}"#),
         "{def}"
     );
     // Fixed: the include's old diagnostics are cleared.
-    std::fs::write(&part, "node far \"Far 𐀀\"\n").unwrap();
+    std::fs::write(&part, "far \"Far 𐀀\"\n").unwrap();
     l.change(&uri, text);
     assert!(l.recv().contains(&uri));
     let cleared = l.recv();
@@ -1276,15 +1274,11 @@ fn language_server_follows_includes() {
 fn includes_splice_files_and_keep_their_names_in_diagnostics() {
     let dir = tmp("inc");
     std::fs::create_dir_all(dir.join("parts")).unwrap();
-    std::fs::write(
-        dir.join("parts/more.fitd"),
-        "node c \"Gamma\"\nc -> ghost\n",
-    )
-    .unwrap();
+    std::fs::write(dir.join("parts/more.fitd"), "c \"Gamma\"\nc -> ghost\n").unwrap();
     let main = dir.join("main.fitd");
     std::fs::write(
         &main,
-        "include \"parts/more.fitd\"\nlayout layered\nnode a \"Alpha\"\na -> c\n",
+        "include \"parts/more.fitd\"\nlayout layered\n\na \"Alpha\"\na -> c\n",
     )
     .unwrap();
     let (ok, log) = fitd(&[
@@ -1299,7 +1293,7 @@ fn includes_splice_files_and_keep_their_names_in_diagnostics() {
     );
     std::fs::write(
         dir.join("parts/more.fitd"),
-        "include \"../main.fitd\"\nnode c \"Gamma\"\n",
+        "include \"../main.fitd\"\n\nc \"Gamma\"\n",
     )
     .unwrap();
     let (ok, log) = fitd(&[
@@ -1312,7 +1306,7 @@ fn includes_splice_files_and_keep_their_names_in_diagnostics() {
         !ok && log.contains("parts/more.fitd:1:1: error[E0011]"),
         "{log}"
     );
-    std::fs::write(dir.join("parts/more.fitd"), "node c \"Gamma\"\n").unwrap();
+    std::fs::write(dir.join("parts/more.fitd"), "c \"Gamma\"\n").unwrap();
     let (ok, log) = fitd(&[
         main.to_str().unwrap(),
         "-o",
@@ -1390,7 +1384,7 @@ fn split_pages_each_build_alone() {
     let cos = std::fs::read_to_string(dir.join("group_theory-cos.fitd")).unwrap();
     assert!(
         cos.contains("corr ..> classif")
-            && cos.contains("classif \"Classification\"\n| see page group_theory-iso"),
+            && cos.contains("classif \"Classification\" {\n  | see page group_theory-iso\n}"),
         "{cos}"
     );
     let mut pages = 0;
@@ -1605,11 +1599,11 @@ fn macros_expand_loops_templates_and_recursion() {
     std::fs::create_dir_all(dir.join("parts")).unwrap();
     std::fs::write(
         dir.join("parts/t.fitd"),
-        "def box(id)\n  node ${id}\n  ${id} -> ghost\nend\n",
+        "def box(id) {\n  node ${id}\n  ${id} -> ghost\n}\n",
     )
     .unwrap();
     let main = dir.join("main.fitd");
-    std::fs::write(&main, "include \"parts/t.fitd\"\nfor s in a, b\n  box ${s}\nend\nbox c 2\ndef f(n)\n  f ${n + 1}\nend\nf 0\nif 1\n").unwrap();
+    std::fs::write(&main, "include \"parts/t.fitd\"\n\nfor s in a, b {\n  box ${s}\n}\nbox c 2\ndef f(n) {\n  f ${n + 1}\n}\nf 0\nif 1 {\n").unwrap();
     let (ok, log) = fitd(&[
         main.to_str().unwrap(),
         "-o",
@@ -1622,15 +1616,15 @@ fn macros_expand_loops_templates_and_recursion() {
         "{log}"
     );
     assert!(
-        log.contains("main.fitd:5:1: error[E0012]: `box` takes 1 argument (id), found 2"),
+        log.contains("main.fitd:6:1: error[E0012]: `box` takes 1 argument (id), found 2"),
         "{log}"
     );
     assert!(
-        log.contains("main.fitd:7:3: error[E0012]: templates nest more than"),
+        log.contains("main.fitd:8:3: error[E0012]: templates nest more than"),
         "{log}"
     );
     assert!(
-        log.contains("main.fitd:10:1: error[E0002]: `if` has no matching `end`"),
+        log.contains("main.fitd:11:1: error[E0002]: `if` has no closing `}`"),
         "{log}"
     );
 }
@@ -1638,11 +1632,11 @@ fn macros_expand_loops_templates_and_recursion() {
 #[test]
 fn figure_rows_draw_cells_and_need_a_node() {
     let plain = tmp("figplain.fitd");
-    std::fs::write(&plain, "node a \"A\"\nnode b\na -> b\n").unwrap();
+    std::fs::write(&plain, "a \"A\"\nb\na -> b\n").unwrap();
     let grid = tmp("figgrid.fitd");
     std::fs::write(
         &grid,
-        "node a \"A\"\n~ %100 . _ GLU\n~ %100\"two words\" . . .\nnode b\na -> b\n",
+        "a \"A\" {\n  ~ [%100, ., _, GLU]\n  ~ [%100\"two words\", ., ., .]\n}\nb\na -> b\n",
     )
     .unwrap();
     let count = |src: &std::path::Path, out: &str| {
@@ -1670,7 +1664,7 @@ fn figure_rows_draw_cells_and_need_a_node() {
     assert!(std::fs::read_to_string(&tex).unwrap().contains("GLU"));
 
     let orphan = tmp("figorphan.fitd");
-    std::fs::write(&orphan, "~ %100 .\nnode a\nnode b\na -> b\n").unwrap();
+    std::fs::write(&orphan, "~ [%100, .]\na\nb\na -> b\n").unwrap();
     let (ok, log) = fitd(&[
         orphan.to_str().unwrap(),
         "-o",
@@ -1696,7 +1690,10 @@ fn shaded_cells_span_columns_and_nodes_stack() {
             .collect();
         (svg, w)
     };
-    let (svg, _) = widths("node a \"A\"\n~ %60 %0 %100\n node b\na -> b\n", "figshade");
+    let (svg, _) = widths(
+        "a \"A\" {\n  ~ [%60, %0, %100]\n  b\n}\na -> b\n",
+        "figshade",
+    );
     assert!(svg.contains("fill-opacity=\"0.60\""), "no 60% cell\n{svg}");
     assert!(
         svg.contains("fill-opacity=\"1.00\""),
@@ -1704,7 +1701,7 @@ fn shaded_cells_span_columns_and_nodes_stack() {
     );
 
     let (_, wide) = widths(
-        "node a \"A\"\n~ . . .\n~ %100\"x\"*3\nnode b\na -> b\n",
+        "a \"A\" {\n  ~ [., ., .]\n  ~ [%100\"x\"*3]\n}\nb\na -> b\n",
         "figspan",
     );
     let cell = wide.iter().copied().fold(f64::NAN, f64::min);
@@ -1713,11 +1710,8 @@ fn shaded_cells_span_columns_and_nodes_stack() {
         "no cell spans three columns: {wide:?}"
     );
 
-    let (flat, _) = widths("node a \"A\" shape=box\nnode b\na -> b\n", "figflat");
-    let (stacked, _) = widths(
-        "node a \"A\" shape=box stack=3\nnode b\na -> b\n",
-        "figstack",
-    );
+    let (flat, _) = widths("a \"A\" [shape=box]\nb\na -> b\n", "figflat");
+    let (stacked, _) = widths("a \"A\" [shape=box, stack=3]\nb\na -> b\n", "figstack");
     assert_eq!(
         stacked.matches("<rect").count(),
         flat.matches("<rect").count() + 2,
@@ -1725,7 +1719,7 @@ fn shaded_cells_span_columns_and_nodes_stack() {
     );
 
     let bad = tmp("figstackbad.fitd");
-    std::fs::write(&bad, "node a stack=9\nnode b\na -> b\n").unwrap();
+    std::fs::write(&bad, "a [stack=9]\nb\na -> b\n").unwrap();
     let (ok, log) = fitd(&[
         bad.to_str().unwrap(),
         "-o",
@@ -1740,7 +1734,7 @@ fn library_modules_are_included_by_name() {
     let f = tmp("usestd.fitd");
     std::fs::write(
         &f,
-        "include \"nn\"\nnn.input x Tokens \"B x L\"\nnn.layer e Encoder \"d 64\" 2\nnn.mask m Causal 4 1\nnn.block\n  b \"Block\"\nx -> e -> m\n",
+        "include \"nn\"\n\nnn.input x Tokens \"B x L\"\nnn.layer e Encoder \"d 64\" 2\nnn.mask m Causal 4 1\nwith nn.block {\n  b \"Block\"\n}\nx -> e -> m\n",
     )
     .unwrap();
     let o = tmp("usestd.svg");
@@ -1752,7 +1746,7 @@ fn library_modules_are_included_by_name() {
     assert_eq!(svg.matches("fill-opacity=\"1.00\"").count(), 12, "{svg}");
 
     let bad = tmp("badstd.fitd");
-    std::fs::write(&bad, "include \"nope\"\nnode a\nnode b\na -> b\n").unwrap();
+    std::fs::write(&bad, "include \"nope\"\n\na\nb\na -> b\n").unwrap();
     let (ok, log) = fitd(&[
         bad.to_str().unwrap(),
         "-o",
@@ -1770,10 +1764,10 @@ fn library_modules_are_included_by_name() {
     // Module templates live under the module name, so a file's own `input` does not clash.
     let (ok, log) = build(
         "stdown",
-        "include \"nn\"\ndef input(id)\nnode ${id}\nend\ninput a\nnn.input x X \"1\"\na -> x\n",
+        "include \"nn\"\n\ndef input(id) {\n  node ${id}\n}\ninput a\nnn.input x X \"1\"\na -> x\n",
     );
     assert!(ok && log.contains("0 errors"), "{log}");
-    let (ok, log) = build("stdold", "include \"std/nn.fitd\"\nnode a\n");
+    let (ok, log) = build("stdold", "include \"std/nn.fitd\"\n\na\n");
     assert!(!ok && log.contains("cannot read"), "{log}");
 }
 
@@ -1789,15 +1783,15 @@ fn user_libraries_are_included_beside_the_file() {
     // A library calls templates it includes by their module name, and a shared library splices once.
     write(
         "shapes.fitd",
-        "// shapes: boxes for tests\ninclude \"user/base\"\ndef pill(id, name)\nbase.tag ${id} ${name}\nend\n",
+        "// shapes: boxes for tests\ninclude \"user/base\"\n\ndef pill(id, name) {\n  base.tag ${id} ${name}\n}\n",
     );
     write(
         "base.fitd",
-        "def tag(id, name)\nnode ${id} \"${name}\"\nend\n",
+        "def tag(id, name) {\n  node ${id} \"${name}\"\n}\n",
     );
     let main = write(
         "main.fitd",
-        "include \"user/base\"\ninclude \"user/shapes\"\nshapes.pill a Alpha\nbase.tag b Beta\na -> b\n",
+        "include \"user/base\"\ninclude \"user/shapes\"\n\nshapes.pill a Alpha\nbase.tag b Beta\na -> b\n",
     );
     let o = dir.join("main.svg");
     let (ok, log) = fitd(&[main.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
@@ -1806,11 +1800,11 @@ fn user_libraries_are_included_beside_the_file() {
     assert!(svg.contains("Alpha") && svg.contains("Beta"), "{svg}");
 
     // A library's templates are not global, so the bare name is unknown outside it.
-    let bare = write("bare.fitd", "include \"user/shapes\"\npill a A\n");
+    let bare = write("bare.fitd", "include \"user/shapes\"\n\npill a A\n");
     let (ok, log) = fitd(&[bare.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
     assert!(!ok && log.contains("unknown statement `pill`"), "{log}");
 
-    let missing = write("missing.fitd", "include \"user/nope\"\nnode a\n");
+    let missing = write("missing.fitd", "include \"user/nope\"\n\na\n");
     let (ok, log) = fitd(&[
         missing.to_str().unwrap(),
         "-o",
@@ -1822,7 +1816,7 @@ fn user_libraries_are_included_beside_the_file() {
         "{log}"
     );
 
-    let badname = write("badname.fitd", "include \"user/a/b\"\nnode a\n");
+    let badname = write("badname.fitd", "include \"user/a/b\"\n\na\n");
     let (ok, log) = fitd(&[
         badname.to_str().unwrap(),
         "-o",
@@ -1841,11 +1835,11 @@ fn user_libraries_fall_back_to_fitd_path() {
     }
     std::fs::write(
         libs.join("kit.fitd"),
-        "def tag(id)\nnode ${id} \"From path\"\nend\n",
+        "def tag(id) {\n  node ${id} \"From path\"\n}\n",
     )
     .unwrap();
     let main = work.join("main.fitd");
-    std::fs::write(&main, "include \"user/kit\"\nkit.tag a\n").unwrap();
+    std::fs::write(&main, "include \"user/kit\"\n\nkit.tag a\n").unwrap();
     let o = work.join("main.svg");
     let run = |path: Option<String>| {
         let mut c = Command::new(env!("CARGO_BIN_EXE_fitd"));
@@ -1869,7 +1863,7 @@ fn user_libraries_fall_back_to_fitd_path() {
     // A library beside the file wins over the search path.
     std::fs::write(
         work.join("kit.fitd"),
-        "def tag(id)\nnode ${id} \"Local\"\nend\n",
+        "def tag(id) {\n  node ${id} \"Local\"\n}\n",
     )
     .unwrap();
     let (ok, log) = run(Some(libs.to_string_lossy().into_owned()));
@@ -1897,14 +1891,17 @@ fn repeated_groups_are_dashed_and_frameless_nodes_lose_their_box() {
             std::fs::read_to_string(&tex).unwrap(),
         )
     };
-    let body = "layout layered\npage a4\nnode a\nnode b\nnode c\na -> b\nb -> c\n";
+    let body = "layout layered\npage a4\n\na\nb\nc\na -> b\nb -> c\n";
     let (plain, ptex) = build(&format!("{body}group \"Layers\" b, c\n"), "grpplain");
     assert!(
         !plain.contains("stroke-dasharray") && !ptex.contains("dash pattern"),
         "{plain}"
     );
 
-    let (rep, rtex) = build(&format!("{body}group \"Layers\" b, c times=3\n"), "grprep");
+    let (rep, rtex) = build(
+        &format!("{body}group \"Layers\" b, c [times=3]\n"),
+        "grprep",
+    );
     assert!(
         rep.contains("stroke-dasharray") && rep.contains(">3x Layers<"),
         "{rep}"
@@ -1915,7 +1912,7 @@ fn repeated_groups_are_dashed_and_frameless_nodes_lose_their_box() {
     );
 
     let bad = tmp("grpbad.fitd");
-    std::fs::write(&bad, format!("{body}group b, c times=1\n")).unwrap();
+    std::fs::write(&bad, format!("{body}group b, c [times=1]\n")).unwrap();
     let (ok, log) = fitd(&[
         bad.to_str().unwrap(),
         "-o",
@@ -1925,7 +1922,7 @@ fn repeated_groups_are_dashed_and_frameless_nodes_lose_their_box() {
     assert!(!ok && log.contains("2 to 99"), "{log}");
 
     // A frameless node draws its text but no box, so the rect count drops by one.
-    let boxed = "layout layered\npage a4\nnode a \"Lane\" shape=box\nnode b\na -> b\n";
+    let boxed = "layout layered\npage a4\n\na \"Lane\" [shape=box]\nb\na -> b\n";
     let (bsvg, btex) = build(boxed, "noframeboxed");
     let (nsvg, ntex) = build(&boxed.replace("shape=box", "shape=none"), "noframe");
     assert!(nsvg.contains(">Lane<") && ntex.contains("Lane"), "{nsvg}");
@@ -1962,11 +1959,11 @@ fn outlines(svg: &str) -> Vec<(f64, f64, f64, f64)> {
 
 #[test]
 fn aside_nodes_sit_after_the_flow_and_wrap_widens_one_node() {
-    let flow = "layout layered dir=right\npage 200x120mm\nnode a \"A\"\nnode enc \"Encoder\"\nnode out \"Out\"\na -> enc -> out\n";
-    let note = "| next-token objective on all unique sequences\npre ..> enc \"init\"\n";
+    let flow = "layout layered [dir=right]\npage 200x120mm\n\na \"A\"\nenc \"Encoder\"\nout \"Out\"\na -> enc -> out\n";
+    let note = " {\n  | next-token objective on all unique sequences\n}\npre ..> enc \"init\"\n";
     let build = |name: &str, pre: &str| {
         let src = tmp(&format!("{name}.fitd"));
-        std::fs::write(&src, format!("{flow}{pre}\n{note}")).unwrap();
+        std::fs::write(&src, format!("{flow}{pre}{note}")).unwrap();
         let svg = tmp(&format!("{name}.svg"));
         let (ok, log) = fitd(&[
             src.to_str().unwrap(),
@@ -1977,7 +1974,7 @@ fn aside_nodes_sit_after_the_flow_and_wrap_widens_one_node() {
         assert!(ok && log.contains(" 0 warnings"), "{log}");
         outlines(&std::fs::read_to_string(&svg).unwrap())
     };
-    let aside = build("aside", "node pre \"Pretraining\" wrap=34em place=aside");
+    let aside = build("aside", "pre \"Pretraining\" [wrap=34em, place=aside]");
     assert_eq!(aside.len(), 4, "{aside:?}");
     let flow_bottom = aside[..3].iter().map(|r| r.1 + r.3).fold(0.0, f64::max);
     assert!(
@@ -1987,7 +1984,7 @@ fn aside_nodes_sit_after_the_flow_and_wrap_widens_one_node() {
 
     let narrow = build(
         "aside-narrow",
-        "node pre \"Pretraining\" wrap=8em place=aside",
+        "pre \"Pretraining\" [wrap=8em, place=aside]",
     );
     assert!(
         narrow[3].2 < aside[3].2,
@@ -1998,7 +1995,7 @@ fn aside_nodes_sit_after_the_flow_and_wrap_widens_one_node() {
 #[test]
 fn aside_on_a_flow_node_warns() {
     let src = tmp("aside-flow.fitd");
-    std::fs::write(&src, "layout layered\nnode a\nnode b place=aside\na -> b\n").unwrap();
+    std::fs::write(&src, "layout layered\n\na\nb [place=aside]\na -> b\n").unwrap();
     let (ok, log) = fitd(&[
         src.to_str().unwrap(),
         "-o",
@@ -2013,7 +2010,7 @@ fn ratio_page_is_smallest_that_fits() {
     let src = tmp("ratio.fitd");
     std::fs::write(
         &src,
-        "layout layered dir=down\nfont 10pt\nnode a \"Start here\"\nnode b \"Then this\"\nnode c \"Or that\"\nnode d \"Done\"\na -> b, c\nb -> d\nc -> d\n",
+        "layout layered [dir=down]\nfont 10pt\n\na \"Start here\"\nb \"Then this\"\nc \"Or that\"\nd \"Done\"\na -> b, c\nb -> d\nc -> d\n",
     )
     .unwrap();
     let svg = tmp("ratio.svg");
@@ -2056,7 +2053,7 @@ fn source_order_keeps_children_in_edge_order() {
     let src = tmp("source-order.fitd");
     std::fs::write(
         &src,
-        "layout layered order=source\nnode e \"E\"\nnode d \"D\"\nnode c \"C\"\nnode b \"B\"\nnode a \"A\"\nnode p \"P\"\np -> a, b, c, d, e\n",
+        "layout layered [order=source]\n\ne \"E\"\nd \"D\"\nc \"C\"\nb \"B\"\na \"A\"\np \"P\"\np -> a, b, c, d, e\n",
     )
     .unwrap();
     let svg = tmp("source-order.svg");
@@ -2084,7 +2081,7 @@ fn diamond_edges_end_on_the_outline() {
     let (svg, tex) = (tmp("diamond.svg"), tmp("diamond.tex"));
     std::fs::write(
         &src,
-        "layout layered\nnode a \"Alpha\"\nnode d \"Decide?\" shape=diamond\nnode b \"B\"\nnode c \"C\"\na -> d\nd -> b, c\n",
+        "layout layered\n\na \"Alpha\"\nd \"Decide?\" [shape=diamond]\nb \"B\"\nc \"C\"\na -> d\nd -> b, c\n",
     )
     .unwrap();
     let (ok, log) = fitd(&[
@@ -2134,7 +2131,7 @@ fn edge_heads_and_dashes_reach_svg_and_tikz() {
     let (svg, tex) = (tmp("heads.svg"), tmp("heads.tex"));
     std::fs::write(
         &src,
-        "layout layered\nnode a\nnode b\nnode c\na -> b head=triangle tail=odiamond\nb -- c head=crow line=dotted\n",
+        "layout layered\n\na\nb\nc\na -> b [head=triangle, tail=odiamond]\nb -- c [head=crow, line=dotted]\n",
     )
     .unwrap();
     let (ok, log) = fitd(&[
@@ -2191,7 +2188,7 @@ fn build_svg(name: &str, src: &str) -> String {
 #[test]
 fn sequence_messages_keep_source_order() {
     // Steps zig-zag between lanes declared right to left, so only source order sorts them.
-    let mut src = String::from("include \"seq\"\nlayout lanes order=source\n");
+    let mut src = String::from("include \"seq\"\nlayout lanes [order=source]\n");
     for (id, name) in [("c", "Cc"), ("b", "Bb"), ("a", "Aa")] {
         src += &format!("seq.actor {id} {name}\n");
     }
@@ -2259,9 +2256,9 @@ fn swimlanes_keep_declaration_order() {
 #[test]
 fn lane_rejects_itself_and_nested_heads() {
     for (body, want) in [
-        ("node a \"A\" lane=a\n", "cannot be its own lane"),
+        ("a \"A\" [lane=a]\n", "cannot be its own lane"),
         (
-            "node h \"H\"\nnode a \"A\" lane=h\nnode b \"B\" lane=a\n",
+            "h \"H\"\na \"A\" [lane=h]\nb \"B\" [lane=a]\n",
             "is itself on a lane",
         ),
     ] {
@@ -2323,7 +2320,7 @@ fn venn_rejects_a_fourth_set() {
     let src = tmp("venn-four.fitd");
     std::fs::write(
         &src,
-        "layout venn\nnode a\nnode b\nnode c\nnode d\ngroup a\ngroup b\ngroup c\ngroup d\n",
+        "layout venn\n\na\nb\nc\nd\ngroup a\ngroup b\ngroup c\ngroup d\n",
     )
     .unwrap();
     let (ok, log) = fitd(&[
@@ -2369,7 +2366,7 @@ fn algorithm_lines_keep_indent_and_bold_keywords() {
 
 #[test]
 fn layered_frames_between_unrelated_pieces_get_their_own_columns() {
-    let mut src = String::from("layout layered dir=down\npage a2 landscape\n");
+    let mut src = String::from("layout layered [dir=down]\npage a2 landscape\n");
     for g in ["a", "b"] {
         src += &format!(
             "{g}1 \"{g} root\"\n{g}2 \"{g} left\"\n{g}3 \"{g} right\"\n{g}4 \"{g} leaf\"\n"
@@ -2397,7 +2394,8 @@ fn layered_frames_between_unrelated_pieces_get_their_own_columns() {
 
 #[test]
 fn packed_frames_spread_fans_and_skip_clearance_inside_group_ends() {
-    let src = "layout layered dir=down
+    let src = "layout layered [dir=down]
+
 r \"Radio\"
 d \"Devices\"
 x \"Gamepad\"

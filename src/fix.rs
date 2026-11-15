@@ -44,7 +44,10 @@ impl Names {
             .0
             .into_iter()
             .filter_map(|s| match s.kind {
-                StmtKind::Node { id, .. } => Some(id.text),
+                // A lone name opened a style block in the old syntax, so it declares nothing.
+                StmtKind::Node {
+                    id, bare: false, ..
+                } => Some(id.text),
                 _ => None,
             })
             .collect();
@@ -147,7 +150,8 @@ fn attr(w: &str) -> bool {
             !v.is_empty()
                 && !k.is_empty()
                 && !k.starts_with(|c: char| c.is_ascii_digit() || c == '-')
-                && k.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+                && k.chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
         }
         None => false,
     }
@@ -337,12 +341,14 @@ impl Fix<'_> {
             }
         }
         let ws = words(code);
-        let bare = ws.first().is_some_and(|(_, w)| name(w) && !KEYWORDS.contains(w))
-            && ws
-                .get(1)
-                .is_none_or(|(_, w)| w.starts_with('"') || attr(w));
-        if bare || first == "node" && ws.len() > 1 && !KEYWORDS.contains(&ws[1].1) {
-            let code = if bare { code } else { rest };
+        let bare = ws
+            .first()
+            .is_some_and(|(_, w)| name(w) && !KEYWORDS.contains(w))
+            && ws.get(1).is_none_or(|(_, w)| w.starts_with('"') || attr(w));
+        if bare || first == "node" && ws.len() > 1 {
+            // An ID that is a keyword, or interpolated and so maybe one, keeps its `node`.
+            let keep = !bare && (KEYWORDS.contains(&ws[1].1) || ws[1].1.contains("${"));
+            let code = if bare || keep { code } else { rest };
             let it = self.add(to, bracket(code), note, Kind::Stmt);
             self.open(col, it, false);
             self.last_node = Some(it);
@@ -379,7 +385,12 @@ impl Fix<'_> {
             }
             let parent = cols.last().unwrap().1;
             let cut = crate::fmt::code_end(t);
-            let row = self.add(parent, t[..cut].trim_end().to_string(), &t[cut..], Kind::Stmt);
+            let row = self.add(
+                parent,
+                t[..cut].trim_end().to_string(),
+                &t[cut..],
+                Kind::Stmt,
+            );
             cols.push((c, row));
         }
         // Trailing blank and comment lines belong after the call.
@@ -498,7 +509,8 @@ mod tests {
 
     #[test]
     fn body_and_cells_join_their_node() {
-        let src = "node a \"A\"\n| one\n~ %100 . \"d 64\"*2 _\nnode b\n~ image \"p.png\" width=9em\n";
+        let src =
+            "node a \"A\"\n| one\n~ %100 . \"d 64\"*2 _\nnode b\n~ image \"p.png\" width=9em\n";
         assert_eq!(
             run(src),
             "a \"A\" {\n  | one\n  ~ [%100, ., \"d 64\"*2, _]\n}\nb {\n  ~ image \"p.png\" [width=9em]\n}\n"
@@ -510,7 +522,7 @@ mod tests {
         let src = "def t(a, b)\nnode ${a} \"${b}\"\nend\nfor i in 1..2\nif i == 1\nn${i}\nelse\nm${i}\nend\nend\nt x X\n";
         assert_eq!(
             run(src),
-            "def t(a, b) {\n  ${a} \"${b}\"\n}\nfor i in 1..2 {\n  if i == 1 {\n    with n${i}\n  } else {\n    with m${i}\n  }\n}\nt x X\n"
+            "def t(a, b) {\n  node ${a} \"${b}\"\n}\nfor i in 1..2 {\n  if i == 1 {\n    with n${i}\n  } else {\n    with m${i}\n  }\n}\nt x X\n"
         );
     }
 

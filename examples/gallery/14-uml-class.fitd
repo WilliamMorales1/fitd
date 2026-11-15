@@ -2,13 +2,16 @@
 include "uml"
 layout layered
 page 4:3
+
 uml.iface shape Shape "area(): float"
-uml.class
+uml.class {
   circle Circle "r: float"
   rect Rect "w: float; h: float"
   canvas Canvas "draw()"
-uml.is
+}
+uml.is {
   circle shape
   rect shape
+}
 uml.has canvas shape "0..*"
 uml.key

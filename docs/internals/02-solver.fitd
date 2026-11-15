@@ -1,45 +1,57 @@
 title "How the solver picks a font"
-layout layered dir=down
-page 320x180mm margin=1cm
+layout layered [dir=down]
+page 320x180mm [margin=1cm]
 font 8pt..28pt
-
-style probe color=#0969DA
-style fail color=#CF222E
-style good color=#1A7F37
-
-node font "Next font"
-| binary search between the floor and the ceiling
-probe
-  csp "Probe"
-  | forward checking, backjumping, spatial index
-  fits "Fits?"
-  bnb "Branch and bound"
-  | fewest unmet prefer weight
-trade "Trade-off"
-| top font, 5% and 10% smaller, polished in parallel
-| kept above 16pt per meter of page diagonal
-polish "Polish each"
-| annealing: crossings, nearness, spread
-good
-  best "Best merit"
-  | readability plus font
-fail
-  none "Nothing fits"
-  core "QuickXplain"
-  | minimal set of requires: E0110
-
 font -> csp -> fits -> bnb "range closed"
+
+style probe [color=#0969DA]
+style fail [color=#CF222E]
+style good [color=#1A7F37]
+
+node font "Next font" {
+  | binary search between the floor and the ceiling
+}
+with probe {
+  csp "Probe" {
+    | forward checking, backjumping, spatial index
+  }
+  fits "Fits?"
+  bnb "Branch and bound" {
+    | fewest unmet prefer weight
+  }
+}
+trade "Trade-off" {
+  | top font, 5% and 10% smaller, polished in parallel
+  | kept above 16pt per meter of page diagonal
+}
+polish "Polish each" {
+  | annealing: crossings, nearness, spread
+}
+with good {
+  best "Best merit" {
+    | readability plus font
+  }
+}
+with fail {
+  none "Nothing fits"
+  core "QuickXplain" {
+    | minimal set of requires: E0110
+  }
+}
+
 fits -> none "fails at the floor"
 fits ..> font "yes: go larger; no: smaller"
 bnb -> trade -> polish -> best
 none -> core
 
-refs "References" color=#57606A
-| Prosser 1993: conflict-directed backjumping
-| Junker, AAAI 2004: QuickXplain
-| Sugiyama, Tagawa, Toda 1981: layered layout
+refs "References" [color=#57606A] {
+  | Prosser 1993: conflict-directed backjumping
+  | Junker, AAAI 2004: QuickXplain
+  | Sugiyama, Tagawa, Toda 1981: layered layout
+}
 refs ..> csp
-links "Dashed links last"
-| with nodes fixed, each link picks a bend
-| or a detour around boxes
+links "Dashed links last" {
+  | with nodes fixed, each link picks a bend
+  | or a detour around boxes
+}
 best -> links

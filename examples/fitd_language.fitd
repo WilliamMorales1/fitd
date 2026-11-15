@@ -1,79 +1,102 @@
 // fitd described in fitd: one of each kind of statement, in a small diagram.
 include "shared/lang_styles.fitd"
 title "fitd, in fitd"
-layout layered dir=right
-page 300x160mm landscape margin=6mm
-font 6pt..28pt wrap=12em family="DejaVu Serif"
-theme light palette="#1565C0 #2E7D32 #EF6C00" edge=#455A64 link=#8E24AA label=#37474F background=#FAFAFA text=#212121
+layout layered [dir=right]
+page 300x160mm landscape [margin=6mm]
+font 6pt..28pt [wrap=12em, family="DejaVu Serif"]
+theme light [
+  palette="#1565C0 #2E7D32 #EF6C00",
+  edge=#455A64,
+  link=#8E24AA,
+  label=#37474F,
+  background=#FAFAFA,
+  text=#212121
+]
 
-io
-  src "Source\n.fitd"
-  | one statement per line
-  emit "Output"
-  | svg, png, pdf, tikz
-macro
-  expand "Macros"
-  | for, if, def, use, $${names}
-  | write $${expr} to show it literally
-stage
+with io {
+  src "Source\n.fitd" {
+    | one statement per line
+  }
+  emit "Output" {
+    | svg, png, pdf, tikz
+  }
+}
+with macro {
+  expand "Macros" {
+    | for, if, def, use, $${names}
+    | write $${expr} to show it literally
+  }
+}
+with stage {
   parse "Parser"
   sema "Analysis"
-  lay "Layout"
-  | radial or layered
-  solve "Solver"
-  | largest font that fits
+  lay "Layout" {
+    | radial or layered
+  }
+  solve "Solver" {
+    | largest font that fits
+  }
+}
 src -> expand -> parse -> sema -> lay -> solve -> emit "one format per -o"
-expand ..> sema "errors point at the template line" color=#C62828
+expand ..> sema "errors point at the template line" [color=#C62828]
 
 // Statements: a loop over a list with an index and a branch per kind.
-for i, s in "node", "edge", "setting"
-  if s == "node"
-    stage
+for i, s in "node", "edge", "setting" {
+  if s == "node" {
+    with stage {
       st${i} "node and | body"
-  else if s == "edge"
-    stage
+    }
+  } else if s == "edge" {
+    with stage {
       st${i} "-> -- ..> .."
-  else
-    setting
+    }
+  } else {
+    with setting {
       st${i} "title, page, font, theme"
-  end
+    }
+  }
   parse -> st${i}
-end
+}
 
 // Relations: one template call per family.
-def rel(id, text, note)
-  rule
-    node ${id} "${text}"
-    | ${note}
+def rel(id, text, note) {
+  with rule {
+    node ${id} "${text}" {
+      | ${note}
+    }
+  }
   sema -> ${id}
-end
+}
 rel ord "left-of, above, near, at" "gap=, within="
 rel al align "row, column, top, left"
 lay .. al "reads"
-rule
+with rule {
   req "require"
-  prf "prefer"
-  | weight=2
+  prf "prefer" {
+    | weight=2
+  }
+}
 sema -- req, prf
 
 // The solver probes fonts from the top; a recursive template writes the probes.
-def probe(n)
-  note
+def probe(n) {
+  with note {
     probe${n} "font probe ${n}"
-  if n > 1
+  }
+  if n > 1 {
     probe ${n - 1}
     probe${n} -> probe${n - 1}
-  end
-end
+  }
+}
 probe 2
 solve -> probe2
 
-group "Constraints" ord, al, req, prf color=#C62828
+group "Constraints" ord, al, req, prf [color=#C62828]
 group "Hard and soft" req, prf
 group "Probes" ${names("probe", 1, 2)}
 
 require src at left
 require ord above al
 require align top(expand, parse)
-prefer probe1 near solve within=20em weight=2
+prefer probe1 near solve [within=20em, weight=2]
 prefer prf below req

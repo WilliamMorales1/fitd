@@ -1,11 +1,15 @@
 // Gantt chart (project plans, grant proposals).
 include "grid"
 page 16:9
-grid
-  plan "Thesis plan (months)"
-grid.scale 1 8
-grid.task
-  Survey 1 2
-  Build 2 4
-  Study 5 2
-  Write 6 3
+
+with grid {
+  plan "Thesis plan (months)" {
+    grid.scale 1 8
+    grid.task {
+      Survey 1 2
+      Build 2 4
+      Study 5 2
+      Write 6 3
+    }
+  }
+}

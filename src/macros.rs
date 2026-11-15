@@ -521,8 +521,65 @@ fn row_words(t: &str) -> Result<Vec<(bool, String)>, String> {
     Ok(words)
 }
 
+/// braces gives the net `{` count of a plain line, skipping strings, `${...}`, comments, and body text.
+fn braces(line: &str) -> isize {
+    let t = line.trim_start();
+    if t.starts_with('|') {
+        return 0;
+    }
+    let (mut n, mut in_str, mut expr) = (0, false, 0);
+    let mut it = t[..comment_start(t)].chars().peekable();
+    while let Some(c) = it.next() {
+        match c {
+            '\\' if in_str => {
+                it.next();
+            }
+            '"' => in_str = !in_str,
+            '$' if !in_str && it.peek() == Some(&'{') => {
+                it.next();
+                expr += 1;
+            }
+            '}' if expr > 0 && !in_str => expr -= 1,
+            '{' if !in_str && expr == 0 => n += 1,
+            '}' if !in_str && expr == 0 => n -= 1,
+            _ => {}
+        }
+    }
+    n
+}
+
+/// opener strips the `{` that ends a `for`, `if`, `else`, or `def` line.
+fn opener<'a>(w: &str, rest: &'a str) -> Result<&'a str, String> {
+    rest[..comment_start(rest)]
+        .trim_end()
+        .strip_suffix('{')
+        .map(str::trim_end)
+        .ok_or_else(|| format!("`{w}` needs a `{{` at the end of its line"))
+}
+
 fn classify(line: &str) -> Result<Line, String> {
     let t = line.trim();
+    if let Some(r) = t.strip_prefix('}') {
+        let r = r.trim_start();
+        if r.is_empty() || r.starts_with("//") {
+            return Ok(Line::End);
+        }
+        if let Some(("else", rest)) = is_kw_line(r) {
+            let rest = opener("else", rest)?;
+            let mut p = P {
+                t: tokens(rest)?,
+                i: 0,
+            };
+            return Ok(if p.word("if") {
+                let e = p.expr()?;
+                p.done()?;
+                Line::ElseIf(e)
+            } else {
+                p.done()?;
+                Line::Else
+            });
+        }
+    }
     let verbatim = t.starts_with('|') || t.starts_with('~');
     if t.starts_with("//") || verbatim && !t.contains("${") {
         return Ok(Line::Item(Kind::Plain));
@@ -541,6 +598,12 @@ fn classify(line: &str) -> Result<Line, String> {
             None => Kind::Plain,
         }));
     };
+    match w {
+        "end" => return Err("blocks close with `}`, not `end`".into()),
+        "else" => return Err("`else` goes on the closing line: `} else {`".into()),
+        _ => {}
+    }
+    let rest = opener(w, rest)?;
     if w == "for" {
         return for_line(rest);
     }
@@ -549,20 +612,6 @@ fn classify(line: &str) -> Result<Line, String> {
         i: 0,
     };
     Ok(match w {
-        "end" => {
-            p.done()?;
-            Line::End
-        }
-        "else" => {
-            if p.word("if") {
-                let e = p.expr()?;
-                p.done()?;
-                Line::ElseIf(e)
-            } else {
-                p.done()?;
-                Line::Else
-            }
-        }
         "if" => {
             let e = p.expr()?;
             p.done()?;
@@ -679,8 +728,6 @@ struct Builder<'a> {
     defs: HashMap<String, Def>,
     /// names holds every template key, gathered before building so a call may precede its `def`.
     names: std::collections::HashSet<String>,
-    /// styles holds every `style NAME` declared, so a module line naming one opens a style block.
-    styles: std::collections::HashSet<String>,
     errs: Vec<(usize, Diag)>,
 }
 
@@ -697,6 +744,8 @@ impl Builder<'_> {
 
     fn block(&mut self, top: bool) -> (Vec<Item>, Stop, usize) {
         let mut items = Vec::new();
+        // plain counts node and style blocks open in this body, so their `}` is not the body's.
+        let mut plain = 0usize;
         while self.i < self.lines.len() {
             let at = self.i;
             self.i += 1;
@@ -724,9 +773,16 @@ impl Builder<'_> {
                 }
             };
             let kind = match line {
-                Line::Item(k) => k,
-                Line::End | Line::Else | Line::ElseIf(_) if top => {
-                    self.err(at, "`end` or `else` with no open `for`, `if`, or `def`");
+                Line::Item(k) => {
+                    plain = plain.saturating_add_signed(braces(self.lines[at]));
+                    k
+                }
+                Line::End if plain > 0 || top => {
+                    plain = plain.saturating_sub(1);
+                    Kind::Plain
+                }
+                Line::Else | Line::ElseIf(_) if top || plain > 0 => {
+                    self.err(at, "`else` with no open `if`");
                     Kind::Skip
                 }
                 Line::End => return (items, Stop::End, at),
@@ -812,56 +868,58 @@ impl Builder<'_> {
                             .is_some_and(|m| self.names.contains(&format!("{m}.{head}"))))
             }
         };
-        let style = r.is_empty() && self.mods[at].is_some() && self.styles.contains(head);
-        ok && !style && !["->", "--", ".."].iter().any(|o| r.starts_with(o))
+        ok && !["->", "--", ".."].iter().any(|o| r.starts_with(o))
     }
 
-    /// rows reads the lines indented under template block opener `at`, one call each; with none it is one call without arguments.
+    /// rows reads the calls of template line `at`: its own arguments, then the rows in its braces, which nest by braces; with neither it is one call without arguments.
     fn rows(&mut self, at: usize, name: String, rest: &str) -> Kind {
-        let col = indent(self.lines[at]);
+        let row = |line, depth, text: &str| Row {
+            line,
+            depth,
+            name: name.clone(),
+            text: text.trim().to_string(),
+        };
+        let head = rest[..comment_start(rest)].trim_end();
+        let (head, block) = match head.strip_suffix('{') {
+            Some(h) => (h.trim_end(), true),
+            None => (head, false),
+        };
         let mut rows = Vec::new();
-        let mut cols: Vec<usize> = Vec::new();
-        if !rest.trim().is_empty() {
-            rows.push(Row {
-                line: at,
-                depth: 0,
-                name: name.clone(),
-                text: rest.to_string(),
-            });
-            cols.push(col);
+        let base = usize::from(!head.is_empty());
+        if !head.is_empty() || !block {
+            rows.push(row(at, 0, head));
         }
-        let mut k = self.i;
-        while k < self.lines.len() {
-            let l = self.lines[k];
-            let t = l.trim();
-            k += 1;
-            if t.is_empty() || t.starts_with("//") {
+        if !block {
+            return Kind::Rows(rows);
+        }
+        let mut depth = 0;
+        loop {
+            let Some(l) = self.lines.get(self.i) else {
+                self.err(at, format!("template block `{name}` has no closing `}}`"));
+                break;
+            };
+            self.i += 1;
+            let t = l[..comment_start(l)].trim();
+            if t.is_empty() {
                 continue;
             }
-            let c = indent(l);
-            if c <= col {
-                break;
+            if t == "}" {
+                if depth == 0 {
+                    break;
+                }
+                depth -= 1;
+                continue;
             }
-            self.i = k;
-            while cols.last().is_some_and(|&x| x >= c) {
-                cols.pop();
+            match t.strip_suffix('{') {
+                Some(t) => {
+                    rows.push(row(self.i - 1, base + depth, t));
+                    depth += 1;
+                }
+                None => rows.push(row(self.i - 1, base + depth, t)),
             }
-            let depth = cols.len();
-            cols.push(c);
-            rows.push(Row {
-                line: k - 1,
-                depth,
-                name: name.clone(),
-                text: t.to_string(),
-            });
         }
         if rows.is_empty() {
-            rows.push(Row {
-                line: at,
-                depth: 0,
-                name,
-                text: String::new(),
-            });
+            rows.push(row(at, 0, ""));
         }
         Kind::Rows(rows)
     }
@@ -869,7 +927,7 @@ impl Builder<'_> {
     fn close(&mut self, at: usize, stop: &Stop, what: &str) {
         match stop {
             Stop::End => {}
-            Stop::Eof => self.err(at, format!("`{what}` has no matching `end`")),
+            Stop::Eof => self.err(at, format!("`{what}` has no closing `}}`")),
             Stop::Else(_) => self.err(at, format!("`else` inside `{what}` belongs to no `if`")),
         }
     }
@@ -1001,6 +1059,51 @@ impl Expander<'_> {
         self.calls.pop();
         self.frames.pop();
         r
+    }
+
+    /// open_rows lifts the closing `}` lines off the expansion begun at line `from`, so children land in its last node's braces; it gives them and the children's indent.
+    fn open_rows(&mut self, from: usize, at: usize) -> (Vec<(usize, String)>, usize) {
+        let mut closers = Vec::new();
+        while self.origin.len() > from && self.last_line().trim() == "}" {
+            closers.push(self.pop_line());
+        }
+        closers.reverse();
+        if self.origin.len() == from {
+            return (closers, at);
+        }
+        let last = self.last_line().to_string();
+        let t = last.trim();
+        if !closers.is_empty() && (t.ends_with(['{', ']']) || t.starts_with(['|', '~'])) {
+            let inner = indent(&closers[0].1) + 2;
+            return (closers, inner);
+        }
+        // A node with no block of its own gets one.
+        let (o, line) = self.pop_line();
+        self.close_rows(vec![(o, format!("{line} {{"))]);
+        closers.insert(0, (o, format!("{}}}", " ".repeat(indent(&line)))));
+        (closers, indent(&line) + 2)
+    }
+
+    /// close_rows puts back lines that already carry their final indent.
+    fn close_rows(&mut self, lines: Vec<(usize, String)>) {
+        let old = std::mem::take(&mut self.shift);
+        for (o, l) in lines {
+            self.emit(o, &l, false);
+        }
+        self.shift = old;
+    }
+
+    fn last_line(&self) -> &str {
+        let t = &self.text[..self.text.len() - 1];
+        &t[t.rfind('\n').map_or(0, |k| k + 1)..]
+    }
+
+    fn pop_line(&mut self) -> (usize, String) {
+        let line = self.last_line().to_string();
+        let n = self.text.len() - line.len() - 1;
+        self.text.truncate(n);
+        self.parse.truncate(n);
+        (self.origin.pop().unwrap(), line)
     }
 
     fn raw(&mut self, item: &Item) {
@@ -1338,9 +1441,13 @@ impl Expander<'_> {
                 }
             }
             Kind::Rows(rows) => {
-                let mut bases = vec![self.at(self.lines[at])];
-                for r in rows {
-                    bases.truncate(r.depth + 1);
+                let base = self.at(self.lines[at]);
+                // open holds, per row whose children follow, the closing lines lifted off its expansion and the children's indent.
+                let mut open: Vec<(Vec<(usize, String)>, usize)> = Vec::new();
+                for (k, r) in rows.iter().enumerate() {
+                    while open.len() > r.depth {
+                        self.close_rows(open.pop().unwrap().0);
+                    }
                     let mut words = match row_words(&r.text) {
                         Ok(w) => w,
                         Err(m) => {
@@ -1360,15 +1467,15 @@ impl Expander<'_> {
                     for (quoted, w) in &words {
                         args.push(Expr::Lit(self.word(r.line, *quoted, w)?));
                     }
-                    let from = self.text.len();
-                    self.invoke(r.line, &name, &args, Some(bases[r.depth]))?;
-                    // Children sit right of every line the parent emitted, so its style opener cannot close the parent's scope.
-                    let deep = self.text[from..]
-                        .lines()
-                        .filter(|l| !l.trim().is_empty())
-                        .map(indent)
-                        .max();
-                    bases.push(deep.map_or(bases[r.depth], |d| d + 1));
+                    let from = self.origin.len();
+                    let at = open.last().map_or(base, |o| o.1);
+                    self.invoke(r.line, &name, &args, Some(at))?;
+                    if rows.get(k + 1).is_some_and(|n| n.depth > r.depth) {
+                        open.push(self.open_rows(from, at));
+                    }
+                }
+                while let Some((closers, _)) = open.pop() {
+                    self.close_rows(closers);
                 }
             }
         }
@@ -1429,12 +1536,6 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
                     None => n,
                 })
             })
-            .collect(),
-        styles: lines
-            .iter()
-            .filter_map(|l| l.trim().strip_prefix("style "))
-            .filter_map(|r| r.split_whitespace().next())
-            .map(str::to_string)
             .collect(),
         errs: Vec::new(),
     };
@@ -1557,7 +1658,7 @@ mod tests {
 
     #[test]
     fn plain_files_pass_through() {
-        let text = "node end\nend -> a\nnode a \"x^{2}\"\n| cost $5\n";
+        let text = "end -> a\na \"x^{2}\" {\n  | cost $5\n}\n";
         let l = run(text);
         assert_eq!(l.parse, text);
         assert!(l.diags.is_empty());
@@ -1566,18 +1667,18 @@ mod tests {
     #[test]
     fn count_and_part_split_lists() {
         let l = run(
-            "def row(xs)\nfor i in 1..count(xs, \";\")\n| ${part(xs, \";\", i)}\nend\nend\nnode a\nrow \"x: int; y: int\"\nrow \"\"\n",
+            "def row(xs) {\n  for i in 1..count(xs, \";\") {\n    | ${part(xs, \";\", i)}\n  }\n}\na\nrow \"x: int; y: int\"\nrow \"\"\n",
         );
         assert!(
             l.diags.is_empty(),
             "{:?}",
             l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>()
         );
-        assert_eq!(visible(&l), ["node a", "| x: int", "| y: int"]);
-        let bad = run("node a \"${part(\"a;b\", \";\", 3)}\"\n");
+        assert_eq!(visible(&l), ["a", "| x: int", "| y: int"]);
+        let bad = run("a \"${part(\"a;b\", \";\", 3)}\"\n");
         assert!(bad.diags.iter().any(|d| d.msg.contains("outside 1..2")));
-        let ws = run("node a \"${count(\" 90  5 5 \", \" \")}\"\n");
-        assert_eq!(visible(&ws), ["node a \"3\""]);
+        let ws = run("a \"${count(\" 90  5 5 \", \" \")}\"\n");
+        assert_eq!(visible(&ws), ["a \"3\""]);
     }
 
     #[test]
@@ -1590,29 +1691,47 @@ mod tests {
             )
         };
         let l = go(
-            "tree.unit a A \"x y\"\n  b \"B\" r\n    tree.word c c\n  d D r\nfor i in 1..2\n  tree.unit\n    s${i} \"S ${i}\" r\nend\n",
+            "tree.unit a A \"x y\" {\n  b \"B\" r {\n    tree.word c c\n  }\n  d D r\n}\nfor i in 1..2 {\n  tree.unit {\n    s${i} \"S ${i}\" r\n  }\n}\n",
         );
         let msgs: Vec<_> = l.diags.iter().map(|d| &d.msg).collect();
         assert!(msgs.is_empty(), "{msgs:?}");
         let got: Vec<&str> = l
             .parse
             .lines()
-            .filter(|s| s.trim_start().starts_with(['n', '|']))
+            .filter(|s| !s.trim().is_empty())
+            .skip_while(|s| !s.starts_with("with"))
             .collect();
         assert_eq!(
             got,
             [
-                "  node a \"A\"",
-                "  | x y",
-                "     node b \"B\"",
-                "     | r",
-                "        node c \"c\"",
-                "     node d \"D\"",
-                "     | r",
-                "  node s1 \"S 1\"",
-                "  | r",
-                "  node s2 \"S 2\"",
-                "  | r",
+                "with tree.unit {",
+                "  node a \"A\" {",
+                "    | x y",
+                "    with tree.unit {",
+                "      node b \"B\" {",
+                "        | r",
+                "        with tree.word {",
+                "          node c \"c\"",
+                "        }",
+                "      }",
+                "    }",
+                "    with tree.unit {",
+                "      node d \"D\" {",
+                "        | r",
+                "      }",
+                "    }",
+                "  }",
+                "}",
+                "with tree.unit {",
+                "  node s1 \"S 1\" {",
+                "    | r",
+                "  }",
+                "}",
+                "with tree.unit {",
+                "  node s2 \"S 2\" {",
+                "    | r",
+                "  }",
+                "}",
             ]
         );
         assert!(
@@ -1622,7 +1741,7 @@ mod tests {
                 .any(|d| d.msg.contains("takes 3 arguments"))
         );
         assert!(
-            go("tree.unit\n  a \"A\n")
+            go("tree.unit {\n  a \"A\n}\n")
                 .diags
                 .iter()
                 .any(|d| d.msg.contains("unterminated"))
@@ -1632,7 +1751,7 @@ mod tests {
     #[test]
     fn loops_and_interpolation() {
         let l = run(
-            "for i in 1..3\n  node s${i} \"Step ${i * 10}\"\n  if i < 3\n    s${i} -> s${i + 1}\n  end\nend\ngroup ${names(\"s\", 1, 3)}\n",
+            "for i in 1..3 {\n  node s${i} \"Step ${i * 10}\"\n  if i < 3 {\n    s${i} -> s${i + 1}\n  }\n}\ngroup ${names(\"s\", 1, 3)}\n",
         );
         assert!(
             l.diags.is_empty(),
@@ -1661,9 +1780,9 @@ mod tests {
 
     #[test]
     fn comments_are_not_interpolated() {
-        let l = run("node a \"$${x} ${1 + 1}\"\n| $${y}\n");
-        assert_eq!(visible(&l), ["node a \"${x} 2\"", "| ${y}"]);
-        let l = run("for i in 1..1\n  node a${i} \"#${i}\" color=#123  // ${nope}\nend\n");
+        let l = run("a \"$${x} ${1 + 1}\" {\n  | $${y}\n}\n");
+        assert_eq!(visible(&l), ["a \"${x} 2\" {", "| ${y}", "}"]);
+        let l = run("for i in 1..1 {\n  node a${i} \"#${i}\" color=#123  // ${nope}\n}\n");
         assert!(
             l.diags.is_empty(),
             "{:?}",
@@ -1674,19 +1793,19 @@ mod tests {
 
     #[test]
     fn list_loops_and_else() {
-        let l = run("for i, s in a, b\n  node ${s}${i}\nend\n");
+        let l = run("for i, s in a, b {\n  node ${s}${i}\n}\n");
         assert_eq!(visible(&l), ["node a1", "node b2"]);
         let l = run(
-            "for s in auth, front-end, \"Big DB\"\n  if s == \"auth\"\n    node a\n  else if s == \"front-end\"\n    node c\n  else\n    node b\n  end\nend\n",
+            "for s in auth, front-end, \"Big DB\" {\n  if s == \"auth\" {\n    a\n  } else if s == \"front-end\" {\n    c\n  } else {\n    b\n  }\n}\n",
         );
         assert!(l.diags.is_empty());
-        assert_eq!(visible(&l), ["node a", "node c", "node b"]);
+        assert_eq!(visible(&l), ["a", "c", "b"]);
     }
 
     #[test]
     fn recursive_templates() {
         let l = run(
-            "fib f 3\ndef fib(id, n)\n  node ${id} \"${n}\"\n  if n >= 2\n    fib ${id + \"a\"} ${n - 1}\n    fib ${id + \"b\"} ${n - 2}\n    ${id} -> ${id}a, ${id}b\n  end\nend\n",
+            "fib f 3\ndef fib(id, n) {\n  node ${id} \"${n}\"\n  if n >= 2 {\n    fib ${id + \"a\"} ${n - 1}\n    fib ${id + \"b\"} ${n - 2}\n    ${id} -> ${id}a, ${id}b\n  }\n}\n",
         );
         assert!(
             l.diags.is_empty(),
@@ -1699,7 +1818,7 @@ mod tests {
 
     #[test]
     fn collatz_runs_and_budget_stops_runaway() {
-        let collatz = "def c(k)\n  node n${k}\n  if k > 1 and k % 2 == 0\n    n${k} -> n${k / 2}\n    c ${k / 2}\n  else if k > 1\n    n${k} -> n${3 * k + 1}\n    c ${3 * k + 1}\n  end\nend\nc 27\n";
+        let collatz = "def c(k) {\n  node n${k}\n  if k > 1 and k % 2 == 0 {\n    n${k} -> n${k / 2}\n    c ${k / 2}\n  } else if k > 1 {\n    n${k} -> n${3 * k + 1}\n    c ${3 * k + 1}\n  }\n}\nc 27\n";
         let l = run(collatz);
         assert!(
             l.diags.is_empty(),
@@ -1710,19 +1829,19 @@ mod tests {
             visible(&l).iter().filter(|s| s.starts_with("node")).count(),
             112
         );
-        let l = run("def f(n)\n  f ${n + 1}\nend\nf 0\n");
+        let l = run("def f(n) {\n  f ${n + 1}\n}\nf 0\n");
         assert!(
             l.diags.iter().any(|d| d.msg.contains("nest more than")),
             "{:?}",
             l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>()
         );
-        let l = run("for i in 1..1000000000\n  node a${i}\nend\n");
+        let l = run("for i in 1..1000000000 {\n  node a${i}\n}\n");
         assert!(l.diags.iter().any(|d| d.code == "E0013"));
     }
 
     #[test]
     fn errors_point_at_raw_lines() {
-        let l = run("node a\nfor i in 1..2\n  node b${j}\nend\nif 1\nnode c\n");
+        let l = run("a\nfor i in 1..2 {\n  node b${j}\n}\nif 1 {\n  c\n");
         let msgs: Vec<_> = l
             .diags
             .iter()
@@ -1741,8 +1860,9 @@ mod tests {
             "{msgs:?}"
         );
         assert!(
-            msgs.iter()
-                .any(|(c, m, line)| *c == "E0002" && m.contains("no matching `end`") && *line == 5),
+            msgs.iter().any(|(c, m, line)| *c == "E0002"
+                && m.contains("has no closing `}`")
+                && *line == 5),
             "{msgs:?}"
         );
         assert_eq!(l.parse.len(), l.src.text.len());

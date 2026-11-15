@@ -169,11 +169,12 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 continue;
             }
             StmtKind::Layout { kind, attrs } => {
-                shared += &format!("layout {}", kind.text);
-                for a in attrs.iter().filter(|a| a.key.text != "root") {
-                    shared += &format!(" {}", snippet(a.key.span.lo, a.value.span().hi));
-                }
-                shared.push('\n');
+                let kept: Vec<String> = attrs
+                    .iter()
+                    .filter(|a| a.key.text != "root")
+                    .map(|a| snippet(a.key.span.lo, a.value.span().hi))
+                    .collect();
+                shared += &format!("layout {}{}\n", kind.text, bracket(&kept));
                 continue;
             }
             StmtKind::Page { .. }
@@ -184,9 +185,9 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 shared += &blocks(&[(looks, own)]);
                 continue;
             }
-            StmtKind::Body(_) | StmtKind::Cells(_) => {
+            StmtKind::Body { .. } | StmtKind::Row { .. } => {
                 for &p in last.iter().filter(|&&p| p != OVERVIEW || last.len() == 1) {
-                    body[slot(p)].push((None, own.clone()));
+                    body[slot(p)].push((None, format!("{CHILD}{own}")));
                 }
                 continue;
             }
@@ -208,7 +209,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 let page = file(*on.iter().find(|&&p| p != OVERVIEW).unwrap());
                 body[slot(OVERVIEW)].push((
                     None,
-                    format!("| see page {}", page.trim_end_matches(".fitd")),
+                    format!("{CHILD}| see page {}", page.trim_end_matches(".fitd")),
                 ));
             }
             last = on;
@@ -230,10 +231,11 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             continue;
         }
         let attrs_of = |attrs: &[Attr]| {
-            attrs
+            let kept: Vec<String> = attrs
                 .iter()
-                .map(|a| format!(" {}", snippet(a.key.span.lo, a.value.span().hi)))
-                .collect::<String>()
+                .map(|a| snippet(a.key.span.lo, a.value.span().hi))
+                .collect();
+            bracket(&kept)
         };
         match &st.kind {
             StmtKind::Edge { from, to, .. } => {
@@ -387,7 +389,10 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             stub.push(decl[v].clone());
             stub.push((
                 None,
-                format!("| see page {}", file(home(v)).trim_end_matches(".fitd")),
+                format!(
+                    "{CHILD}| see page {}",
+                    file(home(v)).trim_end_matches(".fitd")
+                ),
             ));
         }
         for &id in &group_stubs[slot(p)] {
@@ -422,21 +427,60 @@ fn names(classes: &[Name]) -> Vec<String> {
     classes.iter().map(|c| c.text.clone()).collect()
 }
 
-/// blocks writes lines with the style blocks they need, opening and closing only where the styles change.
+/// CHILD marks a body or figure row that goes inside the braces of the node line before it.
+const CHILD: char = '\u{0}';
+
+/// blocks writes lines with the `with` blocks they need, opening and closing only where the styles change.
 fn blocks(lines: &[(Looks, String)]) -> String {
     let (mut s, mut open) = (String::new(), Vec::<String>::new());
-    for (looks, line) in lines {
+    let close = |s: &mut String, open: &mut Vec<String>, keep: usize| {
+        while open.len() > keep {
+            open.pop();
+            *s += &format!("{}}}\n", "  ".repeat(open.len()));
+        }
+    };
+    let mut k = 0;
+    while k < lines.len() {
+        let (looks, line) = &lines[k];
+        k += 1;
         if let Some(want) = looks {
             let keep = open.iter().zip(want).take_while(|(a, b)| a == b).count();
-            open.truncate(keep);
+            close(&mut s, &mut open, keep);
             for c in &want[keep..] {
-                s += &format!("{}{c}\n", "  ".repeat(open.len()));
+                s += &format!("{}with {c} {{\n", "  ".repeat(open.len()));
                 open.push(c.clone());
             }
         }
-        s += &format!("{}{}\n", "  ".repeat(open.len()), line.trim_start());
+        let pad = "  ".repeat(open.len());
+        let line = line.trim_start_matches(CHILD).trim_start();
+        let kids = lines[k..]
+            .iter()
+            .take_while(|l| l.1.starts_with(CHILD))
+            .count();
+        if kids == 0 {
+            s += &format!("{pad}{line}\n");
+            continue;
+        }
+        s += &format!("{pad}{line} {{\n");
+        for (_, kid) in &lines[k..k + kids] {
+            for l in kid.trim_start_matches(CHILD).lines() {
+                s += &format!("{pad}  {}\n", l.trim());
+            }
+        }
+        s += &format!("{pad}}}\n");
+        k += kids;
     }
+    close(&mut s, &mut open, 0);
     s
+}
+
+/// bracket renders an attribute list, or nothing when it is empty.
+fn bracket(attrs: &[String]) -> String {
+    if attrs.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}]", attrs.join(", "))
+    }
 }
 
 #[cfg(test)]
@@ -445,20 +489,20 @@ mod tests {
 
     #[test]
     fn branches_get_pages_and_stubs_name_them() {
-        let text = "title \"Map\"\nlayout radial root=r\nstyle s color=#1565C0\nnode r \"Root\"\ns\n  node a \"A\"\n  | about a\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\na1 ..> b1\nrequire a1 left-of a\nrequire a1 near b1\n";
+        let text = "title \"Map\"\nlayout radial [root=r]\n\nstyle s [color=#1565C0]\nr \"Root\"\nwith s {\n  a \"A\" {\n    | about a\n  }\n}\na1\nb\nb1\nr -> a, b\na -> a1\nb -> b1\na1 ..> b1\nrequire a1 left-of a\nrequire a1 near b1\n";
         let out = split("m.fitd", text, "m").unwrap();
         let names: Vec<&str> = out.files.iter().map(|f| f.0.as_str()).collect();
         assert_eq!(names, ["m-shared.fitd", "m.fitd", "m-a.fitd", "m-b.fitd"]);
         let get = |n: &str| &out.files.iter().find(|f| f.0 == n).unwrap().1;
         assert!(
-            get("m-shared.fitd").contains("layout radial\nstyle s color=#1565C0\n"),
+            get("m-shared.fitd").contains("layout radial\nstyle s [color=#1565C0]\n"),
             "{}",
             get("m-shared.fitd")
         );
         let overview = get("m.fitd");
         assert!(
             overview.contains("title \"Map\"\nroot r\n")
-                && overview.contains("s\n  node a \"A\"\n  | see page m-a\n")
+                && overview.contains("with s {\n  a \"A\" {\n    | see page m-a\n  }\n}\n")
                 && overview.contains("r -> a, b"),
             "{overview}"
         );
@@ -477,28 +521,30 @@ mod tests {
         assert!(
             a.contains("a1 ..> b1\n")
                 && a.ends_with(
-                    "\n// Nodes on other pages that edges here reach.\nnode b1\n| see page m-b\n"
+                    "\n// Nodes on other pages that edges here reach.\nb1 {\n  | see page m-b\n}\n"
                 ),
             "{a}"
         );
-        assert!(get("m-b.fitd").ends_with("a1 ..> b1\n\n// Nodes on other pages that edges here reach.\nnode a1\n| see page m-a\n"), "{}", get("m-b.fitd"));
+        assert!(get("m-b.fitd").ends_with("a1 ..> b1\n\n// Nodes on other pages that edges here reach.\na1 {\n  | see page m-a\n}\n"), "{}", get("m-b.fitd"));
         assert_eq!(out.dropped, ["require a1 near b1"]);
     }
 
     #[test]
     fn group_edges_and_style_blocks_survive_a_split() {
-        let text = "layout radial root=r\nstyle s color=#0072B2\nr \"Root\"\n  a \"A\"\n    a1\n    a2\n  b \"B\"\n    s\n      b1\n      b2\ngroup G \"Gr\" a1, a2\nG -> b1\n";
+        let text = "layout radial [root=r]\n\nstyle s [color=#0072B2]\nr \"Root\" {\n  a \"A\" {\n    a1\n    a2\n  }\n  b \"B\" {\n    with s {\n      b1\n      b2\n    }\n  }\n}\ngroup G \"Gr\" a1, a2\nG -> b1\n";
         let out = split("m.fitd", text, "m").unwrap();
         let get = |n: &str| &out.files.iter().find(|f| f.0 == n).unwrap().1;
         let (a, b) = (get("m-a.fitd"), get("m-b.fitd"));
         assert!(
-            a.contains("G -> b1\n") && a.contains("s\n  b1\n  | see page m-b\n"),
+            a.contains("G -> b1\n") && a.contains("with s {\n  b1 {\n    | see page m-b\n  }\n}\n"),
             "{a}"
         );
         assert!(
-            b.contains("s\n  b1\n  b2\nb -- b1\n")
+            b.contains("with s {\n  b1\n  b2\n}\nb -- b1\n")
                 && b.contains("G -> b1\n")
-                && b.ends_with("a1\n| see page m-a\na2\n| see page m-a\ngroup G \"Gr\" a1, a2\n"),
+                && b.ends_with(
+                    "a1 {\n  | see page m-a\n}\na2 {\n  | see page m-a\n}\ngroup G \"Gr\" a1, a2\n"
+                ),
             "{b}"
         );
         assert!(out.dropped.is_empty(), "{:?}", out.dropped);
@@ -506,40 +552,40 @@ mod tests {
 
     #[test]
     fn groups_and_chains_keep_each_page_part() {
-        let text = "node r\nnode a\nnode a1\nnode a2\nnode b\nnode b1\nnode b2\nr -> a, b\na -> a1, a2\nb -> b1, b2\na ..> b1, b2 \"x\"\ngroup \"G\" a1, a2, b1 color=#6D4C41\nrequire a1 left-of a2 left-of b1 left-of b2 gap=1em\nprefer align top(a1, a2, b1)\n";
+        let text = "r\na\na1\na2\nb\nb1\nb2\nr -> a, b\na -> a1, a2\nb -> b1, b2\na ..> b1, b2 \"x\"\ngroup \"G\" a1, a2, b1 [color=#6D4C41]\nrequire a1 left-of a2 left-of b1 left-of b2 [gap=1em]\nprefer align top(a1, a2, b1)\n";
         let out = split("m.fitd", text, "m").unwrap();
         let get = |n: &str| &out.files.iter().find(|f| f.0 == n).unwrap().1;
         let (a, b) = (get("m-a.fitd"), get("m-b.fitd"));
         assert!(
             a.contains("a ..> b1 \"x\"\na ..> b2 \"x\"\n")
-                && a.contains("node b1\n| see page m-b\nnode b2\n| see page m-b\n"),
+                && a.contains("b1 {\n  | see page m-b\n}\nb2 {\n  | see page m-b\n}\n"),
             "{a}"
         );
         assert!(
             b.contains("a ..> b1 \"x\"\na ..> b2 \"x\"\n")
-                && b.contains("node a\n| see page m-a\n")
-                && !b.contains("node a\n| see page m-a\nnode a\n"),
+                && b.contains("a {\n  | see page m-a\n}\n")
+                && !b.contains("a {\n  | see page m-a\n}\na\n"),
             "{b}"
         );
         assert!(
-            a.contains("group \"G\" a1, a2 color=#6D4C41\n")
-                && b.contains("group \"G\" b1 color=#6D4C41\n"),
+            a.contains("group \"G\" a1, a2 [color=#6D4C41]\n")
+                && b.contains("group \"G\" b1 [color=#6D4C41]\n"),
             "{a}\n{b}"
         );
         assert!(
-            a.contains("require a1 left-of a2 gap=1em\n")
-                && b.contains("require b1 left-of b2 gap=1em\n")
+            a.contains("require a1 left-of a2 [gap=1em]\n")
+                && b.contains("require b1 left-of b2 [gap=1em]\n")
                 && a.contains("prefer align top(a1, a2)\n"),
             "{a}\n{b}"
         );
         assert_eq!(
             out.dropped,
             [
-                "require a2 left-of b1 gap=1em",
+                "require a2 left-of b1 [gap=1em]",
                 "prefer align top(a1, a2, b1) (for b1)"
             ]
         );
-        let nested = "node r\nnode a\nnode a1\nnode b\nnode b1\nr -> a, b\na -> a1\nb -> b1\ngroup \"O\" a, a1, b1\ngroup \"I\" a, a1\n";
+        let nested = "r\na\na1\nb\nb1\nr -> a, b\na -> a1\nb -> b1\ngroup \"O\" a, a1, b1\ngroup \"I\" a, a1\n";
         let out = split("m.fitd", nested, "m").unwrap();
         let a = &out.files.iter().find(|f| f.0 == "m-a.fitd").unwrap().1;
         assert!(

@@ -3,10 +3,10 @@ title "CSP Stress Test"
 layout layered
 page a4
 
-node a "Node A"
-node b "Node B"
-node c "Node C"
-node d "Node D"
+a "Node A"
+b "Node B"
+c "Node C"
+d "Node D"
 
 a -> b -> c -> d -> a
 
@@ -16,5 +16,5 @@ require b left-of c
 require c left-of a
 
 // Add some noise
-prefer a at top-left weight=1
-prefer d at bottom-right weight=10
+prefer a at top-left [weight=1]
+prefer d at bottom-right [weight=10]
