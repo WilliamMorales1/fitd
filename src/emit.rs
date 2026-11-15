@@ -1,14 +1,15 @@
 use crate::geom::{P, Rect};
 use crate::graph::{Dash, Dir, Graph, Head, KeyEntry, LayoutKind, Relation};
 use crate::key::KeyPlan;
-use crate::layout::{
-    Drawn, EdgeStyle, FRAME_PAD, Layout, Role, Shape, TITLE_BAND, TITLE_SIZE, TextLine, frame,
-};
+use crate::layout::{Drawn, EdgeStyle, Layout, Role, Shape, TextLine, frame};
 use crate::metrics::{Fonts, Script};
 use crate::theme::{self, Theme};
 use crate::tree::Tree;
 use std::collections::BTreeMap;
 use std::fmt::Write;
+
+mod draw;
+use draw::{Prim, draw};
 
 struct Paint {
     accent: String,
@@ -451,31 +452,6 @@ fn key_swatch(e: &KeyEntry, th: &Theme, x: f64, y: f64, s: f64) -> String {
     }
 }
 
-fn svg_key(o: &mut String, g: &Graph, fonts: &Fonts, th: &Theme, k: &KeyPlan, w: f64, h: f64) {
-    let bottom = h - k.pad;
-    let n = k.rows.len() as f64;
-    for (r, row) in k.rows.iter().enumerate() {
-        let cy = bottom - (n - r as f64 - 0.5) * k.row_h;
-        let x0 = (w - row.width) / 2.0;
-        for &(dx, i) in &row.items {
-            let e = &g.key[i];
-            let x = x0 + dx;
-            o.push_str(&key_swatch(e, th, x, cy, k.size));
-            o.push('\n');
-            let _ = writeln!(
-                o,
-                r#"<text x="{:.2}" y="{:.2}" font-size="{}" font-family="{}" fill="{}">{}</text>"#,
-                x + 1.5 * k.size,
-                cy + 0.35 * k.size,
-                k.size,
-                xml(&fonts.regular[0].family),
-                th.text,
-                xml(&e.label)
-            );
-        }
-    }
-}
-
 pub fn svg(
     g: &Graph,
     t: &Tree,
@@ -485,10 +461,12 @@ pub fn svg(
     th: &Theme,
     key: Option<&KeyPlan>,
 ) -> String {
-    let paint = paints(g, t, lay, th);
+    let prims = draw(g, t, lay, th, key, view);
     let b = lay.body;
     let (w, h) = (view.x1 - view.x0, view.y1 - view.y0);
     let tx = |p: (f64, f64)| (p.0 - view.x0, view.y1 - p.1);
+    let corners = |r: &Rect| (tx((r.x0, r.y1)), tx((r.x1, r.y0)));
+    let family = xml(&fonts.regular[0].family);
     let mut o = String::new();
     let _ = writeln!(
         o,
@@ -503,19 +481,16 @@ pub fn svg(
         fonts.fingerprint().replace("--", "- -")
     );
     o.push_str("<defs>");
-    let edge_color = |e: &Drawn| {
-        stroke(g, e).unwrap_or(match e.style {
-            EdgeStyle::Link => &th.link,
-            EdgeStyle::Arrow => &th.edge,
-            EdgeStyle::Line => &paint[e.b].accent,
-        })
-    };
     let mut markers: Vec<String> = vec![];
-    for e in &lay.edges {
-        let (s, t, _) = decor(g, e);
-        let c = edge_color(e);
-        for h in [s, t] {
-            let id = marker_id(h, c);
+    for p in &prims {
+        let Prim::Edge {
+            start, end, color, ..
+        } = p
+        else {
+            continue;
+        };
+        for &h in [start, end] {
+            let id = marker_id(h, color);
             if h == Head::None || markers.contains(&id) {
                 continue;
             }
@@ -525,276 +500,235 @@ pub fn svg(
                 o,
                 r#"<marker id="{id}" viewBox="0 0 10 10" refX="{}" refY="5" markerWidth="{m}" markerHeight="{m}" orient="auto-start-reverse">{}</marker>"#,
                 head_path(h).1,
-                head_svg(h, c, &th.background)
+                head_svg(h, color, &th.background)
             );
             markers.push(id);
         }
     }
     o.push_str("</defs>\n");
-    if let Some(end) = &th.gradient {
-        let _ = writeln!(
-            o,
-            r#"<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{}"/><stop offset="1" stop-color="{end}"/></linearGradient></defs>"#,
-            th.background
-        );
-        let _ = writeln!(o, r#"<rect width="{w}" height="{h}" fill="url(#bg)"/>"#);
-    } else {
-        let _ = writeln!(
-            o,
-            r#"<rect width="{w}" height="{h}" fill="{}"/>"#,
-            th.background
-        );
-    }
-    for f in groups(g, lay) {
-        let ((x0, y0), (x1, y1)) = (tx((f.rect.x0, f.rect.y1)), tx((f.rect.x1, f.rect.y0)));
-        let c = f.color.unwrap_or(&th.edge);
-        let dash = if f.dashed {
-            format!(r#" stroke-dasharray="{:.1} {:.1}""#, 0.7 * b, 0.5 * b)
-        } else {
-            String::new()
-        };
-        let _ = writeln!(
-            o,
-            r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{c}" fill-opacity="{:.2}" stroke="{c}" stroke-width="{:.2}"{dash}/>"#,
-            x1 - x0,
-            y1 - y0,
-            0.5 * b,
-            th.tint / 2.0,
-            0.08 * b
-        );
-        if let Some(t) = f.title {
-            let (x, y) = (x0 + FRAME_PAD * b, y0 + (TITLE_BAND / 2.0 + 0.3) * b);
-            let _ = writeln!(
-                o,
-                r#"<text x="{x:.1}" y="{y:.1}" font-size="{:.2}" font-family="{}" font-weight="bold" fill="{}">{}</text>"#,
-                TITLE_SIZE * b,
-                xml(&fonts.regular[0].family),
-                f.color.unwrap_or(&th.label),
-                xml(t)
-            );
-        }
-    }
-    if let Some(v) = &lay.venn {
-        let colors = venn_colors(g, lay, th);
-        for (c, col) in v.circles.iter().zip(&colors) {
-            let (x, y) = tx(c.c);
-            let _ = writeln!(
-                o,
-                r#"<circle cx="{x:.1}" cy="{y:.1}" r="{:.1}" fill="{col}" fill-opacity="{:.2}" stroke="{col}" stroke-width="{:.2}"/>"#,
-                c.r,
-                th.tint,
-                0.12 * b
-            );
-        }
-        for (t, col) in v.titles.iter().zip(&colors) {
-            let Some(t) = t else { continue };
-            let (x, y) = tx((t.at.0, t.at.1 - 0.35 * t.size));
-            let _ = writeln!(
-                o,
-                r#"<text x="{x:.1}" y="{y:.1}" font-size="{:.2}" font-family="{}" font-weight="bold" text-anchor="middle" fill="{col}">{}</text>"#,
-                t.size,
-                xml(&fonts.regular[0].family),
-                xml(&t.text)
-            );
-        }
-    }
-    for e in &lay.edges {
-        let pts = edge_points(lay, e);
-        let d: Vec<String> = pts
-            .iter()
-            .map(|&p| tx(p))
-            .map(|(x, y)| format!("{x:.1},{y:.1}"))
-            .collect();
-        let sw = e.width * b;
-        let (start, end, dash) = decor(g, e);
-        let c = edge_color(e);
-        let mut marks = String::new();
-        for (h, at) in [(start, "start"), (end, "end")] {
-            if h != Head::None {
-                let _ = write!(marks, r#" marker-{at}="url(#{})""#, marker_id(h, c));
-            }
-        }
-        let opacity = if e.style == EdgeStyle::Line {
-            r#" stroke-opacity="0.7""#
-        } else {
-            ""
-        };
-        let _ = writeln!(
-            o,
-            r#"<polyline points="{}" fill="none" stroke="{c}"{opacity} stroke-width="{sw:.2}"{}{marks}/>"#,
-            d.join(" "),
-            svg_dash(dash, sw, b)
-        );
-    }
-    for (v, p) in paint.iter().enumerate() {
-        let bx = &lay.boxes[v];
-        let (cx, cy) = tx(lay.pos[v]);
-        let (left, top) = (cx - bx.w / 2.0, cy - bx.h / 2.0);
-        // A stacked node grows up and to the right: the front copy holds the content.
-        let (bw, bh) = (bx.w - bx.shift, bx.h - bx.shift);
-        let btop = top + bx.shift;
-        let (fcx, fcy) = (left + bw / 2.0, btop + bh / 2.0);
-        for k in (1..bx.stack).rev() {
-            let d = bx.shift / (bx.stack - 1) as f64 * k as f64;
-            let _ = match bx.shape {
-                Shape::Circle => writeln!(
-                    o,
-                    r#"<circle cx="{:.1}" cy="{:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#,
-                    fcx + d,
-                    fcy - d,
-                    bw / 2.0,
-                    th.background,
-                    p.accent,
-                    0.08 * b
-                ),
-                Shape::Plain => Ok(()),
-                Shape::Diamond => writeln!(
-                    o,
-                    r#"<polygon points="{}" fill="{}" stroke="{}" stroke-width="{:.2}" stroke-linejoin="round"/>"#,
-                    svg_points(&rhombus(fcx + d, fcy - d, bw, bh)),
-                    th.background,
-                    p.accent,
-                    0.08 * b
-                ),
-                Shape::Rect => writeln!(
-                    o,
-                    r#"<rect x="{:.1}" y="{:.1}" width="{bw:.1}" height="{bh:.1}" rx="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#,
-                    left + d,
-                    btop - d,
-                    0.35 * b,
-                    th.background,
-                    p.accent,
-                    0.08 * b
-                ),
-            };
-        }
-        match (bx.shape, bx.role) {
-            (Shape::Plain, _) => {}
-            (Shape::Circle, Role::Root) => {
+    for p in &prims {
+        match p {
+            Prim::Page(_) => match &th.gradient {
+                Some(end) => {
+                    let _ = writeln!(
+                        o,
+                        r#"<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="{}"/><stop offset="1" stop-color="{end}"/></linearGradient></defs>"#,
+                        th.background
+                    );
+                    let _ = writeln!(o, r#"<rect width="{w}" height="{h}" fill="url(#bg)"/>"#);
+                }
+                None => {
+                    let _ = writeln!(
+                        o,
+                        r#"<rect width="{w}" height="{h}" fill="{}"/>"#,
+                        th.background
+                    );
+                }
+            },
+            Prim::Frame {
+                r,
+                color: c,
+                opacity,
+                width,
+                radius,
+                dash,
+            } => {
+                let ((x0, y0), (x1, y1)) = corners(r);
+                let dash = dash.map_or(String::new(), |(on, off)| {
+                    format!(r#" stroke-dasharray="{on:.1} {off:.1}""#)
+                });
                 let _ = writeln!(
                     o,
-                    r#"<circle cx="{fcx:.1}" cy="{fcy:.1}" r="{:.1}" fill="{}" stroke="{}" stroke-width="{:.2}"/>"#,
-                    bw / 2.0,
-                    p.fill,
-                    p.accent,
-                    0.12 * b
+                    r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" rx="{radius:.1}" fill="{c}" fill-opacity="{opacity:.2}" stroke="{c}" stroke-width="{width:.2}"{dash}/>"#,
+                    x1 - x0,
+                    y1 - y0,
                 );
             }
-            (Shape::Circle, _) => {
+            Prim::Title {
+                at,
+                text,
+                size,
+                color,
+                center,
+            } => {
+                let (x, y) = match center {
+                    true => tx((at.0, at.1 - 0.35 * size)),
+                    false => tx(*at),
+                };
+                let anchor = if *center {
+                    r#" text-anchor="middle""#
+                } else {
+                    ""
+                };
                 let _ = writeln!(
                     o,
-                    r#"<circle cx="{fcx:.1}" cy="{fcy:.1}" r="{:.1}" fill="{}"/>"#,
-                    bw / 2.0,
-                    p.fill
+                    r#"<text x="{x:.1}" y="{y:.1}" font-size="{size:.2}" font-family="{family}" font-weight="bold"{anchor} fill="{color}">{}</text>"#,
+                    xml(text)
                 );
             }
-            (Shape::Diamond, _) => {
-                let pts = svg_points(&rhombus(fcx, fcy, bw, bh));
-                let _ = writeln!(o, r#"<polygon points="{pts}" fill="{}"/>"#, th.background);
+            Prim::Disc {
+                c,
+                r,
+                color,
+                opacity,
+                width,
+            } => {
+                let (x, y) = tx(*c);
                 let _ = writeln!(
                     o,
-                    r#"<polygon points="{pts}" fill="{}" fill-opacity="{}" stroke="{}" stroke-width="{:.2}" stroke-linejoin="round"/>"#,
-                    p.fill,
-                    p.opacity,
-                    p.accent,
-                    0.1 * b
+                    r#"<circle cx="{x:.1}" cy="{y:.1}" r="{r:.1}" fill="{color}" fill-opacity="{opacity:.2}" stroke="{color}" stroke-width="{width:.2}"/>"#
                 );
             }
-            (Shape::Rect, _) => {
+            Prim::Edge {
+                pts,
+                color: c,
+                width: sw,
+                start,
+                end,
+                dash,
+                faint,
+            } => {
+                let d: Vec<String> = pts
+                    .iter()
+                    .map(|&p| tx(p))
+                    .map(|(x, y)| format!("{x:.1},{y:.1}"))
+                    .collect();
+                let mut marks = String::new();
+                for (h, at) in [(start, "start"), (end, "end")] {
+                    if *h != Head::None {
+                        let _ = write!(marks, r#" marker-{at}="url(#{})""#, marker_id(*h, c));
+                    }
+                }
+                let opacity = if *faint {
+                    r#" stroke-opacity="0.7""#
+                } else {
+                    ""
+                };
                 let _ = writeln!(
                     o,
-                    r#"<rect x="{left:.1}" y="{btop:.1}" width="{bw:.1}" height="{bh:.1}" rx="{:.1}" fill="{}"/>"#,
-                    0.35 * b,
-                    th.background
-                );
-                let _ = writeln!(
-                    o,
-                    r#"<rect x="{left:.1}" y="{btop:.1}" width="{bw:.1}" height="{bh:.1}" rx="{:.1}" fill="{}" fill-opacity="{}" stroke="{}" stroke-width="{:.2}"/>"#,
-                    0.35 * b,
-                    p.fill,
-                    p.opacity,
-                    p.accent,
-                    0.1 * b
+                    r#"<polyline points="{}" fill="none" stroke="{c}"{opacity} stroke-width="{sw:.2}"{}{marks}/>"#,
+                    d.join(" "),
+                    svg_dash(*dash, *sw, b)
                 );
             }
-        }
-        for c in &bx.cells {
-            if let Some(im) = &c.image {
+            Prim::Body {
+                shape,
+                r,
+                fill,
+                under,
+                stroke,
+                radius,
+            } => {
+                let ((x, y), (x1, y1)) = corners(r);
+                let (bw, bh) = (x1 - x, y1 - y);
+                let (cx, cy) = (x + bw / 2.0, y + bh / 2.0);
+                let line = stroke.as_ref().map_or(String::new(), |(c, sw)| {
+                    format!(r#" stroke="{c}" stroke-width="{sw:.2}""#)
+                });
+                let paint = match under {
+                    Some(op) => format!(r#" fill="{fill}" fill-opacity="{op}"{line}"#),
+                    None => format!(r#" fill="{fill}"{line}"#),
+                };
+                let under = |shape: &str| {
+                    if under.is_some() {
+                        format!("{shape} fill=\"{}\"/>\n", th.background)
+                    } else {
+                        String::new()
+                    }
+                };
+                match shape {
+                    Shape::Plain => {}
+                    Shape::Circle => {
+                        let _ = writeln!(
+                            o,
+                            r#"<circle cx="{cx:.1}" cy="{cy:.1}" r="{:.1}"{paint}/>"#,
+                            bw / 2.0
+                        );
+                    }
+                    Shape::Diamond => {
+                        let pts = svg_points(&rhombus(cx, cy, bw, bh));
+                        o += &under(&format!(r#"<polygon points="{pts}""#));
+                        let _ = writeln!(
+                            o,
+                            r#"<polygon points="{pts}"{paint} stroke-linejoin="round"/>"#
+                        );
+                    }
+                    Shape::Rect => {
+                        let at = format!(
+                            r#"<rect x="{x:.1}" y="{y:.1}" width="{bw:.1}" height="{bh:.1}" rx="{radius:.1}""#
+                        );
+                        o += &under(&at);
+                        let _ = writeln!(o, "{at}{paint}/>");
+                    }
+                }
+            }
+            Prim::Image { r, im } => {
+                let ((x, y), (x1, y1)) = corners(r);
                 let _ = writeln!(
                     o,
-                    r#"<image x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" preserveAspectRatio="none" href="data:{};base64,{}"/>"#,
-                    left + c.x,
-                    top + c.y,
-                    c.w,
-                    c.h,
+                    r#"<image x="{x:.1}" y="{y:.1}" width="{:.1}" height="{:.1}" preserveAspectRatio="none" href="data:{};base64,{}"/>"#,
+                    x1 - x,
+                    y1 - y,
                     im.mime,
                     base64(&im.data)
                 );
-                continue;
             }
-            if c.shade > 0.0 {
+            Prim::Cell {
+                r,
+                color,
+                shade,
+                width,
+                radius,
+            } => {
+                let ((x, y), (x1, y1)) = corners(r);
+                let at = format!(
+                    r#"<rect x="{x:.1}" y="{y:.1}" width="{:.1}" height="{:.1}" rx="{radius:.1}""#,
+                    x1 - x,
+                    y1 - y
+                );
+                if *shade > 0.0 {
+                    let _ = writeln!(o, r#"{at} fill="{color}" fill-opacity="{shade:.2}"/>"#);
+                }
                 let _ = writeln!(
                     o,
-                    r#"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="{}" fill-opacity="{:.2}"/>"#,
-                    left + c.x,
-                    top + c.y,
-                    c.w,
-                    c.h,
-                    0.12 * b,
-                    p.accent,
-                    c.shade
+                    r#"{at} fill="none" stroke="{color}" stroke-width="{width:.2}"/>"#
                 );
             }
-            let _ = writeln!(
-                o,
-                r#"<rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" rx="{:.1}" fill="none" stroke="{}" stroke-width="{:.2}"/>"#,
-                left + c.x,
-                top + c.y,
-                c.w,
-                c.h,
-                0.12 * b,
-                p.accent,
-                0.07 * b
-            );
-        }
-        for l in &bx.lines {
-            svg_line(&mut o, fonts, l, left + l.x, top + l.baseline, &p.text);
-        }
-        for c in &bx.cells {
-            let fg = if c.shade >= 0.55 {
-                &th.background
-            } else {
-                &p.text
-            };
-            if let Some(l) = &c.label {
-                svg_line(&mut o, fonts, l, left + l.x, top + l.baseline, fg);
+            Prim::Text { line, at, color } => {
+                let (x, y) = tx(*at);
+                svg_line(&mut o, fonts, line, x, y, color);
+            }
+            Prim::Label { r, text, size } => {
+                let ((x0, y0), (x1, y1)) = corners(r);
+                let _ = writeln!(
+                    o,
+                    r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" fill="{}" fill-opacity="0.9"/>"#,
+                    x1 - x0,
+                    y1 - y0,
+                    th.background
+                );
+                let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0 + 0.35 * size);
+                let _ = writeln!(
+                    o,
+                    r#"<text x="{cx:.1}" y="{cy:.1}" font-size="{size:.2}" font-family="{family}" font-style="italic" fill="{}" text-anchor="middle">{}</text>"#,
+                    th.label,
+                    xml(text)
+                );
+            }
+            Prim::Key { entry, at, size } => {
+                let (x, y) = tx(*at);
+                o.push_str(&key_swatch(entry, th, x, y, *size));
+                o.push('\n');
+                let _ = writeln!(
+                    o,
+                    r#"<text x="{:.2}" y="{:.2}" font-size="{size}" font-family="{family}" fill="{}">{}</text>"#,
+                    x + 1.5 * size,
+                    y + 0.35 * size,
+                    th.text,
+                    xml(&entry.label)
+                );
             }
         }
-    }
-    for e in &lay.edges {
-        let (Some(label), Some(r)) = (&e.label, lay.label_rect(e)) else {
-            continue;
-        };
-        let size = 0.8 * b;
-        let ((x0, y0), (x1, y1)) = (tx((r.x0, r.y1)), tx((r.x1, r.y0)));
-        let _ = writeln!(
-            o,
-            r#"<rect x="{x0:.1}" y="{y0:.1}" width="{:.1}" height="{:.1}" fill="{}" fill-opacity="0.9"/>"#,
-            x1 - x0,
-            y1 - y0,
-            th.background
-        );
-        let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0 + 0.35 * size);
-        let _ = writeln!(
-            o,
-            r#"<text x="{cx:.1}" y="{cy:.1}" font-size="{size:.2}" font-family="{}" font-style="italic" fill="{}" text-anchor="middle">{}</text>"#,
-            xml(&fonts.regular[0].family),
-            th.label,
-            xml(label)
-        );
-    }
-    if let Some(k) = key {
-        svg_key(&mut o, g, fonts, th, k, w, h);
     }
     o.push_str("</svg>\n");
     o
@@ -931,8 +865,13 @@ pub fn tikz(
     th: &Theme,
     key: Option<&KeyPlan>,
 ) -> String {
-    let paint = paints(g, t, lay, th);
-    let b = lay.body;
+    let page = Rect {
+        x0: -w / 2.0,
+        y0: -h / 2.0,
+        x1: w / 2.0,
+        y1: h / 2.0,
+    };
+    let prims = draw(g, t, lay, th, key, page);
     let mut fallback: BTreeMap<char, String> = BTreeMap::new();
     for bx in &lay.boxes {
         for l in &bx.lines {
@@ -975,31 +914,11 @@ pub fn tikz(
     }
     o += "\\usepackage{tikz}\n\\usetikzlibrary{arrows.meta}\n";
     let mut defined = std::collections::BTreeSet::new();
-    let frames = groups(g, lay);
-    let extra: Vec<&str> = lay
-        .edges
-        .iter()
-        .filter_map(|e| stroke(g, e))
-        .chain(frames.iter().filter_map(|f| f.color))
-        .collect();
-    let venn = venn_colors(g, lay, th);
     let used = [&th.background, &th.text, &th.edge, &th.link, &th.label]
         .into_iter()
         .map(String::as_str)
-        .chain(
-            paint
-                .iter()
-                .flat_map(|p| [p.accent.as_str(), p.fill.as_str(), p.text.as_str()]),
-        )
-        .chain(extra)
-        .chain(venn.iter().map(String::as_str))
         .chain(th.gradient.as_deref())
-        .chain(
-            g.key
-                .iter()
-                .flat_map(|e| [e.color.as_deref(), e.fill.as_deref()])
-                .flatten(),
-        );
+        .chain(prims.iter().flat_map(Prim::colors));
     for c in used {
         if defined.insert(theme::rgb(c)) {
             let _ = writeln!(
@@ -1011,270 +930,185 @@ pub fn tikz(
         }
     }
     o += "\\begin{document}\n\\begin{tikzpicture}[x=1bp,y=1bp]\n";
-    let page_fill = match &th.gradient {
-        Some(end) => format!(
-            "top color={}, bottom color={}",
-            cname(&th.background),
-            cname(end)
-        ),
-        None => cname(&th.background),
+    let bg = cname(&th.background);
+    let text = |size: f64, style: &str, body: &str| {
+        format!("{{\\fontsize{{{size:.2}bp}}{{{size:.2}bp}}\\selectfont{style} {body}}}")
     };
-    let page_cmd = if th.gradient.is_some() {
-        "shade"
-    } else {
-        "fill"
-    };
-    let page_fill = format!("{page_fill}, opacity={:.3}", theme::alpha(&th.background));
-    let _ = writeln!(
-        o,
-        "\\{page_cmd}[{page_fill}] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
-        -w / 2.0,
-        -h / 2.0,
-        w / 2.0,
-        h / 2.0
-    );
-    for f in &frames {
-        let (r, c) = (f.rect, cname(f.color.unwrap_or(&th.edge)));
-        let dash = if f.dashed {
-            format!(", dash pattern=on {:.1}bp off {:.1}bp", 0.7 * b, 0.5 * b)
-        } else {
-            String::new()
-        };
-        let _ = writeln!(
-            o,
-            "\\filldraw[fill={c}, fill opacity={:.2}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp{dash}] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
-            th.tint / 2.0,
-            0.08 * b,
-            0.5 * b,
-            r.x0,
-            r.y0,
-            r.x1,
-            r.y1
-        );
-        if let Some(t) = f.title {
-            let _ = writeln!(
-                o,
-                "\\node[anchor=base west, inner sep=0bp, text={}] at ({:.1},{:.1}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont\\bfseries {}}};",
-                cname(f.color.unwrap_or(&th.label)),
-                r.x0 + FRAME_PAD * b,
-                r.y1 - (TITLE_BAND / 2.0 + 0.3) * b,
-                tex(t),
-                s = TITLE_SIZE * b
-            );
-        }
-    }
-    if let Some(v) = &lay.venn {
-        for (c, col) in v.circles.iter().zip(&venn) {
-            let _ = writeln!(
-                o,
-                "\\filldraw[fill={k}, fill opacity={:.2}, draw={k}, line width={:.2}bp] ({:.1},{:.1}) circle ({:.1}bp);",
-                th.tint,
-                0.12 * b,
-                c.c.0,
-                c.c.1,
-                c.r,
-                k = cname(col)
-            );
-        }
-        for (t, col) in v.titles.iter().zip(&venn) {
-            let Some(t) = t else { continue };
-            let _ = writeln!(
-                o,
-                "\\node[inner sep=0bp, text={}] at ({:.1},{:.1}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont\\bfseries {}}};",
-                cname(col),
-                t.at.0,
-                t.at.1,
-                tex(&t.text),
-                s = t.size
-            );
-        }
-    }
-    for e in &lay.edges {
-        let raw = edge_points(lay, e);
-        let pts: Vec<String> = raw
-            .iter()
-            .map(|p| format!("({:.1},{:.1})", p.0, p.1))
-            .collect();
-        let lw = e.width * b;
-        let col = |default: &str| cname(stroke(g, e).unwrap_or(default));
-        let (start, end, dash) = decor(g, e);
-        let decor = tikz_decor(start, end, dash);
-        let style = match e.style {
-            EdgeStyle::Line => format!("{}, opacity=0.7{decor}", col(&paint[e.b].accent)),
-            EdgeStyle::Arrow => format!("{}{decor}", col(&th.edge)),
-            EdgeStyle::Link => format!("{}{decor}", col(&th.link)),
-        };
-        let _ = writeln!(
-            o,
-            "\\draw[{style}, line width={lw:.2}bp] {};",
-            pts.join(" -- ")
-        );
-    }
-    for (v, p) in paint.iter().enumerate() {
-        let bx = &lay.boxes[v];
-        let (cx, cy) = lay.pos[v];
-        let (c, f) = (cname(&p.accent), cname(&p.fill));
-        let (bw, bh) = (bx.w - bx.shift, bx.h - bx.shift);
-        let (x0, ytop) = (cx - bx.w / 2.0, cy + bx.h / 2.0 - bx.shift);
-        let (fcx, fcy) = (x0 + bw / 2.0, ytop - bh / 2.0);
-        for k in (1..bx.stack).rev() {
-            let d = bx.shift / (bx.stack - 1) as f64 * k as f64;
-            let bg = cname(&th.background);
-            let _ = match bx.shape {
-                Shape::Circle => writeln!(
-                    o,
-                    "\\filldraw[fill={bg}, draw={c}, line width={:.2}bp] ({:.1},{:.1}) circle ({:.1});",
-                    0.08 * b,
-                    fcx + d,
-                    fcy - d,
-                    bw / 2.0
-                ),
-                Shape::Plain => Ok(()),
-                Shape::Diamond => writeln!(
-                    o,
-                    "\\filldraw[fill={bg}, draw={c}, line width={:.2}bp, line join=round] {};",
-                    0.08 * b,
-                    tikz_points(&rhombus(fcx + d, fcy - d, bw, bh))
-                ),
-                Shape::Rect => writeln!(
-                    o,
-                    "\\filldraw[fill={bg}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
-                    0.08 * b,
-                    0.35 * b,
-                    x0 + d,
-                    ytop - d,
-                    x0 + d + bw,
-                    ytop - d - bh
-                ),
-            };
-        }
-        match (bx.shape, bx.role) {
-            (Shape::Plain, _) => {}
-            (Shape::Circle, Role::Root) => {
+    for p in &prims {
+        match p {
+            Prim::Page(r) => {
+                let (cmd, fill) = match &th.gradient {
+                    Some(end) => (
+                        "shade",
+                        format!("top color={bg}, bottom color={}", cname(end)),
+                    ),
+                    None => ("fill", bg.clone()),
+                };
                 let _ = writeln!(
                     o,
-                    "\\filldraw[fill={f}, draw={c}, line width={:.2}bp] ({fcx:.1},{fcy:.1}) circle ({:.1});",
-                    0.12 * b,
-                    bw / 2.0
+                    "\\{cmd}[{fill}, opacity={:.3}] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
+                    theme::alpha(&th.background),
+                    r.x0,
+                    r.y0,
+                    r.x1,
+                    r.y1
                 );
             }
-            (Shape::Circle, _) => {
-                let _ = writeln!(
-                    o,
-                    "\\fill[{f}] ({fcx:.1},{fcy:.1}) circle ({:.1});",
-                    bw / 2.0
-                );
-            }
-            (Shape::Diamond, _) => {
-                let pts = tikz_points(&rhombus(fcx, fcy, bw, bh));
-                let _ = writeln!(
-                    o,
-                    "\\filldraw[fill={}, draw={c}, line width={:.2}bp, line join=round] {pts};",
-                    cname(&th.background),
-                    0.1 * b
-                );
-                let _ = writeln!(o, "\\fill[{f}, opacity={}] {pts};", p.opacity);
-            }
-            (Shape::Rect, _) => {
-                let _ = writeln!(
-                    o,
-                    "\\filldraw[fill={}, draw={c}, line width={:.2}bp, rounded corners={:.1}bp] ({x0:.1},{ytop:.1}) rectangle ({:.1},{:.1});",
-                    cname(&th.background),
-                    0.1 * b,
-                    0.35 * b,
-                    x0 + bw,
-                    ytop - bh
-                );
-                let _ = writeln!(
-                    o,
-                    "\\fill[{f}, opacity={}, rounded corners={:.1}bp] ({x0:.1},{ytop:.1}) rectangle ({:.1},{:.1});",
-                    p.opacity,
-                    0.35 * b,
-                    x0 + bw,
-                    ytop - bh
-                );
-            }
-        }
-        let text = cname(&p.text);
-        for c in &bx.cells {
-            let (x, y) = (cx - bx.w / 2.0 + c.x, cy + bx.h / 2.0 - c.y);
-            if let Some(im) = &c.image {
-                let _ = writeln!(
-                    o,
-                    "\\node[anchor=north west, inner sep=0pt] at ({x:.1},{y:.1}) {{\\includegraphics[width={:.1}bp, height={:.1}bp]{{{}}}}};",
-                    c.w, c.h, im.path
-                );
-                continue;
-            }
-            if c.shade > 0.0 {
-                let _ = writeln!(
-                    o,
-                    "\\fill[{}, opacity={:.2}, rounded corners={:.1}bp] ({x:.1},{y:.1}) rectangle ({:.1},{:.1});",
-                    cname(&p.accent),
-                    c.shade,
-                    0.12 * b,
-                    x + c.w,
-                    y - c.h
-                );
-            }
-            let _ = writeln!(
-                o,
-                "\\draw[{}, line width={:.2}bp, rounded corners={:.1}bp] ({x:.1},{y:.1}) rectangle ({:.1},{:.1});",
-                cname(&p.accent),
-                0.07 * b,
-                0.12 * b,
-                x + c.w,
-                y - c.h
-            );
-            if let Some(l) = &c.label {
-                let fg = cname(if c.shade >= 0.55 {
-                    &th.background
-                } else {
-                    &p.text
+            Prim::Frame {
+                r,
+                color,
+                opacity,
+                width,
+                radius,
+                dash,
+            } => {
+                let c = cname(color);
+                let dash = dash.map_or(String::new(), |(on, off)| {
+                    format!(", dash pattern=on {on:.1}bp off {off:.1}bp")
                 });
-                tikz_line(
-                    &mut o,
-                    l,
-                    cx - bx.w / 2.0 + l.x,
-                    cy + bx.h / 2.0 - l.baseline,
-                    &fg,
+                let _ = writeln!(
+                    o,
+                    "\\filldraw[fill={c}, fill opacity={opacity:.2}, draw={c}, line width={width:.2}bp, rounded corners={radius:.1}bp{dash}] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
+                    r.x0, r.y0, r.x1, r.y1
                 );
             }
-        }
-        for l in &bx.lines {
-            tikz_line(
-                &mut o,
-                l,
-                cx - bx.w / 2.0 + l.x,
-                cy + bx.h / 2.0 - l.baseline,
-                &text,
-            );
-        }
-    }
-    for e in &lay.edges {
-        let (Some(label), Some(r)) = (&e.label, lay.label_rect(e)) else {
-            continue;
-        };
-        let m = ((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0);
-        let _ = writeln!(
-            o,
-            "\\node[fill={}, fill opacity=0.9, text opacity=1, inner sep=1bp, text={}] at ({:.1},{:.1}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont\\itshape {}}};",
-            cname(&th.background),
-            cname(&th.label),
-            m.0,
-            m.1,
-            tex(label),
-            s = 0.8 * b
-        );
-    }
-    if let Some(k) = key {
-        let n = k.rows.len() as f64;
-        for (r, row) in k.rows.iter().enumerate() {
-            let cy = -h / 2.0 + k.pad + (n - r as f64 - 0.5) * k.row_h;
-            let x0 = -row.width / 2.0;
-            for &(dx, i) in &row.items {
-                let e = &g.key[i];
-                let x = x0 + dx;
+            Prim::Title {
+                at,
+                text: t,
+                size,
+                color,
+                center,
+            } => {
+                let anchor = if *center { "" } else { "anchor=base west, " };
+                let _ = writeln!(
+                    o,
+                    "\\node[{anchor}inner sep=0bp, text={}] at ({:.1},{:.1}) {};",
+                    cname(color),
+                    at.0,
+                    at.1,
+                    text(*size, "\\bfseries", &tex(t))
+                );
+            }
+            Prim::Disc {
+                c,
+                r,
+                color,
+                opacity,
+                width,
+            } => {
+                let k = cname(color);
+                let _ = writeln!(
+                    o,
+                    "\\filldraw[fill={k}, fill opacity={opacity:.2}, draw={k}, line width={width:.2}bp] ({:.1},{:.1}) circle ({r:.1}bp);",
+                    c.0, c.1
+                );
+            }
+            Prim::Edge {
+                pts,
+                color,
+                width,
+                start,
+                end,
+                dash,
+                faint,
+            } => {
+                let pts: Vec<String> = pts
+                    .iter()
+                    .map(|p| format!("({:.1},{:.1})", p.0, p.1))
+                    .collect();
+                let fade = if *faint { ", opacity=0.7" } else { "" };
+                let _ = writeln!(
+                    o,
+                    "\\draw[{}{fade}{}, line width={width:.2}bp] {};",
+                    cname(color),
+                    tikz_decor(*start, *end, *dash),
+                    pts.join(" -- ")
+                );
+            }
+            Prim::Body {
+                shape,
+                r,
+                fill,
+                under,
+                stroke,
+                radius,
+            } => {
+                let (bw, bh) = (r.x1 - r.x0, r.y1 - r.y0);
+                let (cx, cy) = (r.x0 + bw / 2.0, r.y1 - bh / 2.0);
+                let path = match shape {
+                    Shape::Plain => continue,
+                    Shape::Circle => format!("({cx:.1},{cy:.1}) circle ({:.1})", bw / 2.0),
+                    Shape::Diamond => tikz_points(&rhombus(cx, cy, bw, bh)),
+                    Shape::Rect => format!(
+                        "({:.1},{:.1}) rectangle ({:.1},{:.1})",
+                        r.x0, r.y1, r.x1, r.y0
+                    ),
+                };
+                let corner = match shape {
+                    Shape::Rect => format!(", rounded corners={radius:.1}bp"),
+                    Shape::Diamond => ", line join=round".into(),
+                    _ => String::new(),
+                };
+                let f = cname(fill);
+                let base = if under.is_some() { &bg } else { &f };
+                match stroke {
+                    Some((c, sw)) => {
+                        let _ = writeln!(
+                            o,
+                            "\\filldraw[fill={base}, draw={}, line width={sw:.2}bp{corner}] {path};",
+                            cname(c)
+                        );
+                    }
+                    None => {
+                        let _ = writeln!(o, "\\fill[{base}] {path};");
+                    }
+                }
+                if let Some(op) = under {
+                    let corner = if *shape == Shape::Rect { &corner } else { "" };
+                    let _ = writeln!(o, "\\fill[{f}, opacity={op}{corner}] {path};");
+                }
+            }
+            Prim::Image { r, im } => {
+                let _ = writeln!(
+                    o,
+                    "\\node[anchor=north west, inner sep=0pt] at ({:.1},{:.1}) {{\\includegraphics[width={:.1}bp, height={:.1}bp]{{{}}}}};",
+                    r.x0,
+                    r.y1,
+                    r.x1 - r.x0,
+                    r.y1 - r.y0,
+                    im.path
+                );
+            }
+            Prim::Cell {
+                r,
+                color,
+                shade,
+                width,
+                radius,
+            } => {
+                let c = cname(color);
+                let rect = format!(
+                    "rounded corners={radius:.1}bp] ({:.1},{:.1}) rectangle ({:.1},{:.1});",
+                    r.x0, r.y1, r.x1, r.y0
+                );
+                if *shade > 0.0 {
+                    let _ = writeln!(o, "\\fill[{c}, opacity={shade:.2}, {rect}");
+                }
+                let _ = writeln!(o, "\\draw[{c}, line width={width:.2}bp, {rect}");
+            }
+            Prim::Text { line, at, color } => tikz_line(&mut o, line, at.0, at.1, &cname(color)),
+            Prim::Label { r, text: t, size } => {
+                let _ = writeln!(
+                    o,
+                    "\\node[fill={bg}, fill opacity=0.9, text opacity=1, inner sep=1bp, text={}] at ({:.1},{:.1}) {};",
+                    cname(&th.label),
+                    (r.x0 + r.x1) / 2.0,
+                    (r.y0 + r.y1) / 2.0,
+                    text(*size, "\\itshape", &tex(t))
+                );
+            }
+            Prim::Key { entry: e, at, size } => {
+                let ((x, cy), s) = (*at, *size);
                 let c = cname(e.color.as_deref().unwrap_or(&th.edge));
                 let (fill, op) = match (&e.fill, e.shape) {
                     _ if e.frame => (c.clone(), th.tint / 2.0),
@@ -1282,7 +1116,6 @@ pub fn tikz(
                     (None, Some(Shape::Circle)) => (c.clone(), 1.0),
                     (None, _) => (c.clone(), th.tint),
                 };
-                let s = k.size;
                 if let Some(d) = e.line {
                     let dash = tikz_decor(Head::None, e.head.unwrap_or(Head::None), d);
                     let _ = writeln!(
@@ -1316,11 +1149,11 @@ pub fn tikz(
                 }
                 let _ = writeln!(
                     o,
-                    "\\node[anchor=base west, inner sep=0bp, text={}] at ({:.2},{:.2}) {{\\fontsize{{{s:.2}bp}}{{{s:.2}bp}}\\selectfont {}}};",
+                    "\\node[anchor=base west, inner sep=0bp, text={}] at ({:.2},{:.2}) {};",
                     cname(&th.text),
                     x + 1.5 * s,
                     cy - 0.35 * s,
-                    tex(&e.label)
+                    text(s, "", &tex(&e.label))
                 );
             }
         }
