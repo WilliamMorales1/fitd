@@ -1,5 +1,6 @@
 title "Diagnostic codes"
 page 340x191mm margin=1cm
+font 7pt..28pt
 root diag
 
 style front color=#0969DA

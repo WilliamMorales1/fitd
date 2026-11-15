@@ -2,7 +2,6 @@
 include "model"
 layout layered dir=right
 page 16:9
-font 9pt..28pt
 model.iv ease "Ease of use"
 model.med use Usefulness
 model.dv adopt Adoption

@@ -33,7 +33,7 @@ search
   | no layout fits makes the same distinction
   help "Help printed"
   | remove one, turn it into prefer, or use a larger page;
-  | the default 7pt floor can be lowered with font
+  | the default 9pt floor can be lowered with font
 
 after
   check "Checker"

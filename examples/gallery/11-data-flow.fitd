@@ -2,7 +2,6 @@
 include "arch"
 layout layered dir=right
 page 3:1
-font 9pt..28pt
 arch.ext sensor Sensors
 arch.service
   clean Clean

@@ -521,7 +521,7 @@ fn build_one(args: &[String], pages: Option<&mut Vec<PdfPage>>) -> Result<ExitCo
             ))]);
         }
     }
-    let font = set.font.unwrap_or((7.0, 48.0));
+    let font = set.font.unwrap_or((9.0, 28.0));
     let mut cfg = Config {
         page_w,
         page_h,

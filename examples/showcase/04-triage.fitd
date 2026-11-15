@@ -11,11 +11,11 @@ tree.q
 tree.leaf
   p0 "P0: page on-call"
   low "Backlog"
-io
+flow.io
   rep "Report"
-step
+flow.step
   bisect "Bisect"
-done
+flow.done
   fixed "Fix shipped"
 rep -> crash
 crash -> p0 "yes"

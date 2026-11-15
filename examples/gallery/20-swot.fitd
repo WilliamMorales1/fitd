@@ -1,7 +1,6 @@
 // 2x2 matrix such as SWOT (business, strategy), with nodes placed on a grid.
 layout layered
 page 16:9
-font 9pt..28pt
 s "Strengths" row=1 col=1
 | loyal users
 | fast support

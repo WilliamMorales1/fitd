@@ -51,7 +51,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0011",
-        "An `include` names a file that is already being included (a cycle), or a file that cannot be read. The include is skipped. Paths are relative to the including file.",
+        "An `include` names a file that is already being included (a cycle) or a file that cannot be read, and the include is skipped; or it comes after another statement. Every `include` goes at the top of its file. Paths are relative to the including file.",
     ),
     (
         "E0012",

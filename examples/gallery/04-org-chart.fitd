@@ -2,7 +2,6 @@
 include "tree"
 layout layered order=source
 page 16:9
-font 9pt..28pt
 tree.unit ceo Ada CEO
   cto Lin CTO
     web "Web team" "6 people"

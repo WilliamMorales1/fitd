@@ -392,7 +392,7 @@ fn unsat_constraints_report_minimal_core() {
         "{log}"
     );
     assert!(
-        log.contains("7pt is the default font floor") && log.contains("proved for every candidate"),
+        log.contains("9pt is the default font floor") && log.contains("proved for every candidate"),
         "{log}"
     );
     // A starved search cannot prove anything, so the core it finds is flagged as such.
@@ -1227,7 +1227,7 @@ fn language_server_follows_includes() {
     std::fs::create_dir_all(&dir).unwrap();
     let (main, part) = (dir.join("main.fitd"), dir.join("part.fitd"));
     std::fs::write(&part, "node far \"Far 𐀀\"\nfar -> ghost\n").unwrap();
-    let text = "node a \"A\"\ninclude \"part.fitd\"\na -> far\n";
+    let text = "include \"part.fitd\"\nnode a \"A\"\na -> far\n";
     std::fs::write(&main, text).unwrap();
     let (uri, part_uri) = (file_uri(&main), file_uri(&part));
     let mut l = Lsp::start();
@@ -1284,7 +1284,7 @@ fn includes_splice_files_and_keep_their_names_in_diagnostics() {
     let main = dir.join("main.fitd");
     std::fs::write(
         &main,
-        "layout layered\nnode a \"Alpha\"\ninclude \"parts/more.fitd\"\na -> c\n",
+        "include \"parts/more.fitd\"\nlayout layered\nnode a \"Alpha\"\na -> c\n",
     )
     .unwrap();
     let (ok, log) = fitd(&[
@@ -1299,7 +1299,7 @@ fn includes_splice_files_and_keep_their_names_in_diagnostics() {
     );
     std::fs::write(
         dir.join("parts/more.fitd"),
-        "node c \"Gamma\"\ninclude \"../main.fitd\"\n",
+        "include \"../main.fitd\"\nnode c \"Gamma\"\n",
     )
     .unwrap();
     let (ok, log) = fitd(&[
@@ -1309,7 +1309,7 @@ fn includes_splice_files_and_keep_their_names_in_diagnostics() {
         "--short",
     ]);
     assert!(
-        !ok && log.contains("parts/more.fitd:2:1: error[E0011]"),
+        !ok && log.contains("parts/more.fitd:1:1: error[E0011]"),
         "{log}"
     );
     std::fs::write(dir.join("parts/more.fitd"), "node c \"Gamma\"\n").unwrap();
@@ -1528,7 +1528,7 @@ fn several_inputs_make_one_pdf() {
     ]);
     assert!(ok && log.contains("(3 diagrams on 3 pages)"), "{log}");
     let (ok, log) = fitd(&[
-        "docs/pipeline.fitd",
+        "examples/gallery/01-flowchart.fitd",
         "examples/coffee.fitd",
         "examples/compiler.fitd",
         "--grid",
@@ -2339,7 +2339,7 @@ fn venn_rejects_a_fourth_set() {
 
 #[test]
 fn algorithm_lines_keep_indent_and_bold_keywords() {
-    let src = "layout layered\ninclude \"algo\"\n\
+    let src = "include \"algo\"\nlayout layered\n\
                algo.block a Algo \"**Qkw** Qa;   Qb;     Qc; Qd\"\n";
     let svg = build_svg("algo-indent", src);
     let x = |w: &str| text_at(&svg, w).0;

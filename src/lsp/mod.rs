@@ -657,7 +657,7 @@ mod tests {
         .unwrap();
         let main = dir.join("main.fitd");
         let path = main.to_str().unwrap();
-        let text = "node a \"A\"\ninclude \"parts/more.fitd\"\na -> far\n";
+        let text = "include \"parts/more.fitd\"\nnode a \"A\"\na -> far\n";
         let none = |_: &str| None;
         let d = doc("file:///main", path, text, &none);
         let def = features::definition(&d, &position(text, text.rfind("far").unwrap()));
@@ -679,7 +679,7 @@ mod tests {
                 &position(text, text.len() - 1),
                 false
             )),
-            ["a", "far"]
+            ["far", "a"]
         );
         let diags = front_end(path, text);
         assert!(diags[path].is_empty(), "{diags:?}");

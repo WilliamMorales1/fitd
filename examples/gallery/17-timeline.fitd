@@ -2,7 +2,6 @@
 include "time"
 layout layered dir=right
 page 16:9
-font 9pt..28pt
 time.event
   t1 1957 Sputnik
   t3 1990 Hubble

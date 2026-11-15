@@ -1,6 +1,5 @@
 // Network graph (Lohse et al.: networks; ACL-Fig: graph). Radial layout, no library needed.
 page 1:1
-font 9pt..28pt
 a "Alice"
   b "Bob"
     e "Eli"

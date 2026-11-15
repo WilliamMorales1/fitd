@@ -98,8 +98,11 @@ fn splice(
     let (stmts, _) = crate::parse::parse(text);
     out.seg(path, 1, module);
     let mut cursor = 0;
+    let mut first_other = None;
     for st in stmts {
         let StmtKind::Include(target) = &st.kind else {
+            let base = out.text.len() - cursor;
+            first_other.get_or_insert(Span::new(base + st.span.lo, base + st.span.hi));
             continue;
         };
         let end = text[st.span.hi..]
@@ -111,6 +114,14 @@ fn splice(
             out.text.push('\n');
         }
         let span = Span::new(base + st.span.lo, base + st.span.hi);
+        if let Some(other) = first_other {
+            out.diags.push(
+                Diag::error("E0011", "`include` must come before other statements")
+                    .primary(span, "include after a statement")
+                    .secondary(other, "first statement")
+                    .help("move every `include` to the top of the file"),
+            );
+        }
         let dir = Path::new(path).parent().unwrap_or(Path::new(""));
         let (file, lib_mod) = match resolve(target, dir) {
             Ok(r) => r,
@@ -218,14 +229,30 @@ mod tests {
         for (i, (f, n)) in want.iter().enumerate() {
             assert_eq!(at(i + 1), (f.to_string(), *n), "line {}", i + 1);
         }
-        assert_eq!(diags.len(), 1);
-        assert!(
-            diags[0].code == "E0011" && diags[0].msg.contains("includes itself"),
-            "{}",
-            diags[0].msg
-        );
+        let late: Vec<_> = diags
+            .iter()
+            .filter(|d| d.msg.contains("must come before"))
+            .map(|d| {
+                let line = |k: usize| at(src.line_col(d.labels[k].span.lo).0);
+                (line(0), line(1))
+            })
+            .collect();
+        let s = |f: &str, n| (f.to_string(), n);
         assert_eq!(
-            at(src.line_col(diags[0].labels[0].span.lo).0),
+            late,
+            [
+                (s("main.fitd", 2), s("main.fitd", 1)),
+                (s("a.fitd", 2), s("a.fitd", 1)),
+                (s("main.fitd", 4), s("main.fitd", 1)),
+            ]
+        );
+        let cycle: Vec<_> = diags
+            .iter()
+            .filter(|d| d.msg.contains("includes itself"))
+            .collect();
+        assert!(cycle.len() == 1 && cycle[0].code == "E0011");
+        assert_eq!(
+            at(src.line_col(cycle[0].labels[0].span.lo).0),
             ("loop.fitd".to_string(), 1)
         );
     }

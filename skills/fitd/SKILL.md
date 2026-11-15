@@ -77,7 +77,7 @@ When many nodes or edges share one style, write the style once as a block: `styl
 
 | Module | Draws | Gallery |
 | --- | --- | --- |
-| `flow` | Flowchart roles `io step decide done drop`, `flow.key` | 01 |
+| `flow` | Flowchart roles `flow.io step decide done drop`, `flow.key` | 01 |
 | `arch` | `arch.client service store queue ext layers`, `arch.zone` frames, `arch.key` | 02, 11, 12 |
 | `nn` | `nn.input layer step out mask mask_rows mask_pad_rows note add`, styles `nn.block nn.data` | 03 |
 | `tree` | `tree.cat word` (syntax), `tree.q leaf` (decision), `tree.unit kids` (org) | 04, 05, 06 |

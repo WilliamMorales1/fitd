@@ -2,7 +2,6 @@
 include "er"
 layout layered dir=right
 page 3:1
-font 9pt..28pt
 er.entity
   cust Customer "PK id; name"
   ord Order "PK id; FK customer; date"

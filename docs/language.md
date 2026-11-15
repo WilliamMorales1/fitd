@@ -300,7 +300,7 @@ page 16:9 margin=12pt
 
 A ratio `W:H` such as `16:9`, `4:3`, or `1.414:1` fixes only the page shape. fitd picks the smallest page of that shape on which the diagram fits at the font floor and meets as many checks and `prefer` constraints as it does on an unbounded page, then reports the size it chose (`note: page 16:9 fits on 845x475pt`). Since the page is as small as the floor allows, text comes out near the floor, so set `font` to the smallest size the reader should see (`font 10pt..30pt`). `portrait` and `landscape` turn the ratio; the page is never turned on its own. A `--stable` lock made for a page of the same shape keeps its size. Ratios beyond 20:1 are rejected.
 
-`font VALUE [attributes]` sets font size or font-size search range. A fixed size or range can be specified. Length units are `pt`, `mm`, `cm`, `in`, and `em`; `em` is relative to body font size. `wrap` sets text width, and `family` selects font family. For example, `font 7pt..48pt wrap=24em family="DejaVu Sans"` sets search bounds, wrapping width, and font family.
+`font VALUE [attributes]` sets font size or font-size search range. A fixed size or range can be specified. Length units are `pt`, `mm`, `cm`, `in`, and `em`; `em` is relative to body font size. `wrap` sets text width, and `family` selects font family. For example, `font 7pt..48pt wrap=24em family="DejaVu Sans"` sets search bounds, wrapping width, and font family. Without a `font` statement the range is `9pt..28pt`.
 
 `title "TEXT"` sets document title. `root ID` sets root node for layouts that require one. Command-line options override corresponding source settings.
 
@@ -349,7 +349,7 @@ b, c -> d
 
 ### Includes
 
-`include "PATH"` inserts source file before macro expansion and parsing. Path is resolved relative to including file. Include cycles and missing files produce diagnostics.
+`include "PATH"` inserts source file before macro expansion and parsing. Path is resolved relative to including file. Every `include` must come before the file's other statements, as Go requires for `import`; comments may precede it. Include cycles, missing files, and a late `include` produce E0011.
 
 A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name ARGS` on a line of its own. Styles are global and keep the module prefix; open a block with `nn.layer` for style `nn.layer`. In your own files a lone `MOD.name` that is also a template calls the template.
 
@@ -370,7 +370,7 @@ Rows are read after `${...}` substitution, so they work inside loops and templat
 | Module    | Contents                                                                                                                                                                                                                                                   |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `nn`      | Neural-network blocks: `nn.input`, `nn.layer`, `nn.step`, `nn.out`, `nn.mask`, `nn.mask_rows`, `nn.mask_pad_rows`, `nn.note`, `nn.add`, plus styles such as `nn.block` and `nn.data`                                                                  |
-| `flow`    | Flowchart role styles (`io`, `step`, `decide` as a diamond, `done`, `drop`) and `flow.key`                                                                                                                                                               |
+| `flow`    | Flowchart role styles (`flow.io`, `flow.step`, `flow.decide` as a diamond, `flow.done`, `flow.drop`) and `flow.key`                                                                                                                                                               |
 | `palette` | Okabe-Ito color-blind-safe classes `c1`..`c8`                                                                                                                                                                                                              |
 | `grid`    | Figure-row grids: `grid.head`, `grid.row`, `grid.title_row` (tables), `grid.heat`, `grid.shade` (heat maps, confusion matrices), `grid.bar` (unit bar charts), `grid.task`, `grid.scale` (Gantt), `grid.layers` (layer stacks), `grid.quad` (2x2 matrices) |
 | `arch`    | Architecture and data flow: `arch.client`, `arch.service`, `arch.store`, `arch.queue`, `arch.ext`, `arch.layers`, the `arch.zone` group style, `arch.key`                                                                                                |
@@ -395,7 +395,7 @@ nn.mask m "Causal mask" 4 1
 x -> e -> m
 ```
 
-`include "user/LIB"` reads `LIB.fitd` from the including file's directory, or else from the first directory in the `FITD_PATH` environment variable (a `:`-separated list, `;` on Windows) that has it, and treats it as a library: its templates are called as `LIB.name ARGS`, the same way as bundled modules, and inside the library they can be called unqualified as `name ARGS`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and open a block with `LIB.box` for style `LIB_box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
+`include "user/LIB"` reads `LIB.fitd` from the including file's directory, or else from the first directory in the `FITD_PATH` environment variable (a `:`-separated list, `;` on Windows) that has it, and treats it as a library: its templates are called as `LIB.name ARGS`, the same way as bundled modules, and inside the library they can be called unqualified as `name ARGS`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and open a block with `LIB.box` for style `LIB.box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
 
 ```fitd
 include "user/runbook"

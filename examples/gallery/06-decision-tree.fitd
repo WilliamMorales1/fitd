@@ -2,7 +2,6 @@
 include "tree"
 layout layered
 page 4:3
-font 9pt..28pt
 tree.q
   out Outlook?
   hum Humidity?

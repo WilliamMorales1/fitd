@@ -31,7 +31,7 @@ pub const KEYWORDS: &[Keyword] = &[
     ),
     (
         "font",
-        "font ${1:7pt..48pt}",
+        "font ${1:9pt..28pt}",
         "font SIZE|LO..HI [wrap=EM] [family=\"NAME\"]",
         "Sets the body font size, or the range the solver may search. Units: `pt`, `mm`, `cm`, `in`, `em`.",
     ),

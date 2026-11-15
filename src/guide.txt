@@ -1,4 +1,4 @@
-fitd: .fitd text -> SVG/PNG/PDF/TikZ at largest font that fits.
+fitd: .fitd text -> SVG/PNG/PDF/TikZ, largest font that fits.
 
 Build:  fitd FILE.fitd -o out.svg|.png|.pdf [--tikz out.tex] [--short]
 Book:   fitd A.fitd B.fitd -o out.pdf
@@ -18,11 +18,11 @@ Syntax: one statement per line, // comment.
   a ..> b "label"              // cross link, dashed (.. undirected)
   title "Text"
   layout radial root=ID        // default: mind map
-  layout layered dir=down|right bands=N order=source // flowchart; source order
+  layout layered dir=down|right bands=N order=source // flowchart
   layout lanes dir=down|right order=source // groups are lanes; node lane=HEAD: lifeline
   layout venn                  // groups: set circles (<=3)
   page a0..a4|WxHmm|16:9 portrait|landscape margin=1cm // 16:9 tightest
-  font 8pt..30pt wrap=16em
+  font 9pt..28pt wrap=24em // defaults
   theme paper|light|dark|mono
   style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle|diamond|none stack=N copies
         wrap=24em place=aside (layered: strip after flow)
@@ -58,6 +58,6 @@ Flowchart:
   out "Save"
   err "Error"
 
-Fix first error, rebuild. `fitd explain CODE` details a code.
+Fix first error, rebuild. `fitd explain CODE` details it.
 E0110: drop or `prefer` one listed constraint, or enlarge page.
 No fit: lower font floor or enlarge page.

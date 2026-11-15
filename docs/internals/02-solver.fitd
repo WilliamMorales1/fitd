@@ -1,6 +1,7 @@
 title "How the solver picks a font"
 layout layered dir=down
 page 320x180mm margin=1cm
+font 8pt..28pt
 
 style probe color=#0969DA
 style fail color=#CF222E

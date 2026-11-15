@@ -2,14 +2,13 @@
 include "flow"
 layout layered
 page 3:4
-font 9pt..28pt
-io
+flow.io
   req "Request"
-decide
+flow.decide
   auth "Signed in?"
-step
+flow.step
   login "Log in"
-done
+flow.done
   serve "Serve page"
 req -> auth -> serve "yes"
 auth -> login "no" -> serve

@@ -1,7 +1,6 @@
 // Results table (DocFigure, ACL-Fig: tables).
 include "grid"
 page 4:3
-font 9pt..28pt
 grid
   t "Accuracy on GLUE"
 grid.title_row "Model; MNLI; SST-2"

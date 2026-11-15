@@ -2,7 +2,6 @@
 include "uml"
 layout layered
 page 4:3
-font 9pt..28pt
 uml.iface shape Shape "area(): float"
 uml.class
   circle Circle "r: float"

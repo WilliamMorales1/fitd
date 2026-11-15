@@ -2,7 +2,6 @@
 include "tree"
 layout layered order=source
 page 4:3
-font 9pt..28pt
 tree.cat s S
   np NP
     tree.word she she

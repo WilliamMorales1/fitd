@@ -1,6 +1,6 @@
 // fitd described in fitd: one of each kind of statement, in a small diagram.
-title "fitd, in fitd"
 include "shared/lang_styles.fitd"
+title "fitd, in fitd"
 layout layered dir=right
 page 300x160mm landscape margin=6mm
 font 6pt..28pt wrap=12em family="DejaVu Serif"
