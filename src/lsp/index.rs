@@ -2,6 +2,7 @@
 
 use crate::ast::{Attr, Rel, StmtKind, Value as AValue};
 use crate::diag::{Source, Span};
+use crate::expand::{DefInfo, Mark};
 use std::collections::HashMap;
 
 /// Loc is a range in one file, in LSP coordinates (0-based lines, UTF-16 columns).
@@ -178,10 +179,6 @@ pub fn slice16(line: &str, lo: usize, hi: usize) -> Option<&str> {
     line.get(byte(lo)?..byte(hi)?)
 }
 
-fn utf16(s: &str) -> usize {
-    s.encode_utf16().count()
-}
-
 fn is_ident(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
@@ -306,7 +303,13 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
         images: false,
         ..Default::default()
     };
-    let crate::compile::Front { src, stmts, .. } = crate::compile::check(path, text, &opts);
+    let crate::compile::Front {
+        src,
+        stmts,
+        defs,
+        marks,
+        ..
+    } = crate::compile::check(path, text, &opts);
     let parse = src.text.clone();
     files.cache.insert(path.to_string(), Some(text.to_string()));
     let mut b = Builder {
@@ -488,7 +491,7 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
             }
         }
     }
-    macro_lines(&mut b, path, text);
+    macros(&mut b, &defs, &marks);
     let mut out = b.out;
     out.occs.sort();
     out.occs.dedup();
@@ -497,110 +500,52 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
     out
 }
 
-/// macro_lines indexes `def` and template call lines, which never reach the parser.
-fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
-    let (src, _) = crate::include::expand(path, text);
-    let lines: Vec<&str> = src.text.lines().collect();
-    let key = |module: Option<&str>, n: &str| match module {
-        Some(m) if !n.contains('.') => format!("{m}.{n}"),
-        _ => n.to_string(),
-    };
-    let names: std::collections::HashSet<String> = lines
-        .iter()
-        .enumerate()
-        .filter_map(|(i, l)| {
-            let n = template_name(l.trim_start().strip_prefix("def ")?.trim_start());
-            (!n.is_empty()).then(|| key(src.module(i + 1), &n))
-        })
-        .collect();
-    for (i, line) in lines.iter().enumerate() {
-        let (file, n) = src.file_line(i + 1);
-        let file = file.to_string();
-        let lead = line.len() - line.trim_start().len();
-        let t = &line[lead..];
-        let module = src.module(i + 1);
-        let at = |lo: usize, hi: usize| Loc {
-            path: file.clone(),
-            start: (n - 1, utf16(&line[..lo])),
-            end: (n - 1, utf16(&line[..hi])),
-        };
-        let call = template_name(t);
-        let after = &t[call.len()..];
-        let row = after.starts_with('(')
-            && !crate::parse::KEYWORDS.contains(&call.as_str())
-            && !["->", "--", ".."]
-                .iter()
-                .any(|o| after.trim_start().starts_with(o))
-            && (names.contains(&call) || names.contains(&key(module, &call)));
-        let (w, name_lo) = if row {
-            ("call".to_string(), lead)
-        } else {
-            let w: String = t.chars().take_while(|&c| is_ident(c)).collect();
-            if !super::docs::MACRO_WORDS.contains(&w.as_str()) || t[w.len()..].starts_with('-') {
-                continue;
-            }
-            b.out.spots.push(Spot {
-                word: Word::Keyword(w.clone()),
-                loc: at(lead, lead + w.len()),
-            });
-            if w != "def" {
-                continue;
-            }
-            let rest = &t[w.len()..];
-            (w, lead + (t.len() - rest.trim_start().len()))
-        };
-        let written = template_name(&line[name_lo..]);
-        if written.is_empty() {
+/// macros indexes `def` and template calls from the expander, since neither reaches the parser.
+fn macros(b: &mut Builder<'_, '_, '_>, defs: &[DefInfo], marks: &[Mark]) {
+    for m in marks {
+        let want = b.parse[m.span.lo..m.span.hi].to_string();
+        let Some(loc) = b.loc(m.span, &want) else {
             continue;
-        }
-        let loc = at(name_lo, name_lo + written.len());
-        let name = match module {
-            Some(_) if !names.contains(&written) => key(module, &written),
-            _ => written.clone(),
         };
-        if w == "def" {
-            let after = &line[name_lo + written.len()..];
-            let params = after
-                .trim_start()
-                .strip_prefix('(')
-                .and_then(|p| p.split(')').next())
-                .map(|p| {
-                    p.split(',')
-                        .map(|s| s.split('=').next().unwrap().trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect()
-                })
-                .unwrap_or_default();
-            let mut doc = Vec::new();
-            for prev in lines[..i].iter().rev() {
-                match prev.trim_start().strip_prefix("//") {
-                    Some(c) => doc.push(c.strip_prefix(' ').unwrap_or(c).to_string()),
-                    None => break,
-                }
-            }
-            doc.reverse();
-            b.out.defs.push(Def {
+        match &m.call {
+            None => b.out.spots.push(Spot {
+                word: Word::Keyword(want),
+                loc,
+            }),
+            Some(name) => b.out.occs.push(Occ {
+                kind: Kind::Macro,
                 name: name.clone(),
-                params,
-                doc: doc.join("\n"),
-            });
-            if file == path {
-                let whole = at(lead, line.len());
-                b.out.symbols.push(Symbol {
-                    name: name.clone(),
-                    detail: line[name_lo + written.len()..].trim().to_string(),
-                    kind: 12,
-                    whole,
-                    pick: loc.clone(),
-                });
+                decl: m.def,
+                loc,
+            }),
+        }
+    }
+    for d in defs {
+        let line = b.src.line_col(d.span.lo).0;
+        let mut doc = Vec::new();
+        for prev in (1..line).rev() {
+            match b.src.line_text(prev).trim_start().strip_prefix("//") {
+                Some(c) => doc.push(c.strip_prefix(' ').unwrap_or(c).to_string()),
+                None => break,
             }
         }
-        b.out.occs.push(Occ {
-            kind: Kind::Macro,
-            name,
-            decl: w == "def",
-            loc,
+        doc.reverse();
+        b.out.defs.push(Def {
+            name: d.name.clone(),
+            params: d.params.clone(),
+            doc: doc.join("\n"),
         });
+        let end = b.parse[d.span.lo..]
+            .find('\n')
+            .map_or(b.parse.len(), |k| d.span.lo + k);
+        let detail = b.parse[d.name_span.hi..end].trim().to_string();
+        b.symbol(
+            d.name.clone(),
+            detail,
+            12,
+            Span::new(d.span.lo, end),
+            d.name_span,
+        );
     }
 }
 

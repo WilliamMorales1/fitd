@@ -11,6 +11,7 @@ pub struct Loaded {
     pub toks: Vec<Token>,
     pub diags: Vec<Diag>,
     pub defs: Vec<DefInfo>,
+    pub marks: Vec<Mark>,
 }
 
 /// DefInfo describes one template for the editor: its full name, parameters, and where its `def` line sits.
@@ -19,6 +20,16 @@ pub struct DefInfo {
     pub name: String,
     pub params: Vec<String>,
     pub span: Span,
+    pub name_span: Span,
+}
+
+/// Mark is a macro word the parser never sees: a `for`, `if`, `else`, or `def` keyword, or a template name.
+#[derive(Clone, Debug)]
+pub struct Mark {
+    pub span: Span,
+    /// The full template name at a call, or `None` for a keyword.
+    pub call: Option<String>,
+    pub def: bool,
 }
 
 pub fn load(path: &str, text: &str, budget: u64) -> Loaded {
@@ -37,9 +48,12 @@ pub fn expand(src: Source, mut diags: Vec<Diag>, budget: u64) -> Loaded {
         src: &src,
         defs: HashMap::new(),
         errs: Vec::new(),
+        marks: Vec::new(),
     };
     let items = b.block(None);
-    let Builder { defs, errs, .. } = b;
+    let Builder {
+        defs, errs, marks, ..
+    } = b;
     diags.extend(errs);
     let mut x = Expander {
         src: &src,
@@ -65,15 +79,43 @@ pub fn expand(src: Source, mut diags: Vec<Diag>, budget: u64) -> Loaded {
             name: k.clone(),
             params: d.params.iter().map(|p| p.0.clone()).collect(),
             span: d.span,
+            name_span: d.name_span,
         })
         .collect();
     infos.sort_by_key(|d| d.span.lo);
+    let marks = marks
+        .into_iter()
+        .filter_map(|(span, call)| {
+            let call = match call {
+                None => None,
+                Some(n) => Some(resolve(&src, &defs, &n, span)?.0.clone()),
+            };
+            let def = call.is_some() && infos.iter().any(|d| d.name_span == span);
+            Some(Mark { span, call, def })
+        })
+        .collect();
     Loaded {
         src,
         toks: out,
         diags,
         defs: infos,
+        marks,
     }
+}
+
+/// resolve finds the template a call names: the caller's own module first, then the full name.
+fn resolve<'d>(
+    src: &Source,
+    defs: &'d HashMap<String, Def>,
+    name: &str,
+    at: Span,
+) -> Option<(&'d String, &'d Def)> {
+    let line = src.line_col(at.lo).0;
+    let local = src
+        .module(line)
+        .filter(|_| !name.contains('.'))
+        .and_then(|m| defs.get_key_value(&format!("{m}.{name}")));
+    local.or_else(|| defs.get_key_value(name))
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -555,6 +597,7 @@ struct Def {
     params: Vec<(String, Option<Arg>)>,
     body: Vec<Item>,
     span: Span,
+    name_span: Span,
 }
 
 struct Builder<'a> {
@@ -564,6 +607,8 @@ struct Builder<'a> {
     src: &'a Source,
     defs: HashMap<String, Def>,
     errs: Vec<Diag>,
+    /// Macro keywords and written template names, resolved once all defs are known.
+    marks: Vec<(Span, Option<String>)>,
 }
 
 fn is_ident(w: &str) -> bool {
@@ -669,7 +714,8 @@ impl Builder<'_> {
                 }
                 (Some("for"), Tok::Expr(raw)) => {
                     let raw = raw.clone();
-                    self.bump();
+                    let kw = self.bump().span;
+                    self.marks.push((kw, None));
                     let at = self.bump().span;
                     if !self.expect_open("for") {
                         continue;
@@ -730,7 +776,8 @@ impl Builder<'_> {
             let cond = if *self.peek() == Tok::LBrace {
                 None
             } else {
-                self.bump();
+                let kw = self.bump().span;
+                self.marks.push((kw, None));
                 let Tok::Expr(raw) = self.peek().clone() else {
                     let at = self.span();
                     self.err(at, "expected a condition after `if`");
@@ -762,6 +809,7 @@ impl Builder<'_> {
                 break;
             }
             let at = self.bump().span;
+            self.marks.push((at, None));
             if last {
                 self.err(at, "`else` after `else`");
             }
@@ -777,6 +825,7 @@ impl Builder<'_> {
 
     fn def(&mut self, top: bool) {
         let span = self.bump().span;
+        self.marks.push((span, None));
         let Some(name) = self.word(0).filter(|w| is_ident(w)).map(String::from) else {
             let at = self.span();
             self.err(at, "expected a template name after `def`");
@@ -784,6 +833,7 @@ impl Builder<'_> {
             return;
         };
         let name_span = self.bump().span;
+        self.marks.push((name_span, Some(name.clone())));
         let mut params: Vec<(String, Option<Arg>)> = Vec::new();
         if *self.peek() != Tok::LParen {
             let at = self.span();
@@ -855,6 +905,7 @@ impl Builder<'_> {
                 params,
                 body,
                 span: span.to(name_span),
+                name_span,
             },
         );
     }
@@ -908,6 +959,7 @@ impl Builder<'_> {
             name = format!("{name}.{}", t.src(self.text));
             span = span.to(t.span);
         }
+        self.marks.push((span, Some(name.clone())));
         self.bump();
         let mut args = Vec::new();
         loop {
@@ -1352,13 +1404,7 @@ impl Expander<'_> {
         span: Span,
     ) -> Run<()> {
         let defs = self.defs;
-        let line = self.src.line_col(span.lo).0;
-        let local = self
-            .src
-            .module(line)
-            .filter(|_| !name.contains('.'))
-            .and_then(|m| defs.get(&format!("{m}.{name}")));
-        let Some(def) = local.or_else(|| defs.get(name)) else {
+        let Some((_, def)) = resolve(self.src, defs, name, span) else {
             let mut known: Vec<&String> = defs.keys().collect();
             known.sort();
             let hint = if known.is_empty() {

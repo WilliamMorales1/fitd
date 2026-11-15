@@ -785,6 +785,27 @@ mod tests {
     }
 
     #[test]
+    fn template_calls_are_found_inside_blocks_and_across_lines() {
+        let text = "def box(x) {\n  ${x}\n}\nfor i in 1..2 {\n  box(\n    n${i})\n}\nif 1 == 1 { box(z) }\n";
+        let none = |_: &str| None;
+        let d = doc("file:///b.fitd", "/b.fitd", text, &none);
+        let at = |s: &str| position(text, text.find(s).unwrap());
+        assert_eq!(
+            features::references(&d, &at("box("), true)
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+        assert_eq!(
+            features::definition(&d, &at("box(z"))["range"]["start"],
+            json!({ "line": 0, "character": 4 })
+        );
+        let h = features::hover(&d, &at("for"), &[]);
+        assert!(!h.is_null(), "{h}");
+    }
+
+    #[test]
     fn module_classes_answer_by_qualified_name() {
         let text = "style nn.block [color=#CC79A7]\nwith nn.block {\n  a\n}\n";
         let none = |_: &str| None;

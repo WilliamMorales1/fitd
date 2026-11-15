@@ -56,6 +56,8 @@ pub struct Front {
     pub stmts: Vec<Stmt>,
     pub graph: Graph,
     pub diags: Vec<Diag>,
+    pub defs: Vec<expand::DefInfo>,
+    pub marks: Vec<expand::Mark>,
 }
 
 /// check runs includes, macros, parse, and sema, with diagnostics sorted by position.
@@ -64,7 +66,8 @@ pub fn check(path: &str, text: &str, opts: &Options) -> Front {
         src,
         toks,
         mut diags,
-        ..
+        defs,
+        marks,
     } = expand::load(path, text, opts.expand_budget);
     let (stmts, parse_diags) = parse::parse_tokens(&src.text, toks, Vec::new());
     diags.extend(parse_diags);
@@ -82,6 +85,8 @@ pub fn check(path: &str, text: &str, opts: &Options) -> Front {
         stmts,
         graph,
         diags,
+        defs,
+        marks,
     }
 }
 
