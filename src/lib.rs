@@ -8,6 +8,8 @@ pub mod csp;
 pub mod diag;
 pub mod emit;
 pub mod error;
+pub mod fix;
+pub mod fmt;
 #[cfg(test)]
 mod fuzz;
 pub mod geom;

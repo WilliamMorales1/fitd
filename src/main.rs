@@ -1,7 +1,7 @@
 use diag::{Diag, Level};
 use error::FitdResult;
 use fitd::{
-    attrs, check, compile, diag, emit, error, geom, import, layout, lsp, metrics, split, stdlib,
+    attrs, check, compile, diag, emit, error, fix, fmt, geom, import, layout, lsp, metrics, split, stdlib,
 };
 use geom::Rect;
 use std::process::ExitCode;
@@ -15,6 +15,8 @@ const USAGE: &str = "usage:
   fitd explain <CODE>
   fitd lsp              language server on stdin/stdout
   fitd import <file.dot|file.mmd|file.d2> [-o out.fitd]   translate Graphviz, Mermaid, or D2
+  fitd fix <file.fitd>...   rewrite the indentation syntax into braces, in place
+  fitd fmt <file.fitd|->...  print in canonical layout, in place (- for stdin to stdout)
   fitd split <input.fitd> [-o DIR]   an overview page plus one page per top-level branch
   fitd guide            the whole language on one page, with examples
   fitd std [NAME]       list the bundled library, or print one module
@@ -35,6 +37,38 @@ fn run(args: &[String]) -> FitdResult<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Some("lsp") => Ok(lsp::serve()),
+        Some(cmd @ ("fix" | "fmt")) => {
+            let files = &args[1..];
+            if files.is_empty() {
+                return Err(USAGE.into());
+            }
+            for path in files {
+                let stdin = path == "-";
+                let text = if stdin {
+                    std::io::read_to_string(std::io::stdin()).map_err(|e| format!("stdin: {e}"))?
+                } else {
+                    std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?
+                };
+                let out = if cmd == "fix" {
+                    if fmt::braced(&text) {
+                        eprintln!("{path}: already brace syntax, skipped");
+                        continue;
+                    }
+                    fix::fix(path, &text)
+                } else if fmt::old(&text) {
+                    return Err(format!("{path}: indentation syntax; run `fitd fix {path}` first").into());
+                } else {
+                    fmt::fmt(&text)
+                };
+                if stdin {
+                    print!("{out}");
+                } else if out != text {
+                    write(path, out.as_bytes())?;
+                    eprintln!("wrote {path}");
+                }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
         Some("import") => {
             let path = args.get(1).ok_or(USAGE)?;
             let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;

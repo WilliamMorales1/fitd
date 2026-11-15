@@ -7,6 +7,8 @@ fitd INPUT [-o OUTPUT] [OPTIONS]
 fitd INPUT... -o OUTPUT.pdf
 fitd import INPUT.dot|INPUT.mmd|INPUT.d2 [-o OUTPUT.fitd]
 fitd split INPUT.fitd [-o DIRECTORY]
+fitd fix FILE.fitd...
+fitd fmt FILE.fitd...|-
 fitd explain CODE
 fitd guide
 fitd lsp
@@ -79,6 +81,8 @@ Node, edge, and group attributes include `color`, `fill`, and `text` where suppo
 - `fitd explain CODE` prints extended diagnostic information.
 - `fitd guide` prints concise language syntax and examples.
 - `fitd import INPUT` converts Graphviz DOT, Mermaid, or D2 input to `.fitd` source. DOT `arrowhead`, `arrowtail`, and `dir` become `head=` and `tail=`; `style=dashed|dotted` and `constraint=false` become cross links. Attributes with no fitd equivalent are listed in a warning.
+- `fitd fix FILE...` rewrites indentation-syntax files in place into brace syntax: braces for blocks, `with STYLE { }` for style blocks, `[...]` for attributes and figure rows. Files already in brace syntax are skipped.
+- `fitd fmt FILE...` rewrites brace-syntax files in place in canonical layout: two-space indents, spaced arrows, header statements first, long `[...]` lists one item per line. `-` reads standard input and writes standard output. Indentation-syntax files are refused; run `fitd fix` first.
 - `fitd lsp` starts language server using standard input and output. See [Language server](#language-server).
 
 ## Language server

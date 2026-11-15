@@ -38,6 +38,8 @@ If the user wants the source kept, write it to `NAME.fitd` and build with `fitd 
 | `fitd explain CODE` | Meaning and fix for a diagnostic code. |
 | `fitd import FILE.dot\|.mmd\|.d2 [-o out.fitd]` | Translate Graphviz, Mermaid, or D2. Unmapped attributes are listed in a warning. |
 | `fitd split FILE.fitd [-o DIR]` | Overview page plus one page per top-level branch; shared settings go in an included file. |
+| `fitd fix FILE...` | Rewrite old indentation syntax into braces, in place. |
+| `fitd fmt FILE...` | Canonical layout, in place; `-` for stdin to stdout. |
 | `fitd lsp` | Language server (diagnostics, hover, rename, completion, code actions). Editor support: `editors/vscode`, `editors/tree-sitter-fitd`. |
 
 ## Language features
