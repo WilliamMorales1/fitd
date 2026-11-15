@@ -23,5 +23,5 @@ api -> q
 db ..> t2
 t1 -> t2 -> d "yes"
 d -> fix -> t3
-arch_zone
+arch.zone
   group "System" web, api, db, q

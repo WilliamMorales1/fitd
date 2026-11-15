@@ -272,7 +272,7 @@ impl Builder<'_, '_, '_> {
             if let Some(loc) = self.loc(c.span, &c.text) {
                 self.out.occs.push(Occ {
                     kind: Kind::Style,
-                    name: c.text.replace('.', "_"),
+                    name: c.text.clone(),
                     decl: false,
                     loc,
                 });

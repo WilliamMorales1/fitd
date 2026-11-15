@@ -331,13 +331,7 @@ type Styles = HashMap<String, (Span, Vec<Attr>, bool)>;
 
 fn apply_styles(s: &mut Sema, styles: &mut Styles, classes: &[Name], l: &mut Look) {
     for c in classes {
-        let module_style = c.text.replace('.', "_");
-        let name = if styles.contains_key(&c.text) {
-            &c.text
-        } else {
-            &module_style
-        };
-        match styles.get_mut(name) {
+        match styles.get_mut(&c.text) {
             Some(st) => {
                 st.2 = true;
                 look(&st.1, l, &mut Vec::new());
@@ -1053,8 +1047,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 constraints.extend(constraint(&mut s, *hard, rel, attrs, st.span));
             }
             StmtKind::Open(c) => {
-                if !styles.contains_key(&c.text) && !styles.contains_key(&c.text.replace('.', "_"))
-                {
+                if !styles.contains_key(&c.text) {
                     let names: Vec<&str> = styles.keys().map(String::as_str).collect();
                     let d = Diag::error("E0004", format!("unknown style `{}`", c.text))
                         .primary(c.span, "not a statement or declared style");
@@ -1793,7 +1786,7 @@ mod tests {
 
     #[test]
     fn module_qualified_classes_map_to_prefixed_styles() {
-        let (g, d) = run("style nn_block color=#CC79A7\nnn.block\n  a\n");
+        let (g, d) = run("style nn.block color=#CC79A7\nnn.block\n  a\n");
         assert!(
             d.is_empty(),
             "{:?}",

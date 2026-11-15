@@ -13,6 +13,6 @@ arch.ext pay Stripe
 web -> api -> q -> work
 api -> db
 work -> db, pay
-arch_zone
+arch.zone
   group "Cloud" api, q, work, db
 arch.key

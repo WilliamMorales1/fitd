@@ -675,6 +675,8 @@ struct Builder<'a> {
     defs: HashMap<String, Def>,
     /// names holds every template key, gathered before building so a call may precede its `def`.
     names: std::collections::HashSet<String>,
+    /// styles holds every `style NAME` declared, so a module line naming one opens a style block.
+    styles: std::collections::HashSet<String>,
     errs: Vec<(usize, Diag)>,
 }
 
@@ -806,7 +808,8 @@ impl Builder<'_> {
                             .is_some_and(|m| self.names.contains(&format!("{m}.{head}"))))
             }
         };
-        ok && !["->", "--", ".."].iter().any(|o| r.starts_with(o))
+        let style = r.is_empty() && self.mods[at].is_some() && self.styles.contains(head);
+        ok && !style && !["->", "--", ".."].iter().any(|o| r.starts_with(o))
     }
 
     /// rows reads the lines indented under template block opener `at`, one call each; with none it is one call without arguments.
@@ -1422,6 +1425,12 @@ fn expand(a: Source, inc: Vec<Diag>, budget: u64) -> Loaded {
                     None => n,
                 })
             })
+            .collect(),
+        styles: lines
+            .iter()
+            .filter_map(|l| l.trim().strip_prefix("style "))
+            .filter_map(|r| r.split_whitespace().next())
+            .map(str::to_string)
             .collect(),
         errs: Vec::new(),
     };

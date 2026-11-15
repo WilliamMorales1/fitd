@@ -1,7 +1,7 @@
 # Venn diagrams: items in the regions of two or three sets. Pair with `layout venn`.
-style venn_a color=#E69F00
-style venn_b color=#0072B2
-style venn_c color=#009E73
+style venn.a color=#E69F00
+style venn.b color=#0072B2
+style venn.c color=#009E73
 
 # venn.items id items: one node per `;`-separated item, with ids id1, id2, ...
 def items(id, items)
@@ -33,8 +33,8 @@ def two(a, b, xa, xab, xb)
 items venn_a ${xa}
 items venn_b ${xb}
 items venn_ab ${xab}
-set ${a} venn_a ${names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";"))}
-set ${b} venn_b ${names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";"))}
+set ${a} venn.a ${names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";"))}
+set ${b} venn.b ${names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";"))}
 end
 
 # venn.three a b c only_a only_b only_c ab ac bc abc: three sets with `;`-separated items per region.
@@ -46,7 +46,7 @@ items venn_ab ${xab}
 items venn_ac ${xac}
 items venn_bc ${xbc}
 items venn_abc ${xabc}
-set ${a} venn_a ${names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_abc", 1, count(xabc, ";"))}
-set ${b} venn_b ${names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";"))}
-set ${c} venn_c ${names("venn_c", 1, count(xc, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";"))}
+set ${a} venn.a ${names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_abc", 1, count(xabc, ";"))}
+set ${b} venn.b ${names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";"))}
+set ${c} venn.c ${names("venn_c", 1, count(xc, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";"))}
 end

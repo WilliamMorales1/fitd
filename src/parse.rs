@@ -209,9 +209,9 @@ impl Parser<'_> {
             .collect()
     }
 
-    /// is_style reports whether `name`, or `MOD_x` for `MOD.x`, is declared anywhere in the file.
+    /// is_style reports whether `name` is declared anywhere in the file.
     fn is_style(&self, name: &str) -> bool {
-        self.styles.contains(&name.replacen('.', "_", 1))
+        self.styles.contains(name)
     }
 
     /// col gives the indent of the current token's line in characters.
@@ -397,7 +397,7 @@ impl Parser<'_> {
                 }
             }
             "style" => StmtKind::Style {
-                name: self.name("a style name")?,
+                name: self.class_name()?,
                 attrs: self.attrs()?,
             },
             "key" => {
@@ -467,8 +467,17 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
         .filter(|&i| {
             toks[i].tok == Tok::Ident && &text[toks[i].span.lo..toks[i].span.hi] == "style"
         })
-        .filter_map(|i| toks.get(i + 1).filter(|t| t.tok == Tok::Ident))
-        .map(|t| text[t.span.lo..t.span.hi].to_string())
+        .filter_map(|i| {
+            toks.get(i + 1)
+                .filter(|t| t.tok == Tok::Ident)
+                .map(|t| (i + 1, t))
+        })
+        .map(|(k, t)| match (toks.get(k + 1), toks.get(k + 2)) {
+            (Some(d), Some(p)) if d.tok == Tok::Dot && p.tok == Tok::Ident => {
+                text[t.span.lo..p.span.hi].to_string()
+            }
+            _ => text[t.span.lo..t.span.hi].to_string(),
+        })
         .collect();
     let directed = (0..toks.len())
         .filter(|&i| i == 0 || toks[i - 1].tok == Tok::Newline)
@@ -631,7 +640,7 @@ mod tests {
 
     #[test]
     fn style_blocks_apply_to_lines() {
-        let src = "style step\nstyle nn_block\nstyle radial\nstep\n  a \"A\" color=#f00\n  nn.block\n    e\n  a -> e\nnode radial\nradial -> a\n";
+        let src = "style step\nstyle nn.block\nstyle radial\nstep\n  a \"A\" color=#f00\n  nn.block\n    e\n  a -> e\nnode radial\nradial -> a\n";
         let (stmts, errs) = parse(src);
         assert!(errs.is_empty());
         let classes = |k: &StmtKind| match k {

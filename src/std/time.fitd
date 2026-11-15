@@ -1,18 +1,18 @@
 # Timelines: dated events and milestones in order. Pair with `layout layered dir=right`.
-style time_event color=#0072B2 shape=box
-style time_mile color=#D55E00 shape=box
-style time_era color=#56B4E9
+style time.event color=#0072B2 shape=box
+style time.mile color=#D55E00 shape=box
+style time.era color=#56B4E9
 
 # time.event id date text: an event titled with its date.
 def event(id, date, text)
-time_event
+time.event
   node ${id} "${date}"
   | ${text}
 end
 
 # time.mile id date text: a milestone, drawn in the accent colour.
 def mile(id, date, text)
-time_mile
+time.mile
   node ${id} "${date}"
   | ${text}
 end

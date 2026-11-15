@@ -1,61 +1,61 @@
 # UML class and state diagrams. Relations use UML heads; uml.key names them.
 # Member and action lists split on `;`: "id: int; name: str; save()".
-style uml_class color=#0072B2 shape=box
-style uml_iface color=#56B4E9 shape=box
-style uml_state color=#009E73 shape=box
-style uml_mark color=#222222 fill=#222222 text=#FFFFFF shape=circle
-style uml_is head=triangle
-style uml_has tail=diamond
-style uml_uses line=dashed
+style uml.class color=#0072B2 shape=box
+style uml.iface color=#56B4E9 shape=box
+style uml.state color=#009E73 shape=box
+style uml.mark color=#222222 fill=#222222 text=#FFFFFF shape=circle
+style uml.is head=triangle
+style uml.has tail=diamond
+style uml.uses line=dashed
 
 # uml.class id name members: a class box listing its members.
 def class(id, name, members)
-uml_class
+uml.class
   node ${id} "${name}"
 lines ${members}
 end
 
 # uml.iface id name members: an interface, titled with its stereotype.
 def iface(id, name, members)
-uml_iface
+uml.iface
   node ${id} "«interface» ${name}"
 lines ${members}
 end
 
 # uml.state id name actions: a state listing its entry, do, and exit actions.
 def state(id, name, actions)
-uml_state
+uml.state
   node ${id} "${name}"
 lines ${actions}
 end
 
 # uml.start id: the initial pseudostate.
 def start(id)
-uml_mark
+uml.mark
   node ${id} "start"
 end
 
 # uml.final id: the final state.
 def final(id)
-uml_mark
+uml.mark
   node ${id} "end"
 end
 
 # uml.is a b: a inherits from or implements b.
 def is(a, b)
-uml_is
+uml.is
   ${a} -> ${b}
 end
 
 # uml.has a b mult: a is composed of b, with b's multiplicity such as "1..*".
 def has(a, b, mult)
-uml_has
+uml.has
   ${a} -- ${b} "${mult}"
 end
 
 # uml.uses a b: a depends on b.
 def uses(a, b)
-uml_uses
+uml.uses
   ${a} ..> ${b}
 end
 

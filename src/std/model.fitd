@@ -1,37 +1,37 @@
 # Research models: constructs and the hypotheses between them. Pair with `layout layered dir=right`.
-style model_iv color=#0072B2 shape=box
-style model_dv color=#009E73 shape=box
-style model_med color=#56B4E9 shape=box
-style model_mod color=#E69F00 shape=box
-style model_ctl color=#888888 shape=box
+style model.iv color=#0072B2 shape=box
+style model.dv color=#009E73 shape=box
+style model.med color=#56B4E9 shape=box
+style model.mod color=#E69F00 shape=box
+style model.ctl color=#888888 shape=box
 
 # model.iv id name: an independent variable.
 def iv(id, name)
-model_iv
+model.iv
   node ${id} "${name}"
 end
 
 # model.dv id name: a dependent variable.
 def dv(id, name)
-model_dv
+model.dv
   node ${id} "${name}"
 end
 
 # model.med id name: a mediator.
 def med(id, name)
-model_med
+model.med
   node ${id} "${name}"
 end
 
 # model.mod id name: a moderator; point it at the path it changes with model.hyp.
 def mod(id, name)
-model_mod
+model.mod
   node ${id} "${name}"
 end
 
 # model.ctl id name: a control variable.
 def ctl(id, name)
-model_ctl
+model.ctl
   node ${id} "${name}"
 end
 

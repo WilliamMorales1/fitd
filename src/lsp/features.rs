@@ -492,7 +492,7 @@ pub fn folds(text: &str) -> Value {
             }
             _ if lone
                 && !crate::parse::KEYWORDS.contains(&w.as_str())
-                && (!style_open || styles.contains(&t.replacen('.', "_", 1).as_str())) =>
+                && (!style_open || styles.contains(&t)) =>
             {
                 open.push((i, true, l.len() - l.trim_start().len()))
             }

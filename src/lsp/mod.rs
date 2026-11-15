@@ -790,7 +790,7 @@ mod tests {
 
     #[test]
     fn module_classes_answer_by_qualified_name() {
-        let text = "style nn_block color=#CC79A7\nnn.block\n  a\n";
+        let text = "style nn.block color=#CC79A7\nnn.block\n  a\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = position(text, text.find("nn.block").unwrap() + 3);
@@ -802,7 +802,7 @@ mod tests {
 
     #[test]
     fn style_blocks_answer_like_classes() {
-        let text = "style step color=#0072B2\nstyle nn_block color=#CC79A7\nstep\n  a \"A\"\n  | body\n  nn.block\n    e\n  b \n\n";
+        let text = "style step color=#0072B2\nstyle nn.block color=#CC79A7\nstep\n  a \"A\"\n  | body\n  nn.block\n    e\n  b \n\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str| position(text, text.find(s).unwrap() + 1);

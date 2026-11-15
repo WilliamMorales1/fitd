@@ -1,44 +1,44 @@
 # System architecture and data-flow diagrams: clients, services, stores, queues, outside systems.
-style arch_client color=#56B4E9 shape=box
-style arch_service color=#0072B2 shape=box
-style arch_store color=#009E73 shape=box
-style arch_queue color=#E69F00 shape=box
-style arch_ext color=#888888 shape=box
-style arch_zone color=#888888
+style arch.client color=#56B4E9 shape=box
+style arch.service color=#0072B2 shape=box
+style arch.store color=#009E73 shape=box
+style arch.queue color=#E69F00 shape=box
+style arch.ext color=#888888 shape=box
+style arch.zone color=#888888
 
 # arch.client id name: a user-facing client.
 def client(id, name)
-arch_client
+arch.client
   node ${id} "${name}"
 end
 
 # arch.service id name: a service or process.
 def service(id, name)
-arch_service
+arch.service
   node ${id} "${name}"
 end
 
 # arch.store id name: a database, cache, or file store.
 def store(id, name)
-arch_store
+arch.store
   node ${id} "${name}"
 end
 
 # arch.queue id name: a queue, topic, or stream.
 def queue(id, name)
-arch_queue
+arch.queue
   node ${id} "${name}"
 end
 
 # arch.ext id name: a system outside the boundary.
 def ext(id, name)
-arch_ext
+arch.ext
   node ${id} "${name}"
 end
 
 # arch.layers id title names: a layer stack, top layer first, names split on `;`.
 def layers(id, title, names)
-arch_service
+arch.service
   node ${id} "${title}"
 for i in 1..count(names, ";")
 ~ #"${part(names, ";", i)}"*4

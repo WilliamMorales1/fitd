@@ -29,7 +29,7 @@ These are the design goals from the [README](README.md#design-goals). Each one h
 - Stdlib modules:
   - A module lives at `src/std/NAME.fitd` and is registered in `MODULES` in `src/stdlib.rs`.
   - The first comment line is the summary printed by `fitd std`.
-  - Templates are called as `MOD.name ARGS`, so `def` names carry no prefix. Style names are global, so prefix every style with the module name (`uml_class`, `er_rel`).
+  - Templates are called as `MOD.name ARGS`, so `def` names carry no prefix. Style names are global, so prefix every style with the module name (`uml.class`, `er.rel`).
   - Every exported `def` gets a one-line comment above it in the form `# MOD.name ARGS: what it draws`.
   - Each module needs a gallery file and a row in the `docs/language.md` Includes table.
 - Macro helpers that recurse should accumulate a string and emit once, as `grid.heat` does with `heat_acc`. Partial lines cannot be emitted.

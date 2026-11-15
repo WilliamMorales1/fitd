@@ -1,21 +1,21 @@
 # Entity-relationship diagrams: entities list attributes, links carry cardinality and crow's feet.
 # Relationships are either a plain link (er.rel) or a named diamond (er.relation).
 # Attribute lists split on `;`: "PK id; name; FK dept".
-style er_entity color=#0072B2 shape=box
-style er_weak color=#56B4E9 shape=box
-style er_relation color=#E69F00 shape=diamond
-style er_link color=#444444
+style er.entity color=#0072B2 shape=box
+style er.weak color=#56B4E9 shape=box
+style er.relation color=#E69F00 shape=diamond
+style er.link color=#444444
 
 # er.entity id name attrs: an entity with its attributes, keys first.
 def entity(id, name, attrs)
-er_entity
+er.entity
   node ${id} "${name}"
 lines ${attrs}
 end
 
 # er.weak id name attrs: a weak entity, identified through its owner.
 def weak(id, name, attrs)
-er_weak
+er.weak
   node ${id} "${name}"
 lines ${attrs}
 end
@@ -27,7 +27,7 @@ end
 
 # er.relation id name a b card: a named diamond joining a and b, card such as "1:N".
 def relation(id, name, a, b, card)
-er_relation
+er.relation
   node ${id} "${name}"
 edge ${a} ${id} ${part(card, ":", 1)} ${part(card, ":", 1)} "1"
 edge ${id} ${b} ${part(card, ":", 2)} "1" ${part(card, ":", 2)}
@@ -37,18 +37,18 @@ end
 def edge(a, b, label, ta, hb)
 if ta == "1"
 if hb == "1"
-er_link
+er.link
   ${a} -- ${b} "${label}"
 else
-er_link
+er.link
   ${a} -- ${b} "${label}" head=crow
 end
 else
 if hb == "1"
-er_link
+er.link
   ${a} -- ${b} "${label}" tail=crow
 else
-er_link
+er.link
   ${a} -- ${b} "${label}" head=crow tail=crow
 end
 end
