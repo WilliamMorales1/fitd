@@ -79,7 +79,8 @@ pub enum StmtKind {
     Edge {
         from: Name,
         link: bool,
-        directed: bool,
+        /// None for a nested child; sema makes it directed unless the layout is radial.
+        directed: Option<bool>,
         to: Vec<Name>,
         label: Option<String>,
         classes: Vec<Name>,

@@ -495,7 +495,20 @@ fn cells(line: &str) -> Vec<Cell> {
     out
 }
 
+/// nest_directed reports whether nested children get `->` edges: true unless the last `layout` is radial.
+pub fn nest_directed(stmts: &[Stmt]) -> bool {
+    stmts
+        .iter()
+        .rev()
+        .find_map(|st| match &st.kind {
+            StmtKind::Layout { kind, .. } => Some(kind.text != "radial"),
+            _ => None,
+        })
+        .unwrap_or(false)
+}
+
 pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
+    let nest_directed = nest_directed(stmts);
     let mut s = Sema {
         diags: Vec::new(),
         ids: HashMap::new(),
@@ -939,7 +952,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                             a,
                             b,
                             kind,
-                            directed: *directed,
+                            directed: directed.unwrap_or(nest_directed),
                             label: label.clone(),
                             color: l.color.clone(),
                             head: l.head,

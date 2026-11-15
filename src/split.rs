@@ -132,6 +132,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     };
     let mut last: BTreeSet<Page> = BTreeSet::new();
     // A nested child's edge spans only the child, so its operator is rebuilt from the edge kind.
+    let nest_directed = crate::sema::nest_directed(&stmts);
     let nested = |k: &StmtKind| match k {
         StmtKind::Edge {
             from,
@@ -140,7 +141,7 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             directed,
             ..
         } if to.first().is_some_and(|t| t.span == from.span) => {
-            Some(["--", "->", "..", "..>"][2 * *link as usize + *directed as usize])
+            Some(["--", "->", "..", "..>"][2 * *link as usize + directed.unwrap_or(nest_directed) as usize])
         }
         _ => None,
     };

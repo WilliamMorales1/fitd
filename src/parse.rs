@@ -11,8 +11,6 @@ struct Parser<'a> {
     /// scope holds the node lines that later, deeper lines nest under, with their columns.
     scope: Vec<(Name, usize)>,
     known: std::collections::HashSet<String>,
-    /// directed is the default operator for nested children: `->` unless the layout is radial.
-    directed: bool,
 }
 
 type PResult<T> = Result<T, Diag>;
@@ -188,7 +186,7 @@ impl Parser<'_> {
                 out.push(StmtKind::Edge {
                     from,
                     link,
-                    directed,
+                    directed: Some(directed),
                     to: to.clone(),
                     label: label.clone(),
                     classes: classes.clone(),
@@ -283,7 +281,7 @@ impl Parser<'_> {
                 span: id.span,
             },
             link: false,
-            directed: self.directed,
+            directed: None,
             to: vec![id.clone()],
             label: None,
             classes: Vec::new(),
@@ -479,12 +477,6 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
             _ => text[t.span.lo..t.span.hi].to_string(),
         })
         .collect();
-    let directed = (0..toks.len())
-        .filter(|&i| i == 0 || toks[i - 1].tok == Tok::Newline)
-        .filter(|&i| &text[toks[i].span.lo..toks[i].span.hi] == "layout")
-        .filter_map(|i| toks.get(i + 1))
-        .next_back()
-        .is_some_and(|t| &text[t.span.lo..t.span.hi] != "radial");
     let mut p = Parser {
         text,
         toks,
@@ -493,7 +485,6 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
         open: Vec::new(),
         scope: Vec::new(),
         known: Default::default(),
-        directed,
     };
     let mut stmts = Vec::new();
     loop {
@@ -598,7 +589,7 @@ mod tests {
             &stmts[9].kind,
             StmtKind::Edge {
                 link: false,
-                directed: false,
+                directed: Some(false),
                 ..
             }
         ));
@@ -606,13 +597,13 @@ mod tests {
             &stmts[10].kind,
             StmtKind::Edge {
                 link: true,
-                directed: false,
+                directed: Some(false),
                 ..
             }
         ));
         assert!(matches!(
             &stmts[16].kind,
-            StmtKind::Edge { directed: true, .. }
+            StmtKind::Edge { directed: Some(true), .. }
         ));
         assert!(matches!(
             &stmts[12].kind,
@@ -630,10 +621,10 @@ mod tests {
         assert!(errs.is_empty());
         assert_eq!(stmts.len(), 5);
         assert!(
-            matches!(&stmts[2].kind, StmtKind::Edge { from, to, directed: true, label: Some(_), classes, .. } if from.text == "a" && to.len() == 2 && classes.len() == 1)
+            matches!(&stmts[2].kind, StmtKind::Edge { from, to, directed: Some(true), label: Some(_), classes, .. } if from.text == "a" && to.len() == 2 && classes.len() == 1)
         );
         assert!(
-            matches!(&stmts[4].kind, StmtKind::Edge { from, directed: false, label: None, attrs, .. } if from.text == "c" && attrs.len() == 1)
+            matches!(&stmts[4].kind, StmtKind::Edge { from, directed: Some(false), label: None, attrs, .. } if from.text == "c" && attrs.len() == 1)
         );
         assert_eq!(parse("a -> b ->\n").1.len(), 1);
     }
@@ -687,7 +678,11 @@ mod tests {
                     } => Some(format!(
                         "{}{}{}{}",
                         from.text,
-                        if *directed { ">" } else { "-" },
+                        match directed {
+                            Some(true) => ">",
+                            Some(false) => "-",
+                            None => "~",
+                        },
                         to.iter()
                             .map(|t| t.text.as_str())
                             .collect::<Vec<_>>()
@@ -699,9 +694,12 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         let src = "style s\nr \"R\"\n  | body\n    a \"A\"\n    s\n      b\n  c\n    -> a \"L\"\nr\n  d\n";
-        assert_eq!(edges(src), ["r-a", "r-b", "r-c", "c>aL", "r-d"]);
-        assert_eq!(edges("layout layered\nnode a\n  b\n"), ["a>b"]);
-        assert_eq!(edges("layout radial\na \"A\"\n  b\n"), ["a-b"]);
+        assert_eq!(edges(src), ["r~a", "r~b", "r~c", "c>aL", "r~d"]);
+        // The layout decides the nested kind in sema, wherever the `layout` line sits.
+        let nd = |src: &str| crate::sema::nest_directed(&parse(src).0);
+        assert!(nd("node a\n  b\nlayout layered\n"));
+        assert!(!nd("layout radial\na \"A\"\n  b\n"));
+        assert!(!nd("a \"A\"\n  b\n"));
     }
 
     #[test]
