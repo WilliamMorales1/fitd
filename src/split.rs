@@ -140,9 +140,10 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
             link,
             directed,
             ..
-        } if to.first().is_some_and(|t| t.span == from.span) => {
-            Some(["--", "->", "..", "..>"][2 * *link as usize + directed.unwrap_or(nest_directed) as usize])
-        }
+        } if to.first().is_some_and(|t| t.span == from.span) => Some(
+            ["--", "->", "..", "..>"]
+                [2 * *link as usize + directed.unwrap_or(nest_directed) as usize],
+        ),
         _ => None,
     };
     for st in &stmts {

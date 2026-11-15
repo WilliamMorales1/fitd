@@ -603,7 +603,10 @@ mod tests {
         ));
         assert!(matches!(
             &stmts[16].kind,
-            StmtKind::Edge { directed: Some(true), .. }
+            StmtKind::Edge {
+                directed: Some(true),
+                ..
+            }
         ));
         assert!(matches!(
             &stmts[12].kind,
