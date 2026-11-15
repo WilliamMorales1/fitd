@@ -1,0 +1,29 @@
+// Euler diagrams: sets that nest or stand apart. Pair with `layout euler`.
+
+// euler.items(id, items): one node per item, with ids id1, id2, ...
+def items(id, items) {
+  for i, it in items {
+    ${id}${i} "${it}"
+  }
+}
+
+// euler.set(title, ids): a set circle holding the listed node ids.
+def set(title, ids) {
+  group "${title}" ${ids}
+}
+
+// euler.nest(outer, inner, only_outer, in_inner): a set drawn inside another.
+def nest(outer, inner, xo, xi) {
+  items(euler_o, ${xo})
+  items(euler_i, ${xi})
+  set(${outer}, ${names("euler_o", 1, len(xo)) + names("euler_i", 1, len(xi))})
+  set(${inner}, ${names("euler_i", 1, len(xi))})
+}
+
+// euler.apart(a, b, items_a, items_b): two sets with no item in common.
+def apart(a, b, xa, xb) {
+  items(euler_a, ${xa})
+  items(euler_b, ${xb})
+  set(${a}, ${names("euler_a", 1, len(xa))})
+  set(${b}, ${names("euler_b", 1, len(xb))})
+}

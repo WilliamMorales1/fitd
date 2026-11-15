@@ -15,7 +15,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0002",
-        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes|venn`, `page`, `font`, `theme [PRESET] [k=v]`, `style NAME [k=v]`, `with NAME { ... }`, `ID \"Title\" [: NAME] [k=v] { ... }`, `| body` and `~ [a, b]` inside a node's braces, `A -> B, C \"label\" [color=#hex]`, `A ..> B`, `group [ID] [\"Title\"] A, B`, `key \"Label\" [: NAME] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`. Blocks open with `{` at the end of a line and close with `}`.",
+        "A line could not be parsed. Statements: `title`, `root ID`, `layout radial|layered|lanes|venn|euler`, `page`, `font`, `theme [PRESET] [k=v]`, `style NAME [k=v]`, `with NAME { ... }`, `ID \"Title\" [: NAME] [k=v] { ... }`, `| body` and `~ [a, b]` inside a node's braces, `A -> B, C \"label\" [color=#hex]`, `A ..> B`, `group [ID] [\"Title\"] A, B`, `key \"Label\" [: NAME] [k=v]`, `require REL`, `prefer REL [weight=N]`, `include \"FILE\"`. Blocks open with `{` at the end of a line and close with `}`.",
     ),
     (
         "E0003",
@@ -47,7 +47,7 @@ pub const EXPLAIN: &[(&str, &str)] = &[
     ),
     (
         "E0010",
-        "Two `group` statements share some nodes, but neither holds every node of the other, or both list the same nodes. Groups may nest: a group whose nodes all belong to a larger group is framed inside it. Partial overlap cannot be drawn with rectangles, since each frame must hold its own members and nothing else; use `layout venn` for overlapping sets. A venn diagram takes at most three sets.",
+        "Two `group` statements share some nodes, but neither holds every node of the other, or both list the same nodes. Groups may nest: a group whose nodes all belong to a larger group is framed inside it. Partial overlap cannot be drawn with rectangles, since each frame must hold its own members and nothing else; use `layout venn` for overlapping sets. A venn diagram takes at most three sets; an euler diagram (`layout euler`) takes eight, and each pair of its sets must nest or share no node.",
     ),
     (
         "E0011",

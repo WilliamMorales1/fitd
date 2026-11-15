@@ -2426,3 +2426,55 @@ fn language_doc_lists_every_attribute() {
         );
     }
 }
+
+#[test]
+fn euler_nests_and_separates_sets() {
+    let svg = build_svg(
+        "euler-nest",
+        "layout euler\npage 4:3\nd \"Qd\"\nm \"Qm\"\nb \"Qb\"\n\
+         group \"All\" d, m, b\ngroup \"Pets\" d\ngroup \"Wild\" m\n",
+    );
+    let circles: Vec<(f64, f64, f64)> = svg
+        .split("<circle ")
+        .skip(1)
+        .map(|r| {
+            let tag = &r[..r.find('>').unwrap()];
+            let f = |k: &str| -> f64 {
+                let i = tag.find(&format!("{k}=\"")).unwrap() + k.len() + 2;
+                tag[i..i + tag[i..].find('"').unwrap()].parse().unwrap()
+            };
+            (f("cx"), f("cy"), f("r"))
+        })
+        .collect();
+    assert_eq!(circles.len(), 3, "{svg}");
+    for (word, sets) in [("Qd", "ap"), ("Qm", "aw"), ("Qb", "a")] {
+        let (x, y) = text_at(&svg, word);
+        let inside: String = circles
+            .iter()
+            .zip(["a", "p", "w"])
+            .filter(|((cx, cy, r), _)| (x - cx).hypot(y - cy) < *r)
+            .map(|(_, s)| s)
+            .collect();
+        assert_eq!(inside, sets, "{word} at ({x}, {y})");
+    }
+    let (p, w) = (circles[1], circles[2]);
+    assert!(
+        (p.0 - w.0).hypot(p.1 - w.1) > p.2 + w.2,
+        "disjoint sets overlap"
+    );
+}
+
+#[test]
+fn euler_rejects_partial_overlap() {
+    let src = tmp("euler-partial.fitd");
+    std::fs::write(&src, "layout euler\n\na\nb\nc\ngroup a, b\ngroup b, c\n").unwrap();
+    let (ok, log) = fitd(&[
+        src.to_str().unwrap(),
+        "-o",
+        tmp("euler-partial.svg").to_str().unwrap(),
+    ]);
+    assert!(
+        !ok && log.contains("E0010") && log.contains("nest or stay apart"),
+        "{log}"
+    );
+}

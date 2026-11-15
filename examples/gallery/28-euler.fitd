@@ -1,0 +1,19 @@
+// Euler diagram: sets that nest or stand apart (taxonomies, subset relations).
+layout euler
+page 4:3
+
+dog
+cat
+whale
+eagle
+owl
+ant
+group "Animals" dog
+cat
+whale
+eagle
+owl
+ant
+group "Mammals" dog, cat, whale
+group "Pets" dog, cat
+group "Birds" eagle, owl

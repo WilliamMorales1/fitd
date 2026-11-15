@@ -269,6 +269,8 @@ pub struct Settings {
     pub lanes: bool,
     /// Set by `layout venn`: groups become overlapping set circles.
     pub venn: bool,
+    /// Set by `layout euler`: like venn, but sets nest or stand apart.
+    pub euler: bool,
     pub margin: Option<f64>,
     pub key_size: Option<f64>,
     pub font: Option<(f64, f64)>,

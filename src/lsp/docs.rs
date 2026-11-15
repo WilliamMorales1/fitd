@@ -189,6 +189,11 @@ pub const WORDS: &[(&str, &str, &str)] = &[
     ),
     (
         "layout",
+        "euler",
+        "Euler diagram: each group is a set circle (at most eight); sets nest or stand apart, and nodes sit in the innermost set that lists them.",
+    ),
+    (
+        "layout",
         "radial",
         "Radial layout for mind maps around `root=ID`.",
     ),

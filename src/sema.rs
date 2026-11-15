@@ -555,22 +555,27 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 let allowed: &[&str] = match kind.text.as_str() {
                     "radial" => {
                         set.layout = Some(LayoutKind::Radial);
-                        (set.lanes, set.venn) = (false, false);
+                        (set.lanes, set.venn, set.euler) = (false, false, false);
                         &["root"]
                     }
                     "layered" => {
                         set.layout = Some(LayoutKind::Layered(Dir::Down));
-                        (set.lanes, set.venn) = (false, false);
+                        (set.lanes, set.venn, set.euler) = (false, false, false);
                         &["dir", "bands", "order"]
                     }
                     "lanes" => {
                         set.layout = Some(LayoutKind::Layered(Dir::Down));
-                        (set.lanes, set.venn) = (true, false);
+                        (set.lanes, set.venn, set.euler) = (true, false, false);
                         &["dir", "order"]
                     }
                     "venn" => {
                         set.layout = Some(LayoutKind::Layered(Dir::Down));
-                        (set.lanes, set.venn) = (false, true);
+                        (set.lanes, set.venn, set.euler) = (false, true, false);
+                        &[]
+                    }
+                    "euler" => {
+                        set.layout = Some(LayoutKind::Layered(Dir::Down));
+                        (set.lanes, set.venn, set.euler) = (false, true, true);
                         &[]
                     }
                     _ => {
@@ -578,7 +583,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                             "E0009",
                             "layout",
                             kind,
-                            &["radial", "layered", "lanes", "venn"],
+                            &["radial", "layered", "lanes", "venn", "euler"],
                         ));
                         &[]
                     }
@@ -961,7 +966,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
     );
     lifelines(&s.nodes, &mut edges, &mut s.diags);
     let sets = match set.venn {
-        true => venn_sets(&mut constraints, &mut s.diags),
+        true => venn_sets(&mut constraints, set.euler, &mut s.diags),
         false => {
             nest_groups(&mut constraints, &grouped, &s.nodes, &mut s.diags);
             Vec::new()
@@ -1053,7 +1058,9 @@ fn group_ends(
             dead.push(*k);
             continue;
         }
-        let layout = if set.venn {
+        let layout = if set.euler {
+            Some("euler")
+        } else if set.venn {
             Some("venn")
         } else if set.lanes {
             Some("lanes")
@@ -1198,8 +1205,13 @@ fn grid_cells(
 }
 
 /// venn_sets moves every group into a set circle, where members may overlap freely.
-fn venn_sets(constraints: &mut Vec<Constraint>, diags: &mut Vec<Diag>) -> Vec<VennSet> {
-    let mut sets = Vec::new();
+fn venn_sets(
+    constraints: &mut Vec<Constraint>,
+    euler: bool,
+    diags: &mut Vec<Diag>,
+) -> Vec<VennSet> {
+    let cap = if euler { crate::venn::MAX_EULER } else { 3 };
+    let mut sets: Vec<VennSet> = Vec::new();
     constraints.retain(|c| {
         let Relation::Group {
             items,
@@ -1210,11 +1222,31 @@ fn venn_sets(constraints: &mut Vec<Constraint>, diags: &mut Vec<Diag>) -> Vec<Ve
         else {
             return true;
         };
-        if sets.len() == 3 {
+        let clash = euler
+            .then(|| {
+                sets.iter().find(|o| {
+                    let shared = items.iter().filter(|v| o.items.contains(v)).count();
+                    shared > 0
+                        && !(shared == items.len() && items.len() < o.items.len()
+                            || shared == o.items.len() && o.items.len() < items.len())
+                })
+            })
+            .flatten();
+        if let Some(o) = clash {
             diags.push(
-                Diag::error("E0010", "a venn diagram takes at most three sets")
-                    .primary(c.span, "fourth set")
-                    .help("four or more circles cannot show every overlap; split the figure"),
+                Diag::error("E0010", "euler sets must nest or stay apart")
+                    .primary(c.span, "overlaps part of another set")
+                    .secondary(o.span, "this set")
+                    .help("a set holds all or none of another's nodes; use `layout venn` for overlaps"),
+            );
+        } else if sets.len() == cap {
+            diags.push(
+                Diag::error(
+                    "E0010",
+                    format!("a {} diagram takes at most {} sets", if euler { "euler" } else { "venn" }, if euler { "eight" } else { "three" }),
+                )
+                .primary(c.span, "one set too many")
+                .help("split the figure"),
             );
         } else {
             sets.push(VennSet {

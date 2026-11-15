@@ -241,9 +241,9 @@ canvas -- shape [tail=diamond, line=dotted]
 
 ### Groups
 
-`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn`. A group inside a `with` block takes its frame color from that style, so a group, its nodes, and its `key` entry can share one block.
+`group ["title"] members` declares a frame containing listed nodes. Membership is specified by node identifiers. To nest groups, list inner group members in outer group as well. Group frames must fit page and avoid overlapping nodes and non-nested groups. Non-nested overlapping groups produce E0010, except under `layout venn` and `layout euler`. A group inside a `with` block takes its frame color from that style, so a group, its nodes, and its `key` entry can share one block.
 
-`group ID "title" members` also names the group, so edges can start or end at it: the edge meets the frame instead of a member. An empty title, `group ID "" members`, gives a named group with no title. A group ID shares the node namespace, so a node and a group cannot have the same ID (E0003). For layout, the edge stands in for the group with a member: the last member of the flow when the group is the source, the first when it is the target. An edge from a group to itself, to one of its members, or to a group nested with it is E0016, as is a group edge under `layout venn` or `layout lanes`.
+`group ID "title" members` also names the group, so edges can start or end at it: the edge meets the frame instead of a member. An empty title, `group ID "" members`, gives a named group with no title. A group ID shares the node namespace, so a node and a group cannot have the same ID (E0003). For layout, the edge stands in for the group with a member: the last member of the flow when the group is the source, the first when it is the target. An edge from a group to itself, to one of its members, or to a group nested with it is E0016, as is a group edge under `layout venn`, `layout euler`, or `layout lanes`.
 
 ```fitd
 layout layered
@@ -278,7 +278,7 @@ key "Principal" [shape=circle, fill=#FFFFFF, color=#222222]
 
 ### Layout selection
 
-`layout NAME` selects layout algorithm and accepts layout-specific attributes. Supported algorithms are `radial`, `layered`, `lanes`, and `venn`. Radial layouts use `root=ID`; layered layouts accept `dir=down` or `dir=right`, `bands=N`, and `order=source`. By default a layered layout reorders nodes within a layer to cut edge crossings; `order=source` instead keeps roots in declaration order and children in the order of their incoming edges, which org charts, syntax trees, and fishbones need. Without `order=source`, declaration order does not matter: nodes are taken in the order edges first mention them, so moving a style block leaves the layout unchanged. A long layered flow folds into bands when one band does not fit; on a ratio page (`page 16:9`) it also tries 2 and 3 bands and keeps the count with the largest font. `bands=N` caps the count.
+`layout NAME` selects layout algorithm and accepts layout-specific attributes. Supported algorithms are `radial`, `layered`, `lanes`, `venn`, and `euler`. Radial layouts use `root=ID`; layered layouts accept `dir=down` or `dir=right`, `bands=N`, and `order=source`. By default a layered layout reorders nodes within a layer to cut edge crossings; `order=source` instead keeps roots in declaration order and children in the order of their incoming edges, which org charts, syntax trees, and fishbones need. Without `order=source`, declaration order does not matter: nodes are taken in the order edges first mention them, so moving a style block leaves the layout unchanged. A long layered flow folds into bands when one band does not fit; on a ratio page (`page 16:9`) it also tries 2 and 3 bands and keeps the count with the largest font. `bands=N` caps the count.
 
 `layout lanes` draws swimlanes and sequence diagrams. It takes `dir` and `order` like `layered`. Each top-level group is a lane, and lanes sit side by side in declaration order with frames that span the whole flow. Nodes stack along their lane in flow order, and edges cross between lanes. A node with `lane=ID` hangs on a dashed lifeline below ID, after the earlier nodes on that lane; ID heads the lane and its lane nodes share it. An empty `shape=none` node draws as a point on the lifeline. With `order=source`, heads take the first row and each later row holds one `align row` set, in declaration order, so messages keep source order:
 
@@ -311,6 +311,21 @@ group "Compiled" go, both
 ```
 
 The `venn` module wraps this as `venn.two` and `venn.three`, which take each region's items as one `;`-separated string.
+
+`layout euler` draws an Euler diagram: each group is a circle, and any two groups must nest (one lists every node of the other) or share no node, else E0010. A nested set is drawn inside the smallest set that holds it, disjoint sets stand apart, and each node sits in the innermost set that lists it. Titles sit inside the top of their circles. It takes no attributes and at most eight sets. Colors, `shape=none` nodes, and ungrouped nodes behave as in `layout venn`:
+
+```fitd
+layout euler
+
+dog
+cat
+eagle
+group "Animals" dog, cat, eagle
+group "Mammals" dog, cat
+group "Birds" eagle
+```
+
+The `euler` module wraps this as `euler.nest(outer, inner, only_outer, in_inner)` and `euler.apart(a, b, items_a, items_b)`.
 
 ### Page and font settings
 
@@ -410,6 +425,7 @@ tree.cat(s, S) {
 | `tree`    | Syntax trees, decision trees, org charts: `tree.cat`, `tree.word`, `tree.q`, `tree.leaf`, `tree.unit`, `tree.kids`                                                                                                                                         |
 | `time`    | Timelines: `time.event`, `time.mile`, `time.chain`                                                                                                                                                                                                         |
 | `seq`     | UML sequence diagrams for `layout lanes`: `seq.actor`, `seq.msg`, `seq.reply` (dashed)                                                                                                                                                                     |
+| `euler`   | Euler diagrams for `layout euler`: `euler.nest`, `euler.apart`, `euler.items`, `euler.set`                                                                                                                                                                  |
 | `venn`    | Venn diagrams for `layout venn`: `venn.two`, `venn.three`, `venn.items`, `venn.set`, set styles `venn.a`..`venn.c`                                                                                                                                         |
 | `model`   | Research models: `model.iv`, `model.dv`, `model.med`, `model.mod`, `model.ctl`, `model.hyp`, `model.key`                                                                                                                                                 |
 

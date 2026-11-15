@@ -82,7 +82,7 @@ Each row lists the figure type, the surveys (by number above) that name it, and 
 | Swimlane activity | 6 | yes | core (lanes) | `24-swimlane` |
 | UML sequence | 5, 6 | yes, no activation bars or self-messages | `std/seq` | `25-sequence` |
 | Venn | 3, 4, 5 | yes, up to three sets | `std/venn` | `26-venn`, `27-venn-three` |
-| Euler | 3, 4, 5 | **no** | planned | |
+| Euler | 3, 4, 5 | yes, nested or disjoint circles | `std/euler` | `28-euler` |
 | Algorithm / pseudocode | 3, 4 | **no**, removed | | |
 | UML use case | 6 | partial: no actor glyph | planned | |
 | Dependency arcs (NLP) | 4 | **no** | planned, low priority | |
@@ -143,7 +143,7 @@ Finished plans are removed from this file; git history has them. These parts wer
 
 - Ordered layouts: no per-group `ordered` flag. A group draws a frame, so it is a poor switch for ordering alone. Add one only if a figure needs source order in one part and crossing reduction in another.
 - Sequence diagrams: no activation bars, self-messages, or lane-relative `group` frames inside a sequence.
-- Venn: no Euler diagrams (disjoint or nested sets drawn apart or inside) and no area-proportional circles.
+- Venn and Euler: no area-proportional circles. Euler takes only nested or disjoint sets, never partial overlap with more than three sets.
 - Group edges: `layout lanes` and `layout venn` reject them (E0016). An edge runs from a stand-in member, so a long group edge may leave the frame off center.
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.

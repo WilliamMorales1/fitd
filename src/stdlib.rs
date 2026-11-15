@@ -14,6 +14,7 @@ pub const MODULES: &[(&str, &str)] = &[
     ("model", include_str!("std/model.fitd")),
     ("seq", include_str!("std/seq.fitd")),
     ("venn", include_str!("std/venn.fitd")),
+    ("euler", include_str!("std/euler.fitd")),
 ];
 
 /// get returns the source of the module `name`.

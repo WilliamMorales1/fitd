@@ -30,6 +30,9 @@ pub struct Venn {
     page: Rect,
 }
 
+/// MAX_EULER caps the sets of a `layout euler` diagram, one mask bit each.
+pub const MAX_EULER: usize = 8;
+
 const SPREADS: [f64; 4] = [1.0, 0.8, 1.2, 0.6];
 const MAX_CANDS: usize = 400;
 
@@ -156,6 +159,9 @@ fn circles(k: usize, page: &Rect, band: f64, q: f64) -> Vec<Circle> {
 
 /// shape picks the circle spread that leaves the most room in the most crowded region.
 pub fn shape(g: &Graph, fonts: &Fonts, boxes: &[Boxed], page: Rect, b: f64) -> Venn {
+    if g.settings.euler {
+        return euler(g, fonts, boxes, page, b);
+    }
     let k = g.sets.len().clamp(1, 3);
     let size = 1.2 * b;
     let band = 2.0 * size;
@@ -310,5 +316,172 @@ pub fn plan(g: &Graph, venn: &Venn, boxes: &[Boxed], b: f64) -> Plan {
         ky: 1.0,
         tol: 0.5 * step,
         crowded: None,
+    }
+}
+
+/// Pack is the natural size of one euler set: its child rows, content box, and circle radius.
+#[derive(Clone, Default)]
+struct Pack {
+    rows: Vec<Vec<usize>>,
+    w: f64,
+    h: f64,
+    r: f64,
+    band: f64,
+}
+
+/// pack sizes a set holding `kids` and `own` node boxes, with its title above; fewest-radius row split wins.
+fn pack(
+    kids: &[usize],
+    packs: &[Pack],
+    own: &[(f64, f64)],
+    title_w: f64,
+    band: f64,
+    gap: f64,
+    fit: impl Fn(f64, f64) -> f64,
+) -> Pack {
+    let area: f64 = own.iter().map(|&(w, h)| (w + gap) * (h + gap)).sum();
+    let wide = own.iter().map(|o| o.0 + gap).fold(0.0, f64::max);
+    let ow = (area * 1.6).sqrt().max(wide);
+    let oh = if own.is_empty() { 0.0 } else { area / ow };
+    let mut best: Option<(f64, Pack)> = None;
+    for nrows in 1..=kids.len().max(1) {
+        let per = kids.len().div_ceil(nrows).max(1);
+        let rows: Vec<Vec<usize>> = kids.chunks(per).map(<[usize]>::to_vec).collect();
+        let (mut kw, mut kh) = (0.0f64, 0.0);
+        for r in &rows {
+            let w: f64 =
+                r.iter().map(|&k| 2.0 * packs[k].r).sum::<f64>() + gap * (r.len() - 1) as f64;
+            kw = kw.max(w);
+            kh += r.iter().map(|&k| 2.0 * packs[k].r).fold(0.0, f64::max) + gap;
+        }
+        let w = kw.max(ow).max(title_w);
+        let h = band + kh + oh;
+        let p = Pack {
+            rows,
+            w,
+            h,
+            r: w.hypot(h) / 2.0 + gap / 2.0,
+            band,
+        };
+        let cost = fit(p.w, p.h);
+        if best.as_ref().is_none_or(|(c, _)| cost < *c) {
+            best = Some((cost, p));
+        }
+        if kids.is_empty() {
+            break;
+        }
+    }
+    best.map(|(_, p)| p).unwrap_or_default()
+}
+
+/// euler nests each set's circle inside the smallest set holding it and sets the rest side by side.
+fn euler(g: &Graph, fonts: &Fonts, boxes: &[Boxed], page: Rect, b: f64) -> Venn {
+    let k = g.sets.len();
+    let size = 1.2 * b;
+    let gap = 0.8 * b;
+    let mask = masks(g);
+    let held = |i: usize, j: usize| {
+        g.sets[i].items.len() < g.sets[j].items.len()
+            && g.sets[i].items.iter().all(|v| g.sets[j].items.contains(v))
+    };
+    let parent: Vec<Option<usize>> = (0..k)
+        .map(|i| {
+            (0..k)
+                .filter(|&j| held(i, j))
+                .min_by_key(|&j| g.sets[j].items.len())
+        })
+        .collect();
+    let owner = |u: usize| {
+        (0..k)
+            .filter(|&i| mask[u] & (1 << i) != 0)
+            .min_by_key(|&i| g.sets[i].items.len())
+            .unwrap_or(k)
+    };
+    let mut order: Vec<usize> = (0..k).collect();
+    order.sort_by_key(|&i| g.sets[i].items.len());
+    let mut packs = vec![Pack::default(); k + 1];
+    let mut titles: Vec<Option<(String, f64)>> = vec![None; k];
+    let (pw, ph) = (page.x1 - page.x0 - 2.0 * b, page.y1 - page.y0 - 2.0 * b);
+    for &i in order.iter().chain(std::iter::once(&k)) {
+        let kids: Vec<usize> = (0..k).filter(|&c| parent[c] == Some(i)).collect();
+        let kids = if i == k {
+            (0..k).filter(|&c| parent[c].is_none()).collect()
+        } else {
+            kids
+        };
+        let own: Vec<(f64, f64)> = (0..g.nodes.len())
+            .filter(|&u| owner(u) == i)
+            .map(|u| (boxes[u].w, boxes[u].h))
+            .collect();
+        let title = (i < k).then(|| g.sets[i].title.clone()).flatten();
+        let tw = title
+            .as_ref()
+            .map_or(0.0, |t| fonts.width(t, size, true) + gap);
+        let band = if title.is_some() {
+            1.25 * size + 0.3 * b
+        } else {
+            0.0
+        };
+        packs[i] = if i == k {
+            pack(&kids, &packs, &own, 0.0, 0.0, gap, |w, h| {
+                -(pw / w).min(ph / h)
+            })
+        } else {
+            pack(&kids, &packs, &own, tw, band, gap, |w, h| w.hypot(h))
+        };
+        if let Some(t) = title {
+            titles[i] = Some((t, tw));
+        }
+    }
+    let root = &packs[k];
+    let s = (pw / root.w).min(ph / root.h).max(1e-6);
+    let mut circles = vec![
+        Circle {
+            c: (0.0, 0.0),
+            r: 0.0
+        };
+        k
+    ];
+    let mut at = vec![(0.0, 0.0); k];
+    // Walk from the page in: each set's content box is centered on its circle.
+    let mut stack = vec![(k, page.center())];
+    while let Some((i, (cx, cy))) = stack.pop() {
+        let p = &packs[i];
+        let mut y = cy + p.h * s / 2.0 - p.band * s;
+        for row in &p.rows {
+            let rh = row.iter().map(|&c| 2.0 * packs[c].r).fold(0.0, f64::max);
+            let rw: f64 =
+                row.iter().map(|&c| 2.0 * packs[c].r).sum::<f64>() + gap * (row.len() - 1) as f64;
+            let mut x = cx - rw * s / 2.0;
+            for &c in row {
+                let r = packs[c].r;
+                let ctr = (x + r * s, y - rh * s / 2.0);
+                circles[c] = Circle { c: ctr, r: r * s };
+                stack.push((c, ctr));
+                x += (2.0 * r + gap) * s;
+            }
+            y -= (rh + gap) * s;
+        }
+        if i < k {
+            at[i] = (cx, cy + p.h * s / 2.0 - p.band * s / 2.0);
+        }
+    }
+    let titles = (0..k)
+        .map(|i| {
+            let (text, tw) = titles[i].take()?;
+            Some(Title {
+                rect: Rect::centered(at[i], tw - gap, 1.25 * size),
+                text,
+                at: at[i],
+                size,
+            })
+        })
+        .collect();
+    Venn {
+        circles,
+        titles,
+        mask,
+        margin: 0.4 * b,
+        page,
     }
 }
