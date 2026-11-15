@@ -1,7 +1,7 @@
 ; A later pattern overrides an earlier one, so the catch-all comes first.
 (name) @variable
 
-["title" "root" "layout" "page" "font" "theme" "style" "node" "with" "key" "group" "require" "prefer" "include" "align" "at"] @keyword
+["title" "root" "layout" "page" "font" "theme" "style" "with" "key" "group" "require" "prefer" "include" "align" "at"] @keyword
 ["for" "in" "if" "else" "def"] @keyword.control
 
 (edge_operator) @operator
@@ -26,6 +26,7 @@
 
 (node_statement id: (name) @label)
 (def_statement name: (name) @function)
-(row_statement name: (qualified_name (name) @function.call))
+(call_statement name: (qualified_name (name) @function.call))
+(argument key: (name) @variable.parameter)
 (def_statement parameter: (name) @variable.parameter)
 (expression) @embedded

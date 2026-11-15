@@ -17,4 +17,4 @@ with flow.done {
 }
 req -> auth -> serve "yes"
 auth -> login "no" -> serve
-flow.key
+flow.key()

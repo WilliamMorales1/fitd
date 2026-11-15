@@ -3,24 +3,24 @@ fitd: .fitd text -> SVG/PNG/PDF/TikZ, largest font that fits.
 Build:  fitd FILE.fitd -o out.svg|.png|.pdf [--tikz out.tex] [--short]
 Book:   fitd A.fitd B.fitd -o out.pdf
 Stdin:  fitd - -o out.svg <<'EOF' ... EOF
-Exit 0: written; errors: stderr.
+Exit 0 ok; errors: stderr.
 
 Syntax: a statement per line, // comment, blocks in { }.
-  ID "Title" [row=1, col=2] {  // ID: letters digits _ inner -; keyword: node ID
+  ID "Title" [row=1, col=2] {  // ID: letters digits _ inner -; no keywords
     KID "Kid"                  // child: ID->KID (radial --)
     -> x "label"               // edge from ID; ID { reopens it
     | body line                // lead spaces indent; **bold**
     ~ [%60, ., _, LBL, "a b"]  // row: %NN shade (%100 solid) . box _ gap
-                               //   LBL*3: 3 cols; rows stack to a grid
+                               //   LBL*3: 3 cols; rows stack
     ~ image "p.png" [width=10em] // PNG/JPEG
   }
-  with STYLE { ... }           // style lines inside (or nn.block)
+  with STYLE { ... }           // styles lines inside
   a, b -> c, d "label" -> e    // flow edge (-- undirected); chains
   a ..> b "label"              // dashed cross link (.. undirected)
   title "Text"
   layout radial [root=ID]      // default: mind map
   layout layered [dir=down|right, bands=N, order=source] // flowchart
-  layout lanes [dir=down|right, order=source] // groups are lanes; node lane=HEAD: lifeline
+  layout lanes [dir=down|right, order=source] // groups: lanes; lane=HEAD: lifeline
   layout venn                  // groups: set circles (<=3)
   page a0..a4|WxHmm|16:9 portrait|landscape [margin=1cm] // 16:9 tightest
   font 9pt..28pt [wrap=24em] // defaults
@@ -30,9 +30,10 @@ Syntax: a statement per line, // comment, blocks in { }.
   group G "Title" a, b [color=#hex, times=N] // G: edge end; times: dashed `Nx`
   require REL                  // must hold, else E0110
   prefer REL [weight=2]        // soft; W0205 if unmet
-  include "a.fitd"|"user/L"|"uml" // L.f x; std: nn flow palette grid arch uml er tree time model seq venn algo
-  uml.class a A "x: int"       // uml.class { rows }; row { kids }
-  for i in 1..3 { } / if X { } else { } / def f(a) { }; f 1; ${i}; count(s,";") part(s,";",i)
+  include "a.fitd"|"user/L"|"uml" // L.f(x); std: nn flow palette grid arch uml er tree time model seq venn algo
+  uml.class(a, A, ["x: int", y]) { KID } // args: w 1 "s" [..] k=v ${e} "a.b"
+  for i in 1..3 {} / for x in xs {} / if X {} else {} / def f(a, b=1) {}; f(1); ${i}
+  // xs[1] len(xs) xs+ys split(s,";") names(p,1,3)
 REL:
   a left-of b [gap=2em] | right-of | above | below  // chains: a above b above c
   a near b [within=4em]
@@ -63,6 +64,6 @@ Flowchart:
   out "Save"
   err "Error"
 
-Fix first error, rebuild. `fitd explain CODE` details it.
-E0110: drop or `prefer` one listed constraint, or enlarge page.
-No fit: lower font floor or enlarge page.
+Fix first error; `fitd explain CODE` details it.
+E0110: drop or `prefer` a listed constraint, or enlarge page.
+No fit: lower font floor, enlarge page.

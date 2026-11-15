@@ -232,7 +232,7 @@ impl Builder<'_, '_, '_> {
     }
 
     fn keyword(&mut self, stmt: Span) {
-        let text = &self.parse[stmt.lo..stmt.hi];
+        let text = self.parse.get(stmt.lo..stmt.hi).unwrap_or("");
         let w: String = text.chars().take_while(|&c| is_ident(c)).collect();
         if !w.is_empty() {
             let span = Span::new(stmt.lo, stmt.lo + w.len());
@@ -306,9 +306,8 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
         images: false,
         ..Default::default()
     };
-    let crate::compile::Front {
-        src, parse, stmts, ..
-    } = crate::compile::check(path, text, &opts);
+    let crate::compile::Front { src, stmts, .. } = crate::compile::check(path, text, &opts);
+    let parse = src.text.clone();
     files.cache.insert(path.to_string(), Some(text.to_string()));
     let mut b = Builder {
         src: &src,
@@ -319,11 +318,13 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
     };
     for st in &stmts {
         let k = &st.kind;
-        let keyword = match k {
-            StmtKind::Node { .. } => b.text(st.span).starts_with("node"),
-            StmtKind::Body { .. } | StmtKind::Row { .. } | StmtKind::Edge { .. } => false,
-            _ => true,
-        };
+        let keyword = !matches!(
+            k,
+            StmtKind::Node { .. }
+                | StmtKind::Body { .. }
+                | StmtKind::Row { .. }
+                | StmtKind::Edge { .. }
+        );
         if keyword {
             b.keyword(st.span);
         }
@@ -478,7 +479,7 @@ pub fn build(path: &str, text: &str, files: &mut Files) -> Index {
                 b.attrs(if *hard { "require" } else { "prefer" }, attrs);
             }
             StmtKind::Include(target) => {
-                let text = &parse[st.span.lo..st.span.hi];
+                let text = parse.get(st.span.lo..st.span.hi).unwrap_or("");
                 if let Some(q) = text.find('"') {
                     let lo = st.span.lo + q + 1;
                     let span = Span::new(lo, lo + target.len());
@@ -525,7 +526,7 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
         };
         let call = template_name(t);
         let after = &t[call.len()..];
-        let row = (after.is_empty() || after.starts_with(char::is_whitespace))
+        let row = after.starts_with('(')
             && !crate::parse::KEYWORDS.contains(&call.as_str())
             && !["->", "--", ".."]
                 .iter()
@@ -565,7 +566,7 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
                 .and_then(|p| p.split(')').next())
                 .map(|p| {
                     p.split(',')
-                        .map(|s| s.trim().to_string())
+                        .map(|s| s.split('=').next().unwrap().trim().to_string())
                         .filter(|s| !s.is_empty())
                         .collect()
                 })

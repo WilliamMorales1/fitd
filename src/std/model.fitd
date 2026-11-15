@@ -5,47 +5,47 @@ style model.med [color=#56B4E9, shape=box]
 style model.mod [color=#E69F00, shape=box]
 style model.ctl [color=#888888, shape=box]
 
-// model.iv id name: an independent variable.
+// model.iv(id, name): an independent variable.
 def iv(id, name) {
   with model.iv {
-    node ${id} "${name}"
+    ${id} "${name}"
   }
 }
 
-// model.dv id name: a dependent variable.
+// model.dv(id, name): a dependent variable.
 def dv(id, name) {
   with model.dv {
-    node ${id} "${name}"
+    ${id} "${name}"
   }
 }
 
-// model.med id name: a mediator.
+// model.med(id, name): a mediator.
 def med(id, name) {
   with model.med {
-    node ${id} "${name}"
+    ${id} "${name}"
   }
 }
 
-// model.mod id name: a moderator; point it at the path it changes with model.hyp.
+// model.mod(id, name): a moderator; point it at the path it changes with model.hyp.
 def mod(id, name) {
   with model.mod {
-    node ${id} "${name}"
+    ${id} "${name}"
   }
 }
 
-// model.ctl id name: a control variable.
+// model.ctl(id, name): a control variable.
 def ctl(id, name) {
   with model.ctl {
-    node ${id} "${name}"
+    ${id} "${name}"
   }
 }
 
-// model.hyp a b n sign: hypothesis Hn that a affects b; sign is "+", "-", or "".
+// model.hyp(a, b, n, sign): hypothesis Hn that a affects b; sign is "+", "-", or "".
 def hyp(a, b, n, sign) {
   ${a} -> ${b} "H${n}${sign}"
 }
 
-// model.key: a legend for the variable roles.
+// model.key(): a legend for the variable roles.
 def key() {
   key "independent" [color=#0072B2]
   key "mediator" [color=#56B4E9]

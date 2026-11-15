@@ -4,8 +4,8 @@ page 4:3
 
 with grid {
   votes "Votes per option" {
-    grid.bar A 7
-    grid.bar B 4
-    grid.bar C 9
+    grid.bar(A, 7)
+    grid.bar(B, 4)
+    grid.bar(C, 9)
   }
 }

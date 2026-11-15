@@ -39,8 +39,8 @@ impl Names {
                 });
             }
         }
-        let loaded = crate::macros::load(path, text, 1_000_000);
-        let nodes = crate::parse::parse(&loaded.parse)
+        let loaded = crate::expand::load(path, text, 1_000_000);
+        let nodes = crate::parse::parse_tokens(&loaded.src.text, loaded.toks, Vec::new())
             .0
             .into_iter()
             .filter_map(|s| match s.kind {

@@ -3,16 +3,16 @@ include "user/runbook"
 title "Database latency page"
 layout layered
 page 4:3
-page -> deploy
+alert -> deploy
 font 8pt..26pt
 
-runbook.alert page "p99 latency > 2 s" Grafana
-runbook.check deploy "Deploy in last hour?"
-runbook.act rollback "Roll back" on-call
-runbook.check load "Traffic spike?"
-runbook.act scale "Add replicas" on-call
-runbook.act escalate Escalate "DB team"
-runbook.resolved done
+runbook.alert(alert, "p99 latency > 2 s", Grafana)
+runbook.check(deploy, "Deploy in last hour?")
+runbook.act(rollback, "Roll back", "on-call")
+runbook.check(load, "Traffic spike?")
+runbook.act(scale, "Add replicas", "on-call")
+runbook.act(escalate, Escalate, "DB team")
+runbook.resolved(done)
 deploy -> rollback "yes"
 deploy -> load "no"
 load -> scale "yes"

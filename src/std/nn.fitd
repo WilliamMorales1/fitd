@@ -8,81 +8,75 @@ style nn.loss [color=#D55E00]
 style nn.note [shape=none]
 style nn.op [color=#CC79A7, shape=circle]
 
-// nn.input id name dims: a data block labelled with its shape.
+// nn.input(id, name, dims): a data block labelled with its shape.
 def input(id, name, dims) {
   with nn.data {
-    node ${id} "${name}" {
+    ${id} "${name}" {
       ~ [%100"${dims}"*4]
     }
   }
 }
 
-// nn.layer id name dims times: one block drawn as `times` stacked copies.
+// nn.layer(id, name, dims, times): one block drawn as `times` stacked copies.
 def layer(id, name, dims, times) {
   with nn.block {
-    node ${id} "${name}" [stack=${times}] {
+    ${id} "${name}" [stack=${times}] {
       ~ [%100"${dims}"*4]
     }
   }
 }
 
-// nn.step id name: an operator with no parameters (pool, concat, softmax).
+// nn.step(id, name): an operator with no parameters (pool, concat, softmax).
 def step(id, name) {
   with nn.step {
-    node ${id} "${name}"
+    ${id} "${name}"
   }
 }
 
-// nn.out id name dims: the model output.
+// nn.out(id, name, dims): the model output.
 def out(id, name, dims) {
   with nn.result {
-    node ${id} "${name}" {
+    ${id} "${name}" {
       ~ [%100"${dims}"*4]
     }
   }
 }
 
-// nn.mask id name n causal: an n x n attention mask; causal=1 hides the future.
+// nn.mask(id, name, n, causal): an n x n attention mask; causal=1 hides the future.
 def mask(id, name, n, causal) {
   with nn.block {
-    node ${id} "${name}" {
-      mask_rows ${n} ${causal}
+    ${id} "${name}" {
+      mask_rows(${n}, ${causal})
     }
   }
 }
 
-// nn.mask_rows n causal: the mask figure alone, drawn inside the node above.
+// nn.mask_rows(n, causal): the mask figure alone, drawn inside the node above.
 def mask_rows(n, causal) {
-  mask_pad_rows ${n} 0 ${causal}
+  mask_pad_rows(${n}, 0, ${causal})
 }
 
-// nn.mask_pad_rows n pad causal: the same mask with `pad` hidden key columns after the n real tokens.
+// nn.mask_pad_rows(n, pad, causal): the same mask with `pad` hidden key columns after the n real tokens.
 def mask_pad_rows(n, pad, causal) {
   for i in 1..n {
-    mask_row "" 1 ${n} ${pad} ${i} ${causal}
+    if causal {
+      ~ [for j in 1..i { %100 }, for j in i + 1..n + pad { . }]
+    } else {
+      ~ [for j in 1..n { %100 }, for j in n + 1..n + pad { . }]
+    }
   }
 }
 
-def mask_row(acc, j, n, pad, i, causal) {
-  if j > n + pad {
-    ~ [${acc}]
-  } else if j > n or (causal and j > i) {
-    mask_row ${acc + ", ."} ${j + 1} ${n} ${pad} ${i} ${causal}
-  } else {
-    mask_row ${acc + ", %100"} ${j + 1} ${n} ${pad} ${i} ${causal}
-  }
-}
-
-// nn.note id text: a frameless margin annotation, as used for axis and lane labels.
+// nn.note(id, text): a frameless margin annotation, as used for axis and lane labels.
 def note(id, text) {
   with nn.note {
-    node ${id} "${text}"
+    ${id} "${text}"
   }
 }
 
-// nn.add id: the small circled `+` that marks a residual or merge point.
+// nn.add(id): the small circled `+` that marks a residual or merge point.
 def add(id) {
   with nn.op {
-    node ${id} "+" [shape=circle]
+    ${id} "+" [shape=circle]
   }
 }

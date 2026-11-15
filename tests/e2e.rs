@@ -373,7 +373,7 @@ fn nested_groups_draw_inner_frames_inside_outer() {
 #[test]
 fn unsat_constraints_report_minimal_core() {
     let src = tmp("core.fitd");
-    let text = "layout layered\npage 420x300pt\nnode a\nnode b\nnode c\nnode d\na -> b, c\nc -> d\n\
+    let text = "layout layered\npage 420x300pt\na\nb\nc\nd\na -> b, c\nc -> d\n\
                 require b at left\nrequire align column(c, d)\nrequire c at left\nrequire d at bottom-left\nrequire b left-of c [gap=20em]\n";
     std::fs::write(&src, text).unwrap();
     let (ok, log) = fitd(&[
@@ -727,7 +727,7 @@ fn stable_lock_keeps_nodes_in_place_after_adding_a_leaf() {
         );
         std::fs::write(
             &src,
-            text + &format!("\nnode extra \"Extra leaf\"\n{last} -> extra\n"),
+            text + &format!("\nextra \"Extra leaf\"\n{last} -> extra\n"),
         )
         .unwrap();
         let args = [
@@ -1499,11 +1499,7 @@ fn gallery_and_every_std_module_compile_cleanly() {
             .trim_end_matches(".fitd");
         let name = format!("std-{module}.fitd");
         let input = tmp(&name);
-        std::fs::write(
-            &input,
-            format!("include \"{module}\"\nnode a\nnode b\na -> b\n"),
-        )
-        .unwrap();
+        std::fs::write(&input, format!("include \"{module}\"\na\nb\na -> b\n")).unwrap();
         let out = tmp(&name.replace(".fitd", ".svg"));
         let (ok, log) = fitd(&[input.to_str().unwrap(), "-o", out.to_str().unwrap()]);
         assert!(ok && !log.contains("warning["), "{module}\n{log}");
@@ -1599,20 +1595,23 @@ fn macros_expand_loops_templates_and_recursion() {
     std::fs::create_dir_all(dir.join("parts")).unwrap();
     std::fs::write(
         dir.join("parts/t.fitd"),
-        "def box(id) {\n  node ${id}\n  ${id} -> ghost\n}\n",
+        "def box(id) {\n  ${id}\n  ${id} -> ghost\n}\n",
     )
     .unwrap();
     let main = dir.join("main.fitd");
-    std::fs::write(&main, "include \"parts/t.fitd\"\n\nfor s in a, b {\n  box ${s}\n}\nbox c 2\ndef f(n) {\n  f ${n + 1}\n}\nf 0\nif 1 {\n").unwrap();
+    std::fs::write(&main, "include \"parts/t.fitd\"\n\nfor s in \"a\", \"b\" {\n  box(${s})\n}\nbox(c, 2)\ndef f(n) {\n  f(${n + 1})\n}\nf(0)\nif 1 {\n").unwrap();
     let (ok, log) = fitd(&[
         main.to_str().unwrap(),
         "-o",
         dir.join("m.svg").to_str().unwrap(),
         "--short",
     ]);
-    // A generated line reports at the template line, in the file that holds the template.
+    // A generated statement reports at the call that wrote it, once even when a loop repeats the call.
     assert!(
-        !ok && log.contains("parts/t.fitd:3:6: error[E0001]: unknown node `ghost`"),
+        !ok && log
+            .matches("main.fitd:4:3: error[E0001]: unknown node `ghost`")
+            .count()
+            == 1,
         "{log}"
     );
     assert!(
@@ -1624,7 +1623,7 @@ fn macros_expand_loops_templates_and_recursion() {
         "{log}"
     );
     assert!(
-        log.contains("main.fitd:11:1: error[E0002]: `if` has no closing `}`"),
+        log.contains("main.fitd:11:1: error[E0002]: `{` is never closed"),
         "{log}"
     );
 }
@@ -1734,7 +1733,7 @@ fn library_modules_are_included_by_name() {
     let f = tmp("usestd.fitd");
     std::fs::write(
         &f,
-        "include \"nn\"\n\nnn.input x Tokens \"B x L\"\nnn.layer e Encoder \"d 64\" 2\nnn.mask m Causal 4 1\nwith nn.block {\n  b \"Block\"\n}\nx -> e -> m\n",
+        "include \"nn\"\n\nnn.input(x, Tokens, \"B x L\")\nnn.layer(e, Encoder, \"d 64\", 2)\nnn.mask(m, Causal, 4, 1)\nwith nn.block {\n  b \"Block\"\n}\nx -> e -> m\n",
     )
     .unwrap();
     let o = tmp("usestd.svg");
@@ -1764,7 +1763,7 @@ fn library_modules_are_included_by_name() {
     // Module templates live under the module name, so a file's own `input` does not clash.
     let (ok, log) = build(
         "stdown",
-        "include \"nn\"\n\ndef input(id) {\n  node ${id}\n}\ninput a\nnn.input x X \"1\"\na -> x\n",
+        "include \"nn\"\n\ndef input(id) {\n  ${id}\n}\ninput(a)\nnn.input(x, X, \"1\")\na -> x\n",
     );
     assert!(ok && log.contains("0 errors"), "{log}");
     let (ok, log) = build("stdold", "include \"std/nn.fitd\"\n\na\n");
@@ -1783,15 +1782,12 @@ fn user_libraries_are_included_beside_the_file() {
     // A library calls templates it includes by their module name, and a shared library splices once.
     write(
         "shapes.fitd",
-        "// shapes: boxes for tests\ninclude \"user/base\"\n\ndef pill(id, name) {\n  base.tag ${id} ${name}\n}\n",
+        "// shapes: boxes for tests\ninclude \"user/base\"\n\ndef pill(id, name) {\n  base.tag(${id}, ${name})\n}\n",
     );
-    write(
-        "base.fitd",
-        "def tag(id, name) {\n  node ${id} \"${name}\"\n}\n",
-    );
+    write("base.fitd", "def tag(id, name) {\n  ${id} \"${name}\"\n}\n");
     let main = write(
         "main.fitd",
-        "include \"user/base\"\ninclude \"user/shapes\"\n\nshapes.pill a Alpha\nbase.tag b Beta\na -> b\n",
+        "include \"user/base\"\ninclude \"user/shapes\"\n\nshapes.pill(a, Alpha)\nbase.tag(b, Beta)\na -> b\n",
     );
     let o = dir.join("main.svg");
     let (ok, log) = fitd(&[main.to_str().unwrap(), "-o", o.to_str().unwrap(), "--short"]);
@@ -1835,11 +1831,11 @@ fn user_libraries_fall_back_to_fitd_path() {
     }
     std::fs::write(
         libs.join("kit.fitd"),
-        "def tag(id) {\n  node ${id} \"From path\"\n}\n",
+        "def tag(id) {\n  ${id} \"From path\"\n}\n",
     )
     .unwrap();
     let main = work.join("main.fitd");
-    std::fs::write(&main, "include \"user/kit\"\n\nkit.tag a\n").unwrap();
+    std::fs::write(&main, "include \"user/kit\"\n\nkit.tag(a)\n").unwrap();
     let o = work.join("main.svg");
     let run = |path: Option<String>| {
         let mut c = Command::new(env!("CARGO_BIN_EXE_fitd"));
@@ -1863,7 +1859,7 @@ fn user_libraries_fall_back_to_fitd_path() {
     // A library beside the file wins over the search path.
     std::fs::write(
         work.join("kit.fitd"),
-        "def tag(id) {\n  node ${id} \"Local\"\n}\n",
+        "def tag(id) {\n  ${id} \"Local\"\n}\n",
     )
     .unwrap();
     let (ok, log) = run(Some(libs.to_string_lossy().into_owned()));
@@ -2190,11 +2186,11 @@ fn sequence_messages_keep_source_order() {
     // Steps zig-zag between lanes declared right to left, so only source order sorts them.
     let mut src = String::from("include \"seq\"\nlayout lanes [order=source]\n");
     for (id, name) in [("c", "Cc"), ("b", "Bb"), ("a", "Aa")] {
-        src += &format!("seq.actor {id} {name}\n");
+        src += &format!("seq.actor({id}, {name})\n");
     }
     let steps = [("a", "c"), ("b", "a"), ("c", "b"), ("a", "b"), ("c", "a")];
     for (i, (from, to)) in steps.iter().enumerate() {
-        src += &format!("seq.msg m{i} {from} {to} msg{i}\n");
+        src += &format!("seq.msg(m{i}, {from}, {to}, msg{i})\n");
     }
     let svg = build_svg("seq-order", &src);
     let ys: Vec<f64> = (0..steps.len())
@@ -2220,7 +2216,7 @@ fn swimlanes_keep_declaration_order() {
     // The flow runs x, y, z but the lanes are declared z, y, x.
     let svg = build_svg(
         "swim-order",
-        "layout lanes\nnode x \"Xx\"\nnode y \"Yy\"\nnode z \"Zz\"\nx -> y -> z\n\
+        "layout lanes\nx \"Xx\"\ny \"Yy\"\nz \"Zz\"\nx -> y -> z\n\
          group \"Lz\" z\ngroup \"Ly\" y\ngroup \"Lx\" x\n",
     );
     let lanes: Vec<f64> = ["Lz", "Ly", "Lx"]
@@ -2277,8 +2273,8 @@ fn lane_rejects_itself_and_nested_heads() {
 fn venn_items_land_in_their_regions() {
     let svg = build_svg(
         "venn-regions",
-        "layout venn\npage 1:1\nnode a \"Qa\"\nnode b \"Qb\"\nnode c \"Qc\"\nnode ab \"Qab\"\n\
-         node ac \"Qac\"\nnode bc \"Qbc\"\nnode abc \"Qabc\"\nnode none \"Qnone\"\n\
+        "layout venn\npage 1:1\na \"Qa\"\nb \"Qb\"\nc \"Qc\"\nab \"Qab\"\n\
+         ac \"Qac\"\nbc \"Qbc\"\nabc \"Qabc\"\nnone \"Qnone\"\n\
          group \"A\" a, ab, ac, abc\ngroup \"B\" b, ab, bc, abc\ngroup \"C\" c, ac, bc, abc\n",
     );
     let circles: Vec<(f64, f64, f64)> = svg
@@ -2337,7 +2333,7 @@ fn venn_rejects_a_fourth_set() {
 #[test]
 fn algorithm_lines_keep_indent_and_bold_keywords() {
     let src = "include \"algo\"\nlayout layered\n\
-               algo.block a Algo \"**Qkw** Qa;   Qb;     Qc; Qd\"\n";
+               algo.block(a, Algo, [\"**Qkw** Qa\", \"  Qb\", \"    Qc\", Qd])\n";
     let svg = build_svg("algo-indent", src);
     let x = |w: &str| text_at(&svg, w).0;
     let step = x("Qb") - x("Qkw");

@@ -27,7 +27,7 @@
       }
     },
     "macro": {
-      "comment": "Macro lines; a keyword followed by an edge operator is a node name instead.",
+      "comment": "Macro lines.",
       "patterns": [
         {
           "match": "^\\s*(def)\\s+([\\w]+)",
@@ -45,7 +45,7 @@
           }
         },
         {
-          "match": "^\\s*(if|else|end)\\b(?!\\s*(->|--|\\.\\.))",
+          "match": "^\\s*(}\\s*)?(if|else)\\b",
           "name": "keyword.control.macro.fitd"
         }
       ]
@@ -70,29 +70,22 @@
     "declaration": {
       "patterns": [
         {
-          "match": "^\\s*(node)\\s+([\\w-]+)",
-          "captures": {
-            "1": { "name": "keyword.control.fitd" },
-            "2": { "name": "entity.name.function.node.fitd" }
-          }
-        },
-        {
-          "comment": "A node line without `node`: an id followed by a title or attribute.",
-          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def)\\b)([A-Za-z_][\\w-]*)(?=\\s+(?:\"|[\\w-]+=))",
+          "comment": "A node line: an id followed by a title or attribute.",
+          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|key|group|require|prefer|include|with|for|if|else|def)\\b)([A-Za-z_][\\w-]*)(?=\\s+(?:\"|[\\w-]+=))",
           "captures": { "1": { "name": "entity.name.function.node.fitd" } }
         },
         {
-          "comment": "`mod.name` followed by words calls a template.",
-          "match": "^\\s*([A-Za-z_][\\w-]*\\.[A-Za-z_][\\w-]*)(?=\\s+[^\\s#=(])",
+          "comment": "`name(` or `mod.name(` calls a template.",
+          "match": "^\\s*([A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)?)(?=\\()",
           "captures": { "1": { "name": "entity.name.function.template.fitd" } }
         },
         {
-          "comment": "A lone name, or `mod.name`, opens a style block over the lines indented under it, or reopens a node.",
-          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def)\\b)([A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)?)\\s*(?=//|$)",
-          "captures": { "1": { "name": "entity.name.type.style.fitd" } }
+          "comment": "A lone name declares or reopens a node.",
+          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|key|group|require|prefer|include|with|for|if|else|def)\\b)([A-Za-z_][\\w-]*)\\s*(?=\\{|//|$)",
+          "captures": { "1": { "name": "entity.name.function.node.fitd" } }
         },
         {
-          "match": "^\\s*(style)\\s+([\\w-]+)",
+          "match": "^\\s*(style|with)\\s+([\\w.-]+)",
           "captures": {
             "1": { "name": "keyword.control.fitd" },
             "2": { "name": "entity.name.type.style.fitd" }

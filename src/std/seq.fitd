@@ -5,27 +5,27 @@ style seq.point [shape=none]
 style seq.msg [head=arrow]
 style seq.reply [head=arrow, line=dashed]
 
-// seq.actor id name: a participant heading its dashed lifeline.
+// seq.actor(id, name): a participant heading its dashed lifeline.
 def actor(id, name) {
   with seq.actor {
-    node ${id} "${name}"
+    ${id} "${name}"
   }
 }
 
-// seq.msg step a b text: a call from a to b, below every earlier message.
+// seq.msg(step, a, b, text): a call from a to b, below every earlier message.
 def msg(step, a, b, text) {
-  arrow ${step} ${a} ${b} ${text} seq.msg
+  arrow(${step}, ${a}, ${b}, ${text}, "seq.msg")
 }
 
-// seq.reply step a b text: a dashed return from a to b.
+// seq.reply(step, a, b, text): a dashed return from a to b.
 def reply(step, a, b, text) {
-  arrow ${step} ${a} ${b} ${text} seq.reply
+  arrow(${step}, ${a}, ${b}, ${text}, "seq.reply")
 }
 
 def arrow(step, a, b, text, kind) {
   with seq.point {
-    node ${step}_from "" [lane=${a}]
-    node ${step}_to "" [lane=${b}]
+    ${step}_from "" [lane=${a}]
+    ${step}_to "" [lane=${b}]
   }
   with ${kind} {
     ${step}_from -> ${step}_to "${text}"

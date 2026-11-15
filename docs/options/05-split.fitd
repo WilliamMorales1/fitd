@@ -22,7 +22,7 @@ with sheet {
     | root plus one stub per branch
   }
 }
-for b in a, b, c {
+for b in "a", "b", "c" {
   with sheet {
     p${b} "map-${b} : fitd" {
       | branch ${b}, rooted at its top node

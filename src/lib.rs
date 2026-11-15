@@ -18,12 +18,12 @@ pub mod import;
 pub mod include;
 pub mod key;
 
+pub mod expand;
 pub mod lanes;
 pub mod layered;
 pub mod layout;
 pub mod lex;
 pub mod lsp;
-pub mod macros;
 pub mod metrics;
 pub mod parse;
 pub mod quality;

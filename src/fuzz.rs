@@ -108,23 +108,24 @@ const WORDS: &[&str] = &[
     "} else {\n",
     "} else if i {\n",
     "def t(a) {\n",
-    "t 1\n",
-    "t x\n",
+    "t(1)\n",
+    "t(x, k=[a, b])\n",
     "${",
     "${i}",
     "${i + 1}",
     "$${",
-    "${names(\"s\", 1, 3)}",
+    "${split(\"a b\", \" \")[2]}",
     "${1 / 0}",
 ];
 
 fn front_end(text: &str) {
-    let crate::macros::Loaded {
+    let crate::expand::Loaded {
         src,
-        parse,
+        toks,
         mut diags,
-    } = crate::macros::expand_text("fuzz.fitd", text, 2_000);
-    let (stmts, more) = parse::parse(&parse);
+        ..
+    } = crate::expand::expand_text("fuzz.fitd", text, 2_000);
+    let (stmts, more) = parse::parse_tokens(&src.text, toks, Vec::new());
     diags.extend(more);
     let (g, more) = sema::analyze(&stmts);
     diags.extend(more);

@@ -7,15 +7,13 @@ layout layered [dir=right]
 page 16:9
 font 8pt..24pt
 
-arch.client web "Web app"
-arch.service api API
-arch.store db Postgres
-arch.queue q Jobs
-time.event {
-  t1 14:02 deploy
-  t2 14:09 errors
-}
-time.mile t3 14:31 rollback
+arch.client(web, "Web app")
+arch.service(api, API)
+arch.store(db, Postgres)
+arch.queue(q, Jobs)
+time.event(t1, "14:02", deploy)
+time.event(t2, "14:09", errors)
+time.mile(t3, "14:31", rollback)
 with flow.decide {
   d "Schema change?"
 }

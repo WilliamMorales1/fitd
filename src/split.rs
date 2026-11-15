@@ -11,10 +11,14 @@ pub struct Split {
 }
 
 pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
-    let crate::macros::Loaded {
-        parse, mut diags, ..
-    } = crate::macros::load(path, text, crate::macros::DEFAULT_BUDGET);
-    let (stmts, parse_diags) = crate::parse::parse(&parse);
+    let crate::expand::Loaded {
+        src,
+        toks,
+        mut diags,
+        ..
+    } = crate::expand::load(path, text, crate::expand::DEFAULT_BUDGET);
+    let parse = &src.text;
+    let (stmts, parse_diags) = crate::parse::parse_tokens(parse, toks, Vec::new());
     diags.extend(parse_diags);
     let (g, sema_diags) = crate::sema::analyze(&stmts);
     diags.extend(sema_diags);
@@ -242,7 +246,11 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
                 let (op, tail) = match nested(&st.kind) {
                     Some(op) => (op.to_string(), String::new()),
                     None => (
-                        parse[from.span.hi..to[0].span.lo].trim().to_string(),
+                        parse
+                            .get(from.span.hi..to[0].span.lo)
+                            .unwrap_or("")
+                            .trim()
+                            .to_string(),
                         snippet(to.last().unwrap().span.hi, st.span.hi),
                     ),
                 };

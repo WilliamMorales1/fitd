@@ -5,7 +5,7 @@ use crate::diag::{Diag, Level, Source};
 use crate::geom::Rect;
 use crate::graph::{self, Graph, LayoutKind};
 use crate::layout::{self, Config, Failure, Layout};
-use crate::{check as checks, include, key, macros, metrics, parse, sema, theme, tree};
+use crate::{check as checks, expand, include, key, metrics, parse, sema, theme, tree};
 
 /// Options are the command-line overrides of source settings.
 #[derive(Clone, Debug)]
@@ -41,7 +41,7 @@ impl Default for Options {
             max_font: None,
             wrap: None,
             budget: 20_000_000,
-            expand_budget: macros::DEFAULT_BUDGET,
+            expand_budget: expand::DEFAULT_BUDGET,
             theme: None,
             family: None,
             lock: None,
@@ -53,7 +53,6 @@ impl Default for Options {
 /// Front is the result of the front end: expanded source, statements, and the graph.
 pub struct Front {
     pub src: Source,
-    pub parse: String,
     pub stmts: Vec<Stmt>,
     pub graph: Graph,
     pub diags: Vec<Diag>,
@@ -61,12 +60,13 @@ pub struct Front {
 
 /// check runs includes, macros, parse, and sema, with diagnostics sorted by position.
 pub fn check(path: &str, text: &str, opts: &Options) -> Front {
-    let macros::Loaded {
+    let expand::Loaded {
         src,
-        parse,
+        toks,
         mut diags,
-    } = macros::load(path, text, opts.expand_budget);
-    let (stmts, parse_diags) = parse::parse(&parse);
+        ..
+    } = expand::load(path, text, opts.expand_budget);
+    let (stmts, parse_diags) = parse::parse_tokens(&src.text, toks, Vec::new());
     diags.extend(parse_diags);
     let (mut graph, sema_diags) = sema::analyze(&stmts);
     diags.extend(sema_diags);
@@ -75,9 +75,10 @@ pub fn check(path: &str, text: &str, opts: &Options) -> Front {
     }
     diags.retain(|d| !include::unused_shared_style(&src, d));
     diags.sort_by_key(Diag::pos);
+    // A loop calling one template writes the same error at the same call site once per pass.
+    diags.dedup_by(|a, b| a.code == b.code && a.msg == b.msg && a.pos() == b.pos());
     Front {
         src,
-        parse,
         stmts,
         graph,
         diags,

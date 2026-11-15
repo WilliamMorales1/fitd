@@ -19,9 +19,9 @@ struct Parser<'a> {
 
 type PResult<T> = Result<T, Diag>;
 
-/// KEYWORDS are the reserved words that start a statement or macro directive; a node so named needs `node`.
+/// KEYWORDS are the reserved words that start a statement or macro directive; no node may take one as its name.
 pub const KEYWORDS: &[&str] = &[
-    "title", "root", "layout", "page", "font", "theme", "style", "node", "key", "group", "include",
+    "title", "root", "layout", "page", "font", "theme", "style", "key", "group", "include",
     "require", "prefer", "with", "for", "if", "else", "def",
 ];
 
@@ -46,8 +46,8 @@ impl Parser<'_> {
         t
     }
 
-    fn text(&self, s: Span) -> &str {
-        &self.text[s.lo..s.hi]
+    fn tok_text(&self, k: usize) -> &str {
+        self.toks[(self.pos + k).min(self.toks.len() - 1)].src(self.text)
     }
 
     fn unexpected(&self, want: &str) -> Diag {
@@ -62,9 +62,23 @@ impl Parser<'_> {
         }
         let t = self.bump();
         Ok(Name {
-            text: self.text(t.span).to_string(),
+            text: t.src(self.text).to_string(),
             span: t.span,
         })
+    }
+
+    /// node_name reads a node name, which may not be a keyword.
+    fn node_name(&mut self) -> PResult<Name> {
+        let n = self.name("a node name")?;
+        if KEYWORDS.contains(&n.text.as_str()) {
+            return Err(Diag::error(
+                "E0002",
+                format!("`{}` is a keyword, so it cannot name a node", n.text),
+            )
+            .primary(n.span, "keyword")
+            .help("rename the node, for example `{0}_` or `my_{0}`".replace("{0}", &n.text)));
+        }
+        Ok(n)
     }
 
     fn class_name(&mut self) -> PResult<Name> {
@@ -80,7 +94,7 @@ impl Parser<'_> {
     }
 
     fn keyword_is(&self, k: usize, kw: &str) -> bool {
-        *self.peek_at(k) == Tok::Ident && self.text(self.toks[self.pos + k].span) == kw
+        *self.peek_at(k) == Tok::Ident && self.tok_text(k) == kw
     }
 
     fn at_end(&self) -> bool {
@@ -105,12 +119,12 @@ impl Parser<'_> {
         let t = self.bump();
         let v = match t.tok {
             Tok::Ident => Value::Name(Name {
-                text: self.text(t.span).to_string(),
+                text: t.src(self.text).to_string(),
                 span: t.span,
             }),
             Tok::Str(s) => Value::Str(s, t.span),
-            Tok::Num => Value::Num(self.text(t.span).to_string(), t.span),
-            Tok::Color => Value::Color(self.text(t.span).to_string(), t.span),
+            Tok::Num => Value::Num(t.src(self.text).to_string(), t.span),
+            Tok::Color => Value::Color(t.src(self.text).to_string(), t.span),
             _ => {
                 self.pos -= 1;
                 return Err(self.unexpected("a value"));
@@ -148,12 +162,12 @@ impl Parser<'_> {
     }
 
     fn targets(&mut self) -> PResult<Vec<Name>> {
-        let mut out = vec![self.name("a node name")?];
+        let mut out = vec![self.node_name()?];
         while matches!(self.peek(), Tok::Ident | Tok::Comma) {
             if *self.peek() == Tok::Comma {
                 self.bump();
             }
-            out.push(self.name("a node name")?);
+            out.push(self.node_name()?);
         }
         Ok(out)
     }
@@ -198,11 +212,11 @@ impl Parser<'_> {
                     .primary(self.span(), "no node encloses this line")
                     .help("write `a -> b`, or put `-> b` inside `a { }`"));
             }
-            _ => vec![self.name("a node name")?],
+            _ => vec![self.node_name()?],
         };
         while *self.peek() == Tok::Comma {
             self.bump();
-            froms.push(self.name("a node name")?);
+            froms.push(self.node_name()?);
         }
         let mut hops = Vec::new();
         while let Some((link, directed)) = self.arrow() {
@@ -238,15 +252,15 @@ impl Parser<'_> {
             self.bump();
             let side = self.name("an alignment like `top` or `row`")?;
             self.expect(Tok::LParen)?;
-            let mut items = vec![self.name("a node name")?];
+            let mut items = vec![self.node_name()?];
             while *self.peek() == Tok::Comma {
                 self.bump();
-                items.push(self.name("a node name")?);
+                items.push(self.node_name()?);
             }
             self.expect(Tok::RParen)?;
             return Ok(Rel::Align { side, items });
         }
-        let a = self.name("a node name")?;
+        let a = self.node_name()?;
         let op = self.name("a relation like `left-of`")?;
         if op.text == "at" {
             return Ok(Rel::At {
@@ -254,11 +268,11 @@ impl Parser<'_> {
                 place: self.name("a place like `top-left`")?,
             });
         }
-        let mut nodes = vec![a, self.name("a node name")?];
+        let mut nodes = vec![a, self.node_name()?];
         let mut ops = vec![op];
         while *self.peek() == Tok::Ident {
             ops.push(self.name("a relation like `left-of`")?);
-            nodes.push(self.name("a node name")?);
+            nodes.push(self.node_name()?);
         }
         Ok(Rel::Chain { nodes, ops })
     }
@@ -277,11 +291,11 @@ impl Parser<'_> {
     }
 
     /// node reads `ID ["Title"] [attrs]`, preceded by the edge from the node whose braces hold it.
-    fn node(&mut self, keyword: bool) -> PResult<(Vec<StmtKind>, Option<Frame>)> {
-        let id = self.name("a node name")?;
+    fn node(&mut self) -> PResult<(Vec<StmtKind>, Option<Frame>)> {
+        let id = self.node_name()?;
         let title = self.string();
         let attrs = self.attrs()?;
-        let bare = !keyword && title.is_none() && attrs.is_empty();
+        let bare = title.is_none() && attrs.is_empty();
         let mut out: Vec<StmtKind> = self
             .owner()
             .map(|parent| StmtKind::Edge {
@@ -365,13 +379,12 @@ impl Parser<'_> {
         if self.edge_at() || self.arrow().is_some() {
             return Ok((self.edge()?, None));
         }
-        if *self.peek() == Tok::Ident && !KEYWORDS.contains(&self.text(self.span())) {
-            return self.node(false);
+        if *self.peek() == Tok::Ident && !KEYWORDS.contains(&self.tok_text(0)) {
+            return self.node();
         }
         let kw = self.name("a statement")?;
         let one = |k| Ok((vec![k], None));
         match kw.text.as_str() {
-            "node" => self.node(true),
             "with" => {
                 let name = self.class_name()?;
                 Ok((vec![StmtKind::Open(name.clone())], Some(Frame::Style(name))))
@@ -380,7 +393,7 @@ impl Parser<'_> {
                 Some((s, _)) => one(StmtKind::Title(s)),
                 None => Err(self.unexpected("a quoted title")),
             },
-            "root" => one(StmtKind::Root(self.name("a node name")?)),
+            "root" => one(StmtKind::Root(self.node_name()?)),
             "layout" => one(StmtKind::Layout {
                 kind: self.name("a layout like `radial`")?,
                 attrs: self.attrs()?,
@@ -456,7 +469,7 @@ impl Parser<'_> {
             _ => {
                 let d = Diag::error("E0002", format!("unknown statement `{}`", kw.text))
                     .primary(kw.span, "not a statement");
-                Err(d.help("statements: title, root, layout, page, font, theme, style, node, with, `|` body, `~` row, `a -> b`, group, key, require, prefer, include"))
+                Err(d.help("statements: title, root, layout, page, font, theme, style, NODE, with, `|` body, `~` row, `a -> b`, group, key, require, prefer, include"))
             }
         }
     }
@@ -520,7 +533,12 @@ pub fn cell(raw: &str) -> Cell {
 }
 
 pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
-    let (toks, mut errs) = lex(text);
+    let (toks, errs) = lex(text);
+    parse_tokens(text, toks, errs)
+}
+
+/// parse_tokens parses an already lexed (and possibly macro-expanded) token stream over `text`.
+pub fn parse_tokens(text: &str, toks: Vec<Token>, mut errs: Vec<Diag>) -> (Vec<Stmt>, Vec<Diag>) {
     let mut p = Parser {
         text,
         toks,
@@ -547,12 +565,13 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
             _ => {}
         }
         let lo = p.span().lo;
+        let start = p.pos;
         match p.stmt() {
             Ok((kinds, frame)) => {
                 let hi = p.toks[p.pos - 1].span.hi;
                 stmts.extend(kinds.into_iter().map(|kind| Stmt {
                     kind,
-                    span: Span::new(lo, hi),
+                    span: Span::new(lo.min(hi), hi.max(lo)),
                 }));
                 if *p.peek() == Tok::LBrace {
                     let at = p.bump().span;
@@ -568,14 +587,15 @@ pub fn parse(text: &str) -> (Vec<Stmt>, Vec<Diag>) {
                         }
                     }
                 } else if !p.at_end() {
-                    let head = &p.text[lo..p.toks[p.pos - 1].span.hi];
+                    let head: String = (start..p.pos).map(|k| p.toks[k].src(p.text)).collect();
+                    let head = head.as_str();
                     let bare = head
                         .chars()
                         .all(|c| c.is_alphanumeric() || "_-.".contains(c));
                     let d = if bare && *p.peek() == Tok::Ident {
                         // `pill a A`: a misspelt keyword or a template called without its module.
                         Diag::error("E0002", format!("unknown statement `{head}`"))
-                            .primary(Span::new(lo, lo + head.len()), "not a statement or template")
+                            .primary(Span::new(lo, p.toks[p.pos - 1].span.hi.max(lo)), "not a statement or template")
                             .help("a node line is `ID \"Title\" [attrs]`; call a library template as `MOD.name`")
                     } else {
                         Diag::error(
@@ -791,8 +811,8 @@ mod tests {
 
     #[test]
     fn recovers_after_bad_line() {
-        let (stmts, errs) = parse("a\nnode = b\nc\nfrobnicate x\n");
-        assert_eq!(stmts.len(), 3, "a, c, and frobnicate");
+        let (stmts, errs) = parse("a\nb = c\nc\nfrobnicate x\n");
+        assert_eq!(stmts.len(), 4, "a, b, c, and frobnicate");
         assert_eq!(errs.len(), 2);
     }
 }

@@ -6,16 +6,16 @@ layout layered [dir=right]
 page 16:9
 font 8pt..24pt
 
-nn.input x Tokens "B x L"
-nn.layer enc Encoder "d 256" 4
-nn.out y Classes "B x 3"
+nn.input(x, Tokens, "B x L")
+nn.layer(enc, Encoder, "d 256", 4)
+nn.out(y, Classes, "B x 3")
 x -> enc -> y
 with grid {
   cm "Predicted vs true" {
-    grid.head "cat; dog; fox"
-    grid.heat cat "90 6 4"
-    grid.heat dog "8 85 7"
-    grid.heat fox "3 12 85"
+    grid.head([cat, dog, fox])
+    grid.heat(cat, [90, 6, 4])
+    grid.heat(dog, [8, 85, 7])
+    grid.heat(fox, [3, 12, 85])
   }
 }
 y ..> cm "scored"

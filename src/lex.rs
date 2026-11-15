@@ -7,6 +7,8 @@ pub enum Tok {
     Num,
     Color,
     Body(String),
+    /// Expr is the raw condition of `if` or the `NAMES in ITEMS` of `for`, up to its `{`.
+    Expr(String),
     /// Tilde starts a figure row; a `[` right after it switches the lexer to cells.
     Tilde,
     /// Cell is one raw comma-separated item of a `~ [...]` row, such as `%100"d 64"*4`.
@@ -32,6 +34,26 @@ pub enum Tok {
 pub struct Token {
     pub tok: Tok,
     pub span: Span,
+    /// text replaces the source slice for tokens that macro expansion produced.
+    pub text: Option<String>,
+}
+
+impl Token {
+    pub fn new(tok: Tok, span: Span) -> Token {
+        Token {
+            tok,
+            span,
+            text: None,
+        }
+    }
+
+    /// src gives the token's text: its override, or else its slice of `text`.
+    pub fn src<'a>(&'a self, text: &'a str) -> &'a str {
+        match &self.text {
+            Some(t) => t,
+            None => &text[self.span.lo..self.span.hi],
+        }
+    }
 }
 
 pub fn describe(t: &Tok) -> &'static str {
@@ -41,6 +63,7 @@ pub fn describe(t: &Tok) -> &'static str {
         Tok::Num => "a number",
         Tok::Color => "a color",
         Tok::Body(_) => "a body line",
+        Tok::Expr(_) => "an expression",
         Tok::Tilde => "`~`",
         Tok::Cell(_) => "a cell",
         Tok::LBrace => "`{`",
@@ -65,11 +88,37 @@ fn ident_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
 }
 
+/// interp_end gives the char index after the `}` closing a `${` that starts at `i`, skipping quoted text and nested braces.
+pub fn interp_end(cs: &[char], i: usize) -> Option<usize> {
+    if cs.get(i) != Some(&'$') || cs.get(i + 1) != Some(&'{') {
+        return None;
+    }
+    let (mut depth, mut quoted, mut j) = (1, false, i + 2);
+    while let Some(&c) = cs.get(j) {
+        match c {
+            '\\' if quoted => j += 1,
+            '"' => quoted = !quoted,
+            '\n' => return None,
+            '{' if !quoted => depth += 1,
+            '}' if !quoted => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(j + 1);
+                }
+            }
+            _ => {}
+        }
+        j += 1;
+    }
+    None
+}
+
 pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
     let b: Vec<(usize, char)> = text.char_indices().collect();
+    let cs: Vec<char> = b.iter().map(|&(_, c)| c).collect();
     let at = |i: usize| b.get(i).map(|&(_, c)| c);
     let off = |i: usize| b.get(i).map(|&(o, _)| o).unwrap_or(text.len());
-    let (mut toks, mut errs) = (Vec::new(), Vec::new());
+    let (mut toks, mut errs): (Vec<Token>, Vec<Diag>) = (Vec::new(), Vec::new());
     let mut line_start = true;
     // depth counts open `(` and `[`, inside which newlines do not end a statement.
     let mut depth = 0usize;
@@ -77,10 +126,7 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
     while let Some(c) = at(i) {
         let start = i;
         let push = |toks: &mut Vec<Token>, tok, end: usize| {
-            toks.push(Token {
-                tok,
-                span: Span::new(off(start), off(end)),
-            })
+            toks.push(Token::new(tok, Span::new(off(start), off(end))))
         };
         if c == '\n' {
             if depth == 0 {
@@ -141,6 +187,11 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
                         i += 1;
                         break;
                     }
+                    Some('$') if interp_end(&cs, i).is_some() => {
+                        let end = interp_end(&cs, i).unwrap();
+                        s.extend(&cs[i..end]);
+                        i = end;
+                    }
                     Some('\\') => {
                         match at(i + 1) {
                             Some('n') => s.push('\n'),
@@ -164,13 +215,30 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
                 i += 1;
             }
             push(&mut toks, Tok::Num, i);
-        } else if ident_char(c) {
-            while at(i).is_some_and(ident_char)
-                || (at(i) == Some('-') && at(i + 1).is_some_and(ident_char))
-            {
-                i += 1;
+        } else if ident_char(c) || interp_end(&cs, i).is_some() {
+            loop {
+                if let Some(end) = interp_end(&cs, i) {
+                    i = end;
+                } else if at(i).is_some_and(ident_char)
+                    || (at(i) == Some('-')
+                        && (at(i + 1).is_some_and(ident_char) || interp_end(&cs, i + 1).is_some()))
+                {
+                    i += 1;
+                } else {
+                    break;
+                }
             }
+            let word = &text[off(start)..off(i)];
+            let lead = toks
+                .last()
+                .is_none_or(|t| matches!(t.tok, Tok::Newline | Tok::LBrace | Tok::RBrace));
+            let after_else = toks
+                .last()
+                .is_some_and(|t| t.tok == Tok::Ident && &text[t.span.lo..t.span.hi] == "else");
             push(&mut toks, Tok::Ident, i);
+            if (lead && (word == "if" || word == "for")) || (after_else && word == "if") {
+                i = expr(text, &b, i, &mut toks);
+            }
         } else {
             let two = (c, at(i + 1).unwrap_or(' '));
             let (tok, len) = match two {
@@ -204,15 +272,42 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
             }
         }
     }
-    toks.push(Token {
-        tok: Tok::Newline,
-        span: Span::new(text.len(), text.len()),
-    });
-    toks.push(Token {
-        tok: Tok::Eof,
-        span: Span::new(text.len(), text.len()),
-    });
+    let end = Span::new(text.len(), text.len());
+    toks.push(Token::new(Tok::Newline, end));
+    toks.push(Token::new(Tok::Eof, end));
     (toks, errs)
+}
+
+/// expr lexes the raw text after `if` or `for` up to the `{` that opens its block, and gives the index of that `{`.
+fn expr(text: &str, b: &[(usize, char)], mut i: usize, toks: &mut Vec<Token>) -> usize {
+    let cs: Vec<char> = b.iter().map(|&(_, c)| c).collect();
+    let off = |i: usize| b.get(i).map(|&(o, _)| o).unwrap_or(text.len());
+    while cs.get(i).is_some_and(|&c| c == ' ' || c == '\t') {
+        i += 1;
+    }
+    let lo = i;
+    let (mut depth, mut quoted) = (0usize, false);
+    while let Some(&c) = cs.get(i) {
+        match c {
+            '\n' => break,
+            '\\' if quoted => i += 1,
+            '"' => quoted = !quoted,
+            '/' if !quoted && cs.get(i + 1) == Some(&'/') => break,
+            '(' | '[' if !quoted => depth += 1,
+            ')' | ']' if !quoted => depth = depth.saturating_sub(1),
+            '{' if !quoted && depth == 0 => break,
+            _ => {}
+        }
+        i += 1;
+    }
+    let raw = text[off(lo)..off(i)].trim_end();
+    if !raw.is_empty() {
+        toks.push(Token::new(
+            Tok::Expr(raw.to_string()),
+            Span::new(off(lo), off(lo) + raw.len()),
+        ));
+    }
+    i
 }
 
 /// cells lexes a `[...]` figure row starting at char `i`, one `Cell` per comma-separated item, and gives the index after `]`.
@@ -226,11 +321,9 @@ fn cells(
     let at = |i: usize| b.get(i).map(|&(_, c)| c);
     let off = |i: usize| b.get(i).map(|&(o, _)| o).unwrap_or(text.len());
     let open = i;
+    let cs: Vec<char> = b.iter().map(|&(_, c)| c).collect();
     let tok = |toks: &mut Vec<Token>, tok, lo: usize, hi: usize| {
-        toks.push(Token {
-            tok,
-            span: Span::new(off(lo), off(hi)),
-        })
+        toks.push(Token::new(tok, Span::new(off(lo), off(hi))))
     };
     tok(toks, Tok::LBracket, i, i + 1);
     i += 1;
@@ -259,13 +352,22 @@ fn cells(
             }
             Some(_) => {
                 let lo = i;
-                let mut quoted = false;
+                // Parens count too, so a `for x in split(s, ",") { .. }` cell stays whole.
+                let (mut quoted, mut depth, mut parens) = (false, 0usize, 0usize);
                 while let Some(c) = at(i) {
                     match c {
+                        '$' if !quoted && interp_end(&cs, i).is_some() => {
+                            i = interp_end(&cs, i).unwrap();
+                            continue;
+                        }
                         '"' => quoted = !quoted,
                         '\\' if quoted => i += 1,
-                        ',' | ']' | '\n' if !quoted => break,
-                        '\n' => break,
+                        '{' if !quoted => depth += 1,
+                        '}' if !quoted && depth > 0 => depth -= 1,
+                        '(' if !quoted => parens += 1,
+                        ')' if !quoted && parens > 0 => parens -= 1,
+                        ',' | ']' if !quoted && depth == 0 && parens == 0 => break,
+                        '\n' if depth == 0 => break,
                         _ => {}
                     }
                     i += 1;

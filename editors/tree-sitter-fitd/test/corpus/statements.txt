@@ -8,7 +8,7 @@ page a3 portrait [margin=1cm]
 font 7pt..40pt [wrap=16em]
 theme dark [link=#FFD54F]
 style stage [color=#1565C0, shape=box]
-node lex "Lexer" [color=#fff] {
+lex "Lexer" [color=#fff] {
   | tokens with byte spans // not a comment
 }
 lex -> parse, sema "label"
@@ -130,8 +130,8 @@ include "parts/x.fitd"
 Hash after equals is a color, slashes start a comment
 ================================================================================
 
-node a [color=#fff] // accent
-node b "x"
+a [color=#fff] // accent
+b "x"
 
 --------------------------------------------------------------------------------
 
@@ -151,19 +151,18 @@ node b "x"
 Macro blocks
 ================================================================================
 
-for i, s in a, b {
-  node s${i} "Step ${i}"
+for i, s in [a, "b c"] {
+  s${i} "Step ${i}"
   if i < n {
     s${i} -> s${i}x
   } else if i == 2 {
   } else {
   }
 }
-def box(id, label) {
-  box a 1
+def box(id, label=[x, y]) {
+  box(a, 1)
 }
-node in "Input"
-with -> in
+in "Input"
 
 --------------------------------------------------------------------------------
 
@@ -190,20 +189,21 @@ with -> in
     (name)
     (name)
     (name)
+    (list
+      (name)
+      (name))
     (block
-      (row_statement
+      (call_statement
         (qualified_name
           (name))
-        (qualified_name
-          (name))
-        (number))))
+        (arguments
+          (argument
+            (name))
+          (argument
+            (number))))))
   (node_statement
     (name)
-    (string))
-  (edge_statement
-    (name)
-    (edge_operator)
-    (name)))
+    (string)))
 
 ================================================================================
 Arrow chains
@@ -233,10 +233,9 @@ with stage {
   lex -> parse
 }
 with nn.block {
-  node enc
+  enc
 }
-flow.key
-font -> csp
+flow.key()
 a, b -> c
 
 --------------------------------------------------------------------------------
@@ -264,16 +263,14 @@ a, b -> c
       (name)
       (name))
     (block
-      (node_statement
-        (name))))
-  (name_statement
+      (name_statement
+        (qualified_name
+          (name)))))
+  (call_statement
     (qualified_name
       (name)
-      (name)))
-  (edge_statement
-    (name)
-    (edge_operator)
-    (name))
+      (name))
+    (arguments))
   (edge_statement
     (name)
     (name)
@@ -342,39 +339,59 @@ coffee {
           (name))))))
 
 ================================================================================
-Template rows
+Template calls
 ================================================================================
 
-tree.unit {
-  ceo Ada CEO {
-    web "Web team" 6
-  }
-  adopt 2 +
+tree.unit(ceo, Ada, CEO) {
+  tree.unit(web, "Web team", 6, k=[a, "b c",
+    ${n + 1}])
 }
+seq.msg(m, a, b, hi, "seq.reply")
 
 --------------------------------------------------------------------------------
 
 (source_file
-  (name_statement
+  (call_statement
     (qualified_name
       (name)
       (name))
+    (arguments
+      (argument
+        (name))
+      (argument
+        (name))
+      (argument
+        (name)))
     (block
-      (row_statement
+      (call_statement
         (qualified_name
+          (name)
           (name))
-        (qualified_name
-          (name))
-        (qualified_name
-          (name))
-        (block
-          (row_statement
-            (qualified_name
-              (name))
-            (string)
-            (number))))
-      (row_statement
-        (qualified_name
-          (name))
-        (number)
-        (word)))))
+        (arguments
+          (argument
+            (name))
+          (argument
+            (string))
+          (argument
+            (number))
+          (argument
+            (name)
+            (list
+              (name)
+              (string)
+              (name)))))))
+  (call_statement
+    (qualified_name
+      (name)
+      (name))
+    (arguments
+      (argument
+        (name))
+      (argument
+        (name))
+      (argument
+        (name))
+      (argument
+        (name))
+      (argument
+        (string)))))

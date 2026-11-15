@@ -57,8 +57,8 @@ Syntax details are in `fitd guide`; `docs/language.md` is the full reference. Bl
 - Theme: `theme paper|light|dark|mono` plus overrides `[background=, text=, edge=, link=, label=, root=, palette=, gradient=]`. `paper` is black text on white with Okabe-Ito borders and light tints.
 - Styles: `style NAME [attrs]` declares; `with NAME {` ... `}` applies it to every node, edge, group, and key inside. Blocks nest.
 - Constraints: `require REL` (hard, E0110 if impossible) and `prefer REL [weight=2]` (soft, W0205 if unmet). REL: `a left-of|right-of|above|below b [gap=2em]` (chainable), `a near b [within=4em]`, `a at top-left|top|...|center|...|bottom-right`, `align row(a, b)|column(..)|top(..)|bottom(..)|left(..)|right(..)`.
-- Includes: `include "file.fitd"`, `include "MOD"` (bundled), `include "user/LIB"` (`LIB.fitd` beside the file or in a `FITD_PATH` directory; call as `LIB.name ARGS`).
-- Macros: `for i in 1..n {` / `for i, x in a, b, c {` ... `}`, `if EXPR {` ... `} else {` ... `}`, `def NAME(a, b) {` ... `}` called as `NAME x "two words"` on its own line, `${expr}` in any line, `count(s, ";")`, `part(s, ";", i)`. Recursive templates should build a string and emit once. Errors on generated lines are reported at the call.
+- Includes: `include "file.fitd"`, `include "MOD"` (bundled), `include "user/LIB"` (`LIB.fitd` beside the file or in a `FITD_PATH` directory; call as `LIB.name(ARGS)`).
+- Macros: `for i in 1..n {` / `for i, x in xs {` ... `}`, `if EXPR {` ... `} else {` ... `}`, `def NAME(a, b=1) {` ... `}` called as `NAME(x, "two words", b=[p, q])` on its own line, `${expr}` in any line. Lists: `[a, b]`, `xs[i]` (from 1), `len(xs)`, `xs + ys`, `split(s, ";")`, `names(p, 1, 3)`. Recursive templates should build a list or string and emit once. Errors in generated statements are reported at the call.
 
 ## Choosing a layout
 
@@ -71,11 +71,11 @@ Syntax details are in `fitd guide`; `docs/language.md` is the full reference. Bl
 
 ## Repetition
 
-When many nodes or edges share one style, write the style once as a block: `style step [color=#0072B2]`, then `with step {` around the lines. Declaration order does not change the layout (except with `order=source`), so put each style's nodes in one block. Module styles work the same (`with nn.block {`). Templates take blocks too: `tree.unit {` holds one call per row, and a row ending in `{` holds its children. Node lines need `node` only for keyword ids (`node font`). When many nodes share one shape (numbered steps, layers, recursion trees), use `for` or `def` instead of copying lines.
+When many nodes or edges share one style, write the style once as a block: `style step [color=#0072B2]`, then `with step {` around the lines. Declaration order does not change the layout (except with `order=source`), so put each style's nodes in one block. Module styles work the same (`with nn.block {`). A call ending in `{` holds children of the node it drew: `tree.cat(s, S) { tree.word(w, she) }` links `s -> w`. Keywords (`page`, `font`, `root`, ...) cannot be node ids. When many nodes share one shape (numbered steps, layers, recursion trees), use `for` or `def` instead of copying lines.
 
 ## Standard library
 
-`fitd std` lists modules, `fitd std NAME` prints one. Include by name and call templates with the module prefix: `include "grid"`, then `grid.row "a; b; c"`. Bare words are text, digits are numbers, quotes group words; lists go in one string (text split on `;`, numbers on spaces).
+`fitd std` lists modules, `fitd std NAME` prints one. Include by name and call templates with the module prefix: `include "grid"`, then `grid.row([a, "two words", c])`. Bare words are text, digits are numbers, quotes group words or protect dots (`"seq.msg"`), lists go in `[...]`.
 
 | Module | Draws | Gallery |
 | --- | --- | --- |
@@ -90,7 +90,7 @@ When many nodes or edges share one style, write the style once as a block: `styl
 | `time` | `time.event mile chain` | 17 |
 | `seq` | `seq.actor msg reply` for `layout lanes` | 25 |
 | `venn` | `venn.two three items set` for `layout venn` | 26, 27 |
-| `algo` | `algo.block` pseudocode, `;` lines, extra spaces indent, `**` keywords | 28 |
+| `algo` | `algo.block` pseudocode, a `[...]` list of lines, leading spaces indent, `**` keywords | 28 |
 | `palette` | Okabe-Ito colors | |
 
 Gallery sources: `examples/gallery/NN-*.fitd` (also 07 network, 13 cycle, 19 mind map, 22 commutative, 23 fishbone, 24 swimlane, 29 image). `examples/showcase/` mixes modules in one figure (arch+time+flow, nn+grid, uml+arch, tree+flow). Not drawable yet: Euler diagrams, UML use-case actor glyph, dependency arcs, Sankey. Out of scope: data plots (embed as `~ image`), maps, photos, circuits.

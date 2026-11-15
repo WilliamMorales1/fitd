@@ -5,46 +5,46 @@ style tree.q [color=#E69F00, shape=box]
 style tree.leaf [color=#009E73, shape=box]
 style tree.unit [color=#0072B2, shape=box]
 
-// tree.cat id label: an inner syntax-tree node such as S, NP, or VP.
+// tree.cat(id, label): an inner syntax-tree node such as S, NP, or VP.
 def cat(id, label) {
   with tree.cat {
-    node ${id} "${label}"
+    ${id} "${label}"
   }
 }
 
-// tree.word id word: a leaf word of a syntax tree.
+// tree.word(id, word): a leaf word of a syntax tree.
 def word(id, word) {
   with tree.word {
-    node ${id} "${word}"
+    ${id} "${word}"
   }
 }
 
-// tree.q id question: a decision-tree test; label its edges with the answers.
+// tree.q(id, question): a decision-tree test; label its edges with the answers.
 def q(id, question) {
   with tree.q {
-    node ${id} "${question}"
+    ${id} "${question}"
   }
 }
 
-// tree.leaf id outcome: a decision-tree outcome.
+// tree.leaf(id, outcome): a decision-tree outcome.
 def leaf(id, outcome) {
   with tree.leaf {
-    node ${id} "${outcome}"
+    ${id} "${outcome}"
   }
 }
 
-// tree.unit id name role: an org-chart box naming a person or team and its role.
+// tree.unit(id, name, role): an org-chart box naming a person or team and its role.
 def unit(id, name, role) {
   with tree.unit {
-    node ${id} "${name}" {
+    ${id} "${name}" {
       | ${role}
     }
   }
 }
 
-// tree.kids parent kids: edges from parent to each of the `;`-separated kids, in order.
+// tree.kids(parent, kids): edges from parent to each kid, in order.
 def kids(parent, kids) {
-  for i in 1..count(kids, ";") {
-    ${parent} -> ${part(kids, ";", i)}
+  for k in kids {
+    ${parent} -> ${k}
   }
 }

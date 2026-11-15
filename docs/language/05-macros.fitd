@@ -17,41 +17,42 @@ with line {
   forr "for NAME in LO..HI" {
     | once per integer, inclusive; none when LO > HI
   }
-  forl "for NAME in a, b, \"two words\"" {
-    | once per item: words (hyphens allowed), numbers, strings
+  forl "for NAME in [a, \"two words\"]" {
+    | once per item of a list, or of values split by commas
     | for I, NAME in ...: I counts from 1
   }
-  iff "if EXPR / else if EXPR / else / end" {
+  iff "if EXPR { } else if EXPR { } else { }" {
     | runs the first arm whose condition is true
   }
-  deff "def NAME(a, b) ... end" {
+  deff "def NAME(a, b=1) { }" {
     | a template, top level only; usable before its def
     | and from included files
   }
-  call "NAME a \"two words\" $${EXPR}" {
-    | expands a template with its parameters bound
-    | a lone NAME opens a block: one call per indented row
+  call "NAME(a, \"two words\", b=[x, y])" {
+    | binds arguments by position or key; defaults fill the rest
+    | a { } block after it lands in its last node
   }
   interp "$${EXPR}" {
     | replaced by the value anywhere in a line, strings and bodies too,
-    | but not in # comments; $$${ is a literal $${
+    | but not in // comments; $$${ is a literal $${
   }
 }
 kw "Keywords" {
-  | recognized only at the start of a line, never before an edge
-  | operator, so a node named end still works in end -> start
+  | recognized only at the start of a line
+  | and reserved: a keyword never names a node
 }
 
 with expr {
   expr "Expressions" {
-    | integers and strings
+    | integers, strings, and [a, b] lists; xs[i] counts from 1
     | + - * / % (floor division, non-negative remainder)
     | == != < <= > >= (ordering on numbers only), and, or, ( )
-    | + joins strings when either side is one
+    | + joins strings when either side is one, and joins lists
     | zero and the empty string are false
   }
-  names "names(prefix, lo, hi)" {
-    | gives prefix1, prefix2, ... for node lists
+  names "len(x), split(s, sep), names(prefix, lo, hi)" {
+    | names gives [prefixlo, ..., prefixhi]; a list in a name
+    | reads a, b, c, so group "G" $${ids} takes them all
   }
   scope "Scope" {
     | values come from for variables and template parameters; no assignment
@@ -70,8 +71,8 @@ with safe {
     | templates nest at most 200 deep: E0012
   }
   diag "Diagnostics" {
-    | generated lines are shown expanded, at the template line
-    | that wrote them; columns count in the expanded text
+    | generated statements point at the call that wrote them
+    | and arguments at the argument
     | macro errors name the call sites that led there
     | an error repeated by every call is reported once
     | a line that fails to expand writes nothing,

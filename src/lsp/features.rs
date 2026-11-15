@@ -71,10 +71,7 @@ fn fence(code: &str) -> String {
 }
 
 fn signature(d: &index::Def) -> String {
-    std::iter::once(d.name.as_str())
-        .chain(d.params.iter().map(|p| p.as_str()))
-        .collect::<Vec<_>>()
-        .join(" ")
+    format!("{}({})", d.name, d.params.join(", "))
 }
 
 fn values_line(a: &docs::Attr) -> String {
@@ -558,42 +555,55 @@ pub fn color_presentation(params: &Value) -> Value {
     json!([{ "label": label, "textEdit": { "range": params["range"], "newText": label } }])
 }
 
-/// Call is a template call line: name, each argument's UTF-16 start and text, and whether a space follows the last one.
-type Call = (String, Vec<(usize, String)>, bool);
+/// Call is a template call: name, each argument's UTF-16 start, key, and text, and whether the cursor starts a new argument.
+type Call = (String, Vec<(usize, Option<String>, String)>, bool);
 
 fn call(line: &str) -> Option<Call> {
     let lead = line.len() - line.trim_start().len();
     let name = index::template_name(&line[lead..]);
     let mut i = lead + name.len();
-    if name.is_empty() || !(i == line.len() || line[i..].starts_with([' ', '\t'])) {
+    if name.is_empty() || !line[i..].starts_with('(') {
         return None;
     }
+    i += 1;
     let b = line.as_bytes();
     let mut args = Vec::new();
+    let mut fresh = true;
     while i < b.len() {
         if b[i].is_ascii_whitespace() {
             i += 1;
             continue;
         }
-        if b[i..].starts_with(b"//") {
+        if b[i] == b')' || b[i..].starts_with(b"//") {
             break;
         }
         let lo = i;
         let (mut quoted, mut depth) = (false, 0);
-        while i < b.len() && (quoted || depth > 0 || !b[i].is_ascii_whitespace()) {
+        while i < b.len() && (quoted || depth > 0 || !matches!(b[i], b',' | b')')) {
             match b[i] {
                 b'\\' if quoted => i += 1,
                 b'"' => quoted = !quoted,
-                b'{' if i > 0 && b[i - 1] == b'$' => depth += 1,
-                b'}' if depth > 0 => depth -= 1,
+                b'{' | b'[' | b'(' if !quoted => depth += 1,
+                b'}' | b']' | b')' if !quoted && depth > 0 => depth -= 1,
                 _ => {}
             }
             i += 1;
         }
         let hi = i.min(b.len());
-        args.push((line[..lo].encode_utf16().count(), line[lo..hi].to_string()));
+        let raw = line[lo..hi].trim_end();
+        let (key, val) = match raw.split_once('=') {
+            Some((k, v)) if !k.is_empty() && k.chars().all(|c| c.is_alphanumeric() || c == '_') => {
+                (Some(k.to_string()), v.trim_start().to_string())
+            }
+            _ => (None, raw.to_string()),
+        };
+        args.push((line[..lo].encode_utf16().count(), key, val));
+        fresh = i < b.len() && b[i] == b',';
+        if fresh {
+            i += 1;
+        }
     }
-    Some((name, args, line.ends_with([' ', '\t'])))
+    Some((name, args, fresh))
 }
 
 pub fn inlay_hints(doc: &Doc, params: &Value) -> Value {
@@ -612,7 +622,8 @@ pub fn inlay_hints(doc: &Doc, params: &Value) -> Value {
             continue;
         };
         let Some(d) = idx.def(&name) else { continue };
-        for ((at, arg), p) in args.iter().zip(&d.params) {
+        let positional = args.iter().filter(|a| a.1.is_none());
+        for ((at, _, arg), p) in positional.zip(&d.params) {
             if arg.trim_matches('"') == p {
                 continue;
             }
@@ -627,6 +638,22 @@ pub fn inlay_hints(doc: &Doc, params: &Value) -> Value {
     Value::Array(out)
 }
 
+/// active picks the parameter under the cursor: a keyed argument names it, else count positional ones.
+fn active(d: &index::Def, args: &[(usize, Option<String>, String)], fresh: bool) -> usize {
+    if !fresh
+        && let Some((_, Some(k), _)) = args.last()
+        && let Some(i) = d.params.iter().position(|p| p == k)
+    {
+        return i;
+    }
+    let n = args.iter().filter(|a| a.1.is_none()).count();
+    if fresh || args.is_empty() {
+        n
+    } else {
+        n.saturating_sub(1)
+    }
+}
+
 pub fn signature_help(doc: &Doc, p: &Value) -> Value {
     let (line, ch) = pos(p);
     let text = line_of(doc.text, line);
@@ -639,7 +666,7 @@ pub fn signature_help(doc: &Doc, p: &Value) -> Value {
         })
         .find(|&(u, _)| u >= ch)
         .map_or(text.len(), |(_, i)| i);
-    let Some((name, args, spaced)) = call(&text[..cut]) else {
+    let Some((name, args, fresh)) = call(&text[..cut]) else {
         return Value::Null;
     };
     let idx = doc.index();
@@ -653,7 +680,7 @@ pub fn signature_help(doc: &Doc, p: &Value) -> Value {
         .iter()
         .map(|p| {
             let r = json!([at, at + p.len()]);
-            at += p.len() + 1;
+            at += p.len() + 2;
             json!({ "label": r })
         })
         .collect();
@@ -664,7 +691,7 @@ pub fn signature_help(doc: &Doc, p: &Value) -> Value {
     json!({
         "signatures": [sig],
         "activeSignature": 0,
-        "activeParameter": if spaced { args.len() } else { args.len().saturating_sub(1) },
+        "activeParameter": active(d, &args, fresh),
     })
 }
 

@@ -2,13 +2,13 @@ title "How the solver picks a font"
 layout layered [dir=down]
 page 320x180mm [margin=1cm]
 font 8pt..28pt
-font -> csp -> fits -> bnb "range closed"
+next -> csp -> fits -> bnb "range closed"
 
 style probe [color=#0969DA]
 style fail [color=#CF222E]
 style good [color=#1A7F37]
 
-node font "Next font" {
+next "Next font" {
   | binary search between the floor and the ceiling
 }
 with probe {
@@ -40,7 +40,7 @@ with fail {
 }
 
 fits -> none "fails at the floor"
-fits ..> font "yes: go larger; no: smaller"
+fits ..> next "yes: go larger; no: smaller"
 bnb -> trade -> polish -> best
 none -> core
 

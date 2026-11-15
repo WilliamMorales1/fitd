@@ -6,14 +6,10 @@ layout layered [dir=right]
 page 16:9
 font 8pt..24pt
 
-tree.q {
-  crash "Crashes?"
-  repro "Reproducible?"
-}
-tree.leaf {
-  p0 "P0: page on-call"
-  low "Backlog"
-}
+tree.q(crash, "Crashes?")
+tree.q(repro, "Reproducible?")
+tree.leaf(p0, "P0: page on-call")
+tree.leaf(low, Backlog)
 with flow.io {
   rep "Report"
 }
@@ -30,4 +26,4 @@ repro -> bisect "yes"
 repro -> low "no"
 p0 -> bisect
 bisect -> fixed
-flow.key
+flow.key()

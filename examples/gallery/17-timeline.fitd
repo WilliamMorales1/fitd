@@ -3,13 +3,9 @@ include "time"
 layout layered [dir=right]
 page 16:9
 
-time.event {
-  t1 1957 Sputnik
-  t3 1990 Hubble
-  t4 1998 ISS
-}
-time.mile {
-  t2 1969 "Moon landing"
-  t5 2021 JWST
-}
-time.chain "t1; t2; t3; t4; t5"
+time.event(t1, 1957, Sputnik)
+time.event(t3, 1990, Hubble)
+time.event(t4, 1998, ISS)
+time.mile(t2, 1969, "Moon landing")
+time.mile(t5, 2021, JWST)
+time.chain([t1, t2, t3, t4, t5])

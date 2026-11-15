@@ -1,5 +1,5 @@
 // Okabe-Ito: eight hues that stay distinct for colour-blind readers.
-// Use as classes: node a "A"  : c1
+// Use as styles: with c1 { a "A" }
 style c1 [color=#0072B2]
 style c2 [color=#E69F00]
 style c3 [color=#009E73]

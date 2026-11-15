@@ -1,41 +1,41 @@
 // Entity-relationship diagrams: entities list attributes, links carry cardinality and crow's feet.
 // Relationships are either a plain link (er.rel) or a named diamond (er.relation).
-// Attribute lists split on `;`: "PK id; name; FK dept".
+// Attribute lists are bracketed: ["PK id", name, "FK dept"].
 style er.entity [color=#0072B2, shape=box]
 style er.weak [color=#56B4E9, shape=box]
 style er.relation [color=#E69F00, shape=diamond]
 style er.link [color=#444444]
 
-// er.entity id name attrs: an entity with its attributes, keys first.
+// er.entity(id, name, attrs): an entity with its attributes, keys first.
 def entity(id, name, attrs) {
   with er.entity {
-    node ${id} "${name}" {
-      lines ${attrs}
+    ${id} "${name}" {
+      lines(${attrs})
     }
   }
 }
 
-// er.weak id name attrs: a weak entity, identified through its owner.
+// er.weak(id, name, attrs): a weak entity, identified through its owner.
 def weak(id, name, attrs) {
   with er.weak {
-    node ${id} "${name}" {
-      lines ${attrs}
+    ${id} "${name}" {
+      lines(${attrs})
     }
   }
 }
 
-// er.rel a b card: a relationship such as "1:N" or "M:N".
+// er.rel(a, b, card): a relationship such as "1:N" or "M:N".
 def rel(a, b, card) {
-  edge ${a} ${b} ${card} ${part(card, ":", 1)} ${part(card, ":", 2)}
+  edge(${a}, ${b}, ${card}, ${split(card, ":")[1]}, ${split(card, ":")[2]})
 }
 
-// er.relation id name a b card: a named diamond joining a and b, card such as "1:N".
+// er.relation(id, name, a, b, card): a named diamond joining a and b, card such as "1:N".
 def relation(id, name, a, b, card) {
   with er.relation {
-    node ${id} "${name}"
+    ${id} "${name}"
   }
-  edge ${a} ${id} ${part(card, ":", 1)} ${part(card, ":", 1)} "1"
-  edge ${id} ${b} ${part(card, ":", 2)} "1" ${part(card, ":", 2)}
+  edge(${a}, ${id}, ${split(card, ":")[1]}, ${split(card, ":")[1]}, "1")
+  edge(${id}, ${b}, ${split(card, ":")[2]}, "1", ${split(card, ":")[2]})
 }
 
 // A crow's foot marks each end whose cardinality is not 1.
@@ -64,7 +64,7 @@ def edge(a, b, label, ta, hb) {
 }
 
 def lines(items) {
-  for i in 1..count(items, ";") {
-    | ${part(items, ";", i)}
+  for it in items {
+    | ${it}
   }
 }

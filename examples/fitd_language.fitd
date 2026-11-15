@@ -61,14 +61,14 @@ for i, s in "node", "edge", "setting" {
 // Relations: one template call per family.
 def rel(id, text, note) {
   with rule {
-    node ${id} "${text}" {
+    ${id} "${text}" {
       | ${note}
     }
   }
   sema -> ${id}
 }
-rel ord "left-of, above, near, at" "gap=, within="
-rel al align "row, column, top, left"
+rel(ord, "left-of, above, near, at", "gap=, within=")
+rel(al, align, "row, column, top, left")
 lay .. al "reads"
 with rule {
   req "require"
@@ -84,11 +84,11 @@ def probe(n) {
     probe${n} "font probe ${n}"
   }
   if n > 1 {
-    probe ${n - 1}
+    probe(${n - 1})
     probe${n} -> probe${n - 1}
   }
 }
-probe 2
+probe(2)
 solve -> probe2
 
 group "Constraints" ord, al, req, prf [color=#C62828]

@@ -7,7 +7,7 @@ style runbook_ok [color=#009E73]
 // runbook.alert(id, name, source): a page that starts an incident
 def alert(id, name, source) {
   with runbook_alert {
-    node ${id} "${name}" {
+    ${id} "${name}" {
       | from ${source}
     }
   }
@@ -16,14 +16,14 @@ def alert(id, name, source) {
 // runbook.check(id, question): a yes/no question the responder answers
 def check(id, question) {
   with runbook_check {
-    node ${id} "${question}"
+    ${id} "${question}"
   }
 }
 
 // runbook.act(id, name, owner): a step and who does it
 def act(id, name, owner) {
   with runbook_act {
-    node ${id} "${name}" {
+    ${id} "${name}" {
       | ${owner}
     }
   }
@@ -32,6 +32,6 @@ def act(id, name, owner) {
 // runbook.resolved(id): the end state
 def resolved(id) {
   with runbook_ok {
-    node ${id} "Resolved"
+    ${id} "Resolved"
   }
 }

@@ -13,7 +13,7 @@ These are the design goals from the [README](README.md#design-goals). Each one h
 | Deterministic | Same source gives byte-identical output; `committed_docs_match_a_fresh_build` enforces this |
 | One second at most for reasonable inputs | `for f in examples/gallery/*.fitd; do time fitd $f -o /tmp/x.svg; done` (release build) |
 | Expansive, reliable, easy standard library | Every common figure type below has a `std/` module and a gallery file; `gallery_and_every_std_module_compile_cleanly` passes |
-| Readable source | Templates take lists as one string (`"a; b; c"`, `"90 5 5"`), not one call per cell |
+| Readable source | Templates take lists as `[...]` arguments (`[a, b, c]`, `[90, 5, 5]`), not one call per cell |
 | Minimal text in diagrams | Stdlib templates add no captions or decoration beyond what the figure type requires |
 
 ## Working rules
@@ -29,10 +29,10 @@ These are the design goals from the [README](README.md#design-goals). Each one h
 - Stdlib modules:
   - A module lives at `src/std/NAME.fitd` and is registered in `MODULES` in `src/stdlib.rs`.
   - The first comment line is the summary printed by `fitd std`.
-  - Templates are called as `MOD.name ARGS`, so `def` names carry no prefix. Style names are global, so prefix every style with the module name (`uml.class`, `er.rel`).
-  - Every exported `def` gets a one-line comment above it in the form `// MOD.name ARGS: what it draws`.
+  - Templates are called as `MOD.name(ARGS)`, so `def` names carry no prefix. Style names are global, so prefix every style with the module name (`uml.class`, `er.rel`).
+  - Every exported `def` gets a one-line comment above it in the form `// MOD.name(ARGS): what it draws`.
   - Each module needs a gallery file and a row in the `docs/language.md` Includes table.
-- Macro helpers that recurse should accumulate a string and emit once, as `grid.heat` does with `heat_acc`. Partial lines cannot be emitted.
+- Loop over list arguments with `for x in xs { }`; a figure row takes loops inside its brackets (`~ [_, for l in labels { "${l}" }]`), as `grid.head` does. Partial lines cannot be emitted, so a recursive helper builds a list and emits once.
 
 ## What diagrams people use
 
@@ -148,7 +148,7 @@ Finished plans are removed from this file; git history has them. These parts wer
 - Default styling: docs pages and older examples still set Material colors by hand instead of the Okabe-Ito palette. The `paper` preset ships DejaVu Sans only; math falls back to DejaVu Math TeX Gyre, not a serif italic text face.
 - Grid placement: no cell spans and no equal cell sizes; a grid only aligns rows and columns. Radial layouts ignore grid order between branches and may give E0110.
 - Algorithm blocks: no monospace font. Papers mostly set algorithms with LaTeX `algorithmic` or `algorithm2e`, which use the text face with bold keywords. Add a mono face only for code listings.
-- Editor grammars: tree-sitter cannot tell a lone node, a reopened one, and a template called with no arguments apart, so all parse as `name_statement`; template rows parse as `row_statement` only when they cannot be a node line.
+- Editor grammars: tree-sitter cannot tell a lone node from a reopened one, so both parse as `name_statement`.
 
 ### 8. Dependency arcs and Sankey widths (low priority)
 

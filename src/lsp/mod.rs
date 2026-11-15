@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn modern_requests_answer() {
-        let text = "style hot [color=#C62828]\n// Pair two nodes.\ndef pair(x, y) {\n  node ${x}\n  node ${y}\n}\nwith hot {\n  a \"A\"\n}\nb\na -> b\npair c d\n";
+        let text = "style hot [color=#C62828]\n// Pair two nodes.\ndef pair(x, y) {\n  ${x}\n  ${y}\n}\nwith hot {\n  a \"A\"\n}\nb\na -> b\npair(c, d)\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str| position(text, text.rfind(s).unwrap());
@@ -759,7 +759,7 @@ mod tests {
         assert_eq!(r["changes"]["file:///x.fitd"].as_array().unwrap().len(), 2);
         assert!(features::rename(&d, &at("b\n"), "1x").is_err());
         let sig = features::signature_help(&d, &json!({ "line": 11, "character": 6 }));
-        assert_eq!(sig["signatures"][0]["label"], "pair x y");
+        assert_eq!(sig["signatures"][0]["label"], "pair(x, y)");
         assert_eq!(sig["activeParameter"], 0);
         let hints = features::inlay_hints(
             &d,
@@ -846,7 +846,7 @@ mod tests {
 
     #[test]
     fn module_templates_answer_by_qualified_name() {
-        let text = "include \"nn\"\nnn.layer e Enc d 2\nnn.\n";
+        let text = "include \"nn\"\nnn.layer(e, Enc, d, 2)\nnn.\n";
         let none = |_: &str| None;
         let d = doc("file:///m.fitd", "/m.fitd", text, &none);
         let h = features::hover(&d, &json!({ "line": 1, "character": 4 }), &[]);
@@ -854,11 +854,14 @@ mod tests {
             h["contents"]["value"]
                 .as_str()
                 .unwrap()
-                .contains("nn.layer id"),
+                .contains("nn.layer(id"),
             "{h}"
         );
-        let sig = features::signature_help(&d, &json!({ "line": 1, "character": 12 }));
-        assert_eq!(sig["signatures"][0]["label"], "nn.layer id name dims times");
+        let sig = features::signature_help(&d, &json!({ "line": 1, "character": 13 }));
+        assert_eq!(
+            sig["signatures"][0]["label"],
+            "nn.layer(id, name, dims, times)"
+        );
         assert_eq!(sig["activeParameter"], 1);
         let items = features::completion(&d, &json!({ "line": 2, "character": 3 }), false);
         let labels: Vec<&str> = items
@@ -871,7 +874,7 @@ mod tests {
             labels.contains(&"input") && labels.contains(&"layer"),
             "{labels:?}"
         );
-        let rows = "include \"nn\"\nnn.layer {\n  e Enc d 2\n}\nnn.step s Pool\n";
+        let rows = "include \"nn\"\nnn.layer(e, Enc, d, 2) {\n  x\n}\nnn.step(s, Pool)\n";
         let d = doc("file:///r.fitd", "/r.fitd", rows, &none);
         for line in [1, 4] {
             let h = features::hover(&d, &json!({ "line": line, "character": 4 }), &[]);

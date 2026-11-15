@@ -17,16 +17,16 @@ def stage(i, name, file, kind) {
   }
 }
 
-stage 1 Include "include.rs: splice files line for line; a segment table maps every line back to its file" front
-stage 2 Expand "macros.rs: for, if, def, template calls within a step budget; each input line keeps one raw copy, generated lines map to their template line" front
-stage 3 Lex "lex.rs: tokens with byte spans; newlines are tokens" front
-stage 4 Parse "parse.rs, ast.rs: recursive descent; a bad line is reported and skipped" front
-stage 5 Analyze "sema.rs: declarations, then references; styles, typed values, units, did-you-mean, E0008" front
-stage 6 Plan "radial.rs, layered.rs: measure boxes with real font metrics, propose candidate positions" solver
-stage 7 Solve "csp.rs, layout/: the largest font that fits; see the next page" solver
-stage 8 Polish "quality.rs: annealing for fewer crossings, related nodes close, branches grouped, edges fanned, ink spread" solver
-stage 9 Check "check.rs: recompute every property from the finished layout; any error stops output" back
-stage 10 Emit "emit.rs: SVG, PNG via resvg, TikZ, all at absolute positions; none re-flows text" back
+stage(1, Include, "include.rs: splice files line for line; a segment table maps every line back to its file", front)
+stage(2, Expand, "macros.rs: for, if, def, template calls within a step budget; each input line keeps one raw copy, generated lines map to their template line", front)
+stage(3, Lex, "lex.rs: tokens with byte spans; newlines are tokens", front)
+stage(4, Parse, "parse.rs, ast.rs: recursive descent; a bad line is reported and skipped", front)
+stage(5, Analyze, "sema.rs: declarations, then references; styles, typed values, units, did-you-mean, E0008", front)
+stage(6, Plan, "radial.rs, layered.rs: measure boxes with real font metrics, propose candidate positions", solver)
+stage(7, Solve, "csp.rs, layout/: the largest font that fits; see the next page", solver)
+stage(8, Polish, "quality.rs: annealing for fewer crossings, related nodes close, branches grouped, edges fanned, ink spread", solver)
+stage(9, Check, "check.rs: recompute every property from the finished layout; any error stops output", back)
+stage(10, Emit, "emit.rs: SVG, PNG via resvg, TikZ, all at absolute positions; none re-flows text", back)
 
 s7 ..> s1 "E0110 core at source lines"
 

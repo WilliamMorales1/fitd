@@ -27,7 +27,7 @@ Source          = { Newline | Statement, Newline | "}", Newline } ;
 
 Statement       = Title | Root | Layout | Page | Font | Theme | Style
                 | Node | Body | Cells | Edge | Group | Key | Constraint | Include
-                | With ;
+                | With | Call ;
 
 Title           = "title", String ;
 Root            = "root", Name ;
@@ -37,7 +37,10 @@ Font            = "font", Value, [ Attributes ] ;
 Theme           = "theme", [ Name ], [ Attributes ] ;
 Style           = "style", QualName, [ Attributes ] ;
 With            = "with", QualName, [ "{" ] ;
-Node            = [ "node" ], Name, [ String ], [ Attributes ], [ "{" ] ;
+Node            = Name, [ String ], [ Attributes ], [ "{" ] ;
+Call            = QualName, "(", [ Arg, { ",", Arg } ], ")", [ "{" ] ;
+Arg             = [ Name, "=" ], ( Name | Number | String | ArgList | "${", Expr, "}" ) ;
+ArgList         = "[", [ Arg, { ",", Arg } ], "]" ;
 Body            = BodyLine ;
 Cells           = "~", ( CellList | "image", String, [ Attributes ] ) ;
 CellList        = "[", Cell, { ",", Cell }, "]" ;
@@ -82,7 +85,7 @@ AsciiDigit      = "0" … "9" ;
 HexDigit        = AsciiDigit | "A" … "F" | "a" … "f" ;
 ```
 
-A node or `with` line that ends in `{` opens a block, and a line holding only `}` closes the innermost one. Statements inside a block take its scope, described under Node declarations and Style blocks. A `{` after any other statement, a `}` with no open block, and a `{` never closed are errors.
+A node, call, or `with` line that ends in `{` opens a block, and a line holding only `}` closes the innermost one. Statements inside a block take its scope, described under Node declarations and Style blocks. A `{` after any other statement, a `}` with no open block, and a `{` never closed are errors.
 
 `RelationChain` uses names for both node identifiers and relation operators. Valid operators are `left-of`, `right-of`, `above`, `below`, and `near`. Each operator relates adjacent nodes; for example, `a above b left-of c` specifies two relations. `Position` uses `at` followed by a supported position name.
 
@@ -100,7 +103,7 @@ Whitespace separates tokens. Spaces and tabs may appear between tokens. Whitespa
 
 ### Node declarations and body lines
 
-`ID ["title"] [[attributes]]` declares a node. When title is omitted, identifier is used as title. The `node` keyword is optional; it is needed only for an identifier that is also a statement keyword (`node font "Font"`) and for an untitled node that should not reopen one declared earlier (`node a`).
+`ID ["title"] [[attributes]]` declares a node. When title is omitted, identifier is used as title. Statement and macro keywords (`page`, `font`, `group`, `for`, `def`, ...) are reserved and cannot name a node (E0002).
 
 A node line ending in `{` opens the node's block. A node declared inside the block is its child: the parent gets an edge to it, `--` in a radial layout (the default) and `->` in the others. A line that starts with an edge operator inside a node's block is an edge from that node, so `-> b "yes"` inside `a { }` means `a -> b "yes"`. A line holding only a declared node's identifier reopens it (`a {` adds children to `a`) and, inside another node's block, also links that node to it. Body lines and figure rows inside the block describe the node. A `with` block inside a node keeps the node's scope, so a whole branch can take a style:
 
@@ -135,7 +138,7 @@ with plant {
   leaf "Leaf" [color=#2E7D32] {
     | converts light into stored energy
   }
-  root "Root"
+  stem "Stem"
 }
 ```
 
@@ -377,25 +380,23 @@ b, c -> d
 
 `include "PATH"` inserts source file before macro expansion and parsing. Path is resolved relative to including file. Every `include` must come before the file's other statements, as Go requires for `import`; comments may precede it. Include cycles, missing files, and a late `include` produce E0011.
 
-A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name ARGS` on a line of its own. Styles are global and keep the module prefix; `with nn.layer {` applies style `nn.layer`.
+A bare name with no `/` or `.`, such as `include "nn"`, names a module of the bundled library instead of a file on disk, so it resolves the same way from any directory. `fitd std` lists the modules and `fitd std NAME` prints one. A module's templates are called by module name, as `MOD.name(ARGS)` on a line of its own. Styles are global and keep the module prefix; `with nn.layer {` applies style `nn.layer`.
 
-`MOD.name a "Two words" 3` passes its words as arguments. A bare word is text, a run of digits is a number, quotes group text with spaces or symbols, and a word that is only `${expr}` passes the value itself, so `f ${n + 1}` passes a number. A template name followed by an edge operator is a node, not a call. A call ending in `{` opens a template block, and `MOD.name {` opens one with no call of its own: each line inside it is one call, and a row may start with another template name to call that one instead. A row ending in `{` holds its children, linked the way a nested node line is, so trees need no edge lines:
+`MOD.name(a, "Two words", 3, cells=[x, y])` passes its arguments by position or by `key=`; parameters left out take their defaults. A bare word is text, a run of digits is a number, quotes group text with spaces or symbols, `[a, b]` is a list, and `${expr}` passes the value itself, so `f(${n + 1})` passes a number. Dotted words such as style names are quoted: `"seq.msg"`. A call ending in `{` opens a block that lands in the last node the template declared, so nested calls build trees with no edge lines:
 
 ```fitd
 include "tree"
 layout layered [order=source]
 
-tree.cat s S {
-  np NP {
-    tree.word she she
+tree.cat(s, S) {
+  tree.cat(np, NP) {
+    tree.word(she, she)
   }
-  vp VP {
-    tree.word saw saw
+  tree.cat(vp, VP) {
+    tree.word(saw, saw)
   }
 }
 ```
-
-Rows are read after `${...}` substitution, so they work inside loops and templates.
 
 | Module    | Contents                                                                                                                                                                                                                                                   |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -418,22 +419,22 @@ Rows are read after `${...}` substitution, so they work inside loops and templat
 ```fitd
 include "nn"
 
-nn.input x Tokens "B x L"
-nn.layer e Encoder "d 64" 2
+nn.input(x, Tokens, "B x L")
+nn.layer(e, Encoder, "d 64", 2)
 with nn.block {
   block "Block"
 }
-nn.mask m "Causal mask" 4 1
+nn.mask(m, "Causal mask", 4, 1)
 x -> e -> m
 ```
 
-`include "user/LIB"` reads `LIB.fitd` from the including file's directory, or else from the first directory in the `FITD_PATH` environment variable (a `:`-separated list, `;` on Windows) that has it, and treats it as a library: its templates are called as `LIB.name ARGS`, the same way as bundled modules, and inside the library they can be called unqualified as `name ARGS`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and open a block with `LIB.box` for style `LIB.box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
+`include "user/LIB"` reads `LIB.fitd` from the including file's directory, or else from the first directory in the `FITD_PATH` environment variable (a `:`-separated list, `;` on Windows) that has it, and treats it as a library: its templates are called as `LIB.name(ARGS)`, the same way as bundled modules, and inside the library they can be called unqualified as `name(ARGS)`. `LIB` is a single name of letters, digits, and `_`. A library or module is spliced once even when several files include it, so libraries can share a dependency. Name its styles with the library prefix and open a block with `LIB.box` for style `LIB.box`, since styles are global. [examples/library](../examples/library/) builds an on-call flow from `runbook.fitd`:
 
 ```fitd
 include "user/runbook"
 
-runbook.check deploy "Deploy in last hour?"
-runbook.act rollback "Roll back" on-call
+runbook.check(deploy, "Deploy in last hour?")
+runbook.act(rollback, "Roll back", "on-call")
 deploy -> rollback "yes"
 ```
 
@@ -441,15 +442,18 @@ deploy -> rollback "yes"
 
 ![Macro directives, expressions, scope, and expansion limits](language/05-macros.png)
 
-Macro processing provides `for`, `if`/`else if`/`else`, `def NAME(a, b)` templates, template calls and blocks (`NAME a b`, `MOD.name a b`, `MOD.name {` over rows), and `${expression}` interpolation. Macro blocks are braced: `for i in 1..3 {`, `if X {`, `} else if Y {`, `} else {`, `def f(a) {`, each closed by `}`. A template body may open blocks it closes itself; its output lands where it is called, inside any open node or `with` block. Macro expressions support integer and string values, arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
+Macro processing provides `for`, `if`/`else if`/`else`, `def NAME(a, b=1)` templates, template calls (`NAME(a, b)`, `MOD.name(a, b) {`), and `${expression}` interpolation. Macro blocks are braced: `for i in 1..3 {`, `for x in xs {`, `if X {`, `} else if Y {`, `} else {`, `def f(a) {`, each closed by `}`. A template body may open blocks it closes itself; its output lands where it is called, inside any open node or `with` block. Macro expressions support integer, string, and list values (`[a, b]`, `xs[i]` from 1, `+` joins lists), arithmetic, comparisons, boolean operators, function calls, and ranges. `${expression}` substitutes expression result into generated source, except inside comments. Expansion is bounded by `--expand-budget`; exceeding limit produces E0013.
 
-Built-in functions: `names(prefix, lo, hi)` gives `prefix1, prefix2, ...` for node lists. `count(s, sep)` gives the number of fields in `s`; `part(s, sep, i)` gives field `i`, counted from 1, without trailing spaces or the one space after the separator. Further leading spaces stay, so a `|` body line built from a field keeps its indent. A whitespace separator splits on runs of whitespace, and an empty string has no fields, so templates can take lists as one string:
+Built-in functions: `len(x)` counts list items or string characters. `split(s, sep)` gives the fields of `s` as a list, without trailing spaces or the one space after the separator. `names(prefix, lo, hi)` gives `[prefixlo, ..., prefixhi]`. A list in `${}` reads `a, b, c`, so `group "G" ${ids}` takes every name. Templates take lists as `[...]` arguments and loop over them:
 
 ```fitd
 def row(cells) {
-  for i in 1..count(cells, ";") {
-    | ${part(cells, ";", i)}
+  for c in cells {
+    | ${c}
   }
+}
+t "Steps" {
+  row([one, "two words", three])
 }
 ```
 

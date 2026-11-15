@@ -3,51 +3,39 @@ style venn.a [color=#E69F00]
 style venn.b [color=#0072B2]
 style venn.c [color=#009E73]
 
-// venn.items id items: one node per `;`-separated item, with ids id1, id2, ...
+// venn.items(id, items): one node per item, with ids id1, id2, ...
 def items(id, items) {
-  for i in 1..count(items, ";") {
-    node ${id}${i} "${part(items, ";", i)}"
+  for i, it in items {
+    ${id}${i} "${it}"
   }
 }
 
-// venn.set title style ids: a set holding the `,`-separated ids, blanks skipped.
+// venn.set(title, style, ids): a set holding the listed node ids.
 def set(title, style, ids) {
-  set_acc ${title} ${style} "" ${ids} 1
-}
-
-def set_acc(title, style, acc, ids, i) {
-  if i > count(ids, ",") {
-    with ${style} {
-      group "${title}" ${acc}
-    }
-  } else if part(ids, ",", i) == "" {
-    set_acc ${title} ${style} ${acc} ${ids} ${i + 1}
-  } else if acc == "" {
-    set_acc ${title} ${style} ${part(ids, ",", i)} ${ids} ${i + 1}
-  } else {
-    set_acc ${title} ${style} ${acc + ", " + part(ids, ",", i)} ${ids} ${i + 1}
+  with ${style} {
+    group "${title}" ${ids}
   }
 }
 
-// venn.two a b only_a both only_b: two sets with `;`-separated items per region.
+// venn.two(a, b, only_a, both, only_b): two sets with the items in each region.
 def two(a, b, xa, xab, xb) {
-  items venn_a ${xa}
-  items venn_b ${xb}
-  items venn_ab ${xab}
-  set ${a} venn.a ${names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";"))}
-  set ${b} venn.b ${names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";"))}
+  items(venn_a, ${xa})
+  items(venn_b, ${xb})
+  items(venn_ab, ${xab})
+  set(${a}, "venn.a", ${names("venn_a", 1, len(xa)) + names("venn_ab", 1, len(xab))})
+  set(${b}, "venn.b", ${names("venn_b", 1, len(xb)) + names("venn_ab", 1, len(xab))})
 }
 
-// venn.three a b c only_a only_b only_c ab ac bc abc: three sets with `;`-separated items per region.
+// venn.three(a, b, c, only_a, only_b, only_c, ab, ac, bc, abc): three sets with the items in each region.
 def three(a, b, c, xa, xb, xc, xab, xac, xbc, xabc) {
-  items venn_a ${xa}
-  items venn_b ${xb}
-  items venn_c ${xc}
-  items venn_ab ${xab}
-  items venn_ac ${xac}
-  items venn_bc ${xbc}
-  items venn_abc ${xabc}
-  set ${a} venn.a ${names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_abc", 1, count(xabc, ";"))}
-  set ${b} venn.b ${names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";"))}
-  set ${c} venn.c ${names("venn_c", 1, count(xc, ";")) + "," + names("venn_ac", 1, count(xac, ";")) + "," + names("venn_bc", 1, count(xbc, ";")) + "," + names("venn_abc", 1, count(xabc, ";"))}
+  items(venn_a, ${xa})
+  items(venn_b, ${xb})
+  items(venn_c, ${xc})
+  items(venn_ab, ${xab})
+  items(venn_ac, ${xac})
+  items(venn_bc, ${xbc})
+  items(venn_abc, ${xabc})
+  set(${a}, "venn.a", ${names("venn_a", 1, len(xa)) + names("venn_ab", 1, len(xab)) + names("venn_ac", 1, len(xac)) + names("venn_abc", 1, len(xabc))})
+  set(${b}, "venn.b", ${names("venn_b", 1, len(xb)) + names("venn_ab", 1, len(xab)) + names("venn_bc", 1, len(xbc)) + names("venn_abc", 1, len(xabc))})
+  set(${c}, "venn.c", ${names("venn_c", 1, len(xc)) + names("venn_ac", 1, len(xac)) + names("venn_bc", 1, len(xbc)) + names("venn_abc", 1, len(xabc))})
 }
