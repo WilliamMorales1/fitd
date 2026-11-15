@@ -1,4 +1,5 @@
 mod ast;
+mod attrs;
 mod check;
 mod csp;
 mod diag;
@@ -49,7 +50,8 @@ const USAGE: &str = "usage:
   fitd import <file.dot|file.mmd|file.d2> [-o out.fitd]   translate Graphviz, Mermaid, or D2
   fitd split <input.fitd> [-o DIR]   an overview page plus one page per top-level branch
   fitd guide            the whole language on one page, with examples
-  fitd std [NAME]       list the bundled library, or print one module";
+  fitd std [NAME]       list the bundled library, or print one module
+  fitd docs attrs       every attribute: statements, key, values, meaning";
 
 const GUIDE: &str = include_str!("guide.txt");
 type PdfPage = (String, metrics::Fonts, (f64, f64));
@@ -121,6 +123,10 @@ fn run(args: &[String]) -> FitdResult<ExitCode> {
                 write(&p.to_string_lossy(), text.as_bytes())?;
                 eprintln!("wrote {}", p.display());
             }
+            Ok(ExitCode::SUCCESS)
+        }
+        Some("docs") if args.get(1).map(String::as_str) == Some("attrs") => {
+            print!("{}", attrs::table());
             Ok(ExitCode::SUCCESS)
         }
         Some("guide") => {

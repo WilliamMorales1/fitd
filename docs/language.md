@@ -310,6 +310,8 @@ A ratio `W:H` such as `16:9`, `4:3`, or `1.414:1` fixes only the page shape. fit
 
 On nodes, edges, and groups, `color`, `fill`, and `text` specify border, fill, and text colors where supported. `shape` accepts `box`, `circle`, `diamond`, or `none` for nodes and styles, and `stack` accepts 1 to 8 copies for nodes and styles. `shape=none` draws the text and figure with no frame or fill, for margin annotations and lane labels; such a node still participates in layout, edges, and constraints. Attribute support depends on statement kind; unknown or ill-typed attributes produce diagnostics.
 
+`theme` overrides take colors: `background=` (page, also behind labels), `text=`, `edge=` (`->` and `--` edges), `link=` (`..>` and `..` cross-links), `label=` (edge labels), `root=` (root node fill), and `palette="#0072B2 #D55E00"` (accents cycled over nodes). `fitd docs attrs` lists every attribute on every statement.
+
 `gradient=COLOR` on `theme` paints the page with a diagonal gradient from `background` to `COLOR`. `background` remains the solid color used behind labels.
 
 ```fitd

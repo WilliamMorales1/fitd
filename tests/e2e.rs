@@ -2444,3 +2444,21 @@ wm -> wt, wp
     ]);
     assert!(ok && log.contains(" 0 errors"), "{log}");
 }
+
+#[test]
+fn language_doc_lists_every_attribute() {
+    let out = Command::new(env!("CARGO_BIN_EXE_fitd"))
+        .args(["docs", "attrs"])
+        .output()
+        .unwrap();
+    let out = String::from_utf8(out.stdout).unwrap();
+    assert!(out.lines().count() > 30, "{out}");
+    let doc = std::fs::read_to_string("docs/language.md").unwrap();
+    for line in out.lines() {
+        let key = line.split([' ', ':']).nth(1).unwrap();
+        assert!(
+            doc.contains(&format!("{key}=")),
+            "docs/language.md never shows `{key}=`"
+        );
+    }
+}

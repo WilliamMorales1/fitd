@@ -195,8 +195,7 @@ struct Look {
     dash: Option<Dash>,
 }
 
-const HEADS: &[&str] = &["arrow", "triangle", "diamond", "odiamond", "crow", "none"];
-const DASHES: &[&str] = &["solid", "dashed", "dotted"];
+use crate::attrs::{DASHES, HEADS, keys};
 /// EDGE_ONLY attributes style edges and key lines, never nodes.
 const EDGE_ONLY: &[&str] = &["head", "tail", "line"];
 
@@ -316,13 +315,7 @@ fn look(attrs: &[Attr], l: &mut Look, diags: &mut Vec<Diag>) {
                 Diag::error("E0006", "expected `solid`, `dashed`, or `dotted`")
                     .primary(v.span(), "wrong type or unit"),
             ),
-            _ => diags.push(bad_attr(
-                a,
-                &[
-                    "color", "fill", "text", "shape", "stack", "wrap", "place", "head", "tail",
-                    "line",
-                ],
-            )),
+            _ => diags.push(bad_attr(a, &keys("style"))),
         }
     }
 }
@@ -790,7 +783,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     match a.key.text.as_str() {
                         "margin" => set.margin = s.abs_len(&a.value).or(set.margin),
                         "keysize" => set.key_size = s.abs_len(&a.value).or(set.key_size),
-                        _ => s.diags.push(bad_attr(a, &["margin", "keysize"])),
+                        _ => s.diags.push(bad_attr(a, &keys("page"))),
                     }
                 }
             }
@@ -828,7 +821,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                                 "expected a quoted font family like `\"Inter\"`".into(),
                             ),
                         },
-                        _ => s.diags.push(bad_attr(a, &["wrap", "family"])),
+                        _ => s.diags.push(bad_attr(a, &keys("font"))),
                     }
                 }
             }
@@ -882,13 +875,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                     }
                 }
                 for a in &edge_only {
-                    s.diags.push(bad_attr(
-                        a,
-                        &[
-                            "color", "fill", "text", "shape", "stack", "wrap", "place", "lane",
-                            "row", "col",
-                        ],
-                    ));
+                    s.diags.push(bad_attr(a, &keys("node")));
                 }
                 look(&own, &mut l, &mut s.diags);
                 let n = &mut s.nodes[v];
@@ -927,13 +914,11 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                 apply_styles(&mut s, &mut styles, classes, &mut l);
                 on_other.extend(classes.iter().map(|c| c.text.clone()));
                 for a in attrs {
-                    match a.key.text.as_str() {
-                        "color" | "head" | "tail" | "line" => {
-                            look(std::slice::from_ref(a), &mut l, &mut s.diags)
-                        }
-                        _ => s
-                            .diags
-                            .push(bad_attr(a, &["color", "head", "tail", "line"])),
+                    let allowed = keys("edge");
+                    if allowed.contains(&a.key.text.as_str()) {
+                        look(std::slice::from_ref(a), &mut l, &mut s.diags)
+                    } else {
+                        s.diags.push(bad_attr(a, &allowed))
                     }
                 }
                 let mut end = |n: &Name| match group_ids.contains_key(&n.text)
@@ -1009,7 +994,7 @@ pub fn analyze(stmts: &[Stmt]) -> (Graph, Vec<Diag>) {
                             Diag::error("E0006", "expected a whole number of repeats, 2 to 99")
                                 .primary(v.span(), "wrong type or unit"),
                         ),
-                        _ => s.diags.push(bad_attr(a, &["color", "times"])),
+                        _ => s.diags.push(bad_attr(a, &keys("group"))),
                     }
                 }
                 // `Nx` in front of the title is how a repeated stack is marked in the literature.
@@ -1455,7 +1440,7 @@ fn theme_overrides(attrs: &[Attr], diags: &mut Vec<Diag>) -> Overrides {
                 continue;
             }
             _ => {
-                diags.push(bad_attr(a, theme::KEYS));
+                diags.push(bad_attr(a, &keys("theme")));
                 continue;
             }
         };

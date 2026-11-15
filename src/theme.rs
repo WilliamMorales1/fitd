@@ -27,17 +27,6 @@ pub struct Overrides {
     pub palette: Option<Vec<String>>,
 }
 
-pub const KEYS: &[&str] = &[
-    "background",
-    "gradient",
-    "text",
-    "edge",
-    "link",
-    "label",
-    "root",
-    "palette",
-];
-
 fn strs(xs: &[&str]) -> Vec<String> {
     xs.iter().map(|s| s.to_string()).collect()
 }
