@@ -1,4 +1,4 @@
-# Decision tree (ML papers, clinical guidelines).
+// Decision tree (ML papers, clinical guidelines).
 include "tree"
 layout layered
 page 4:3

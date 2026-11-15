@@ -1,4 +1,4 @@
-# fitd described in fitd: one of each kind of statement, in a small diagram.
+// fitd described in fitd: one of each kind of statement, in a small diagram.
 title "fitd, in fitd"
 include "shared/lang_styles.fitd"
 layout layered dir=right
@@ -25,7 +25,7 @@ stage
 src -> expand -> parse -> sema -> lay -> solve -> emit "one format per -o"
 expand ..> sema "errors point at the template line" color=#C62828
 
-# Statements: a loop over a list with an index and a branch per kind.
+// Statements: a loop over a list with an index and a branch per kind.
 for i, s in "node", "edge", "setting"
   if s == "node"
     stage
@@ -40,7 +40,7 @@ for i, s in "node", "edge", "setting"
   parse -> st${i}
 end
 
-# Relations: one template call per family.
+// Relations: one template call per family.
 def rel(id, text, note)
   rule
     node ${id} "${text}"
@@ -56,7 +56,7 @@ rule
   | weight=2
 sema -- req, prf
 
-# The solver probes fonts from the top; a recursive template writes the probes.
+// The solver probes fonts from the top; a recursive template writes the probes.
 def probe(n)
   note
     probe${n} "font probe ${n}"

@@ -1,4 +1,4 @@
-# UML class diagram (Reggio et al.: most used UML diagram; Nickerson: most common UML type).
+// UML class diagram (Reggio et al.: most used UML diagram; Nickerson: most common UML type).
 include "uml"
 layout layered
 page 4:3

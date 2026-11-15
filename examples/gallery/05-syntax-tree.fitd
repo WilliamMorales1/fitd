@@ -1,4 +1,4 @@
-# Syntax tree (ACL-Fig: NLP grammar examples, trees).
+// Syntax tree (ACL-Fig: NLP grammar examples, trees).
 include "tree"
 layout layered order=source
 page 4:3

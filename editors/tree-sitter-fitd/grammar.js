@@ -1,6 +1,6 @@
 /**
  * Tree-sitter grammar for fitd diagram sources. Mirrors parse.rs and the macro lines of macros.rs: one
- * statement per line, `#` comments except right after `=`, where it starts a color.
+ * statement per line, `//` comments; `#` right after `=` starts a color.
  */
 const KEYWORDS = ['title', 'root', 'layout', 'page', 'font', 'theme', 'style', 'node', 'key', 'group',
   'include', 'require', 'prefer', 'for', 'if', 'else', 'end', 'def'];
@@ -86,7 +86,7 @@ module.exports = grammar({
     row_statement: $ => prec.dynamic(-1, seq(field('name', choice($.qualified_name, $.string, $.number, $.word)), repeat1(field('argument', $._row_word)))),
     _row_word: $ => choice($.name, $.string, $.number, $.word),
     word: _ => token(prec(-1, /[^\s"#=.]+(\.[^\s"#=.]+)*/)),
-    expression: _ => token(prec(-1, /[^\n#]+/)),
+    expression: _ => token(prec(-1, /([^\n\/]|\/[^\n\/])+/)),
 
     edge_operator: _ => choice('->', '--', '..>', '..'),
     _targets: $ => seq(field('to', $.name), repeat(seq(optional(','), field('to', $.name)))),
@@ -108,6 +108,6 @@ module.exports = grammar({
     string: _ => /"([^"\\\n$]|\$\{[^}\n]*\}|\$|\\[^\n])*"/,
     number: _ => /[0-9]([\p{L}\p{N}]|[.:][0-9])*/,
     color: _ => token.immediate(prec(1, /#[0-9a-fA-F]*/)),
-    comment: _ => token(seq('#', /[^\n]*/)),
+    comment: _ => token(seq('//', /[^\n]*/)),
   },
 });

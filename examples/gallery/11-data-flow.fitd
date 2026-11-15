@@ -1,4 +1,4 @@
-# Data-flow diagram (Nickerson: flow, 80 of 983).
+// Data-flow diagram (Nickerson: flow, 80 of 983).
 include "arch"
 layout layered dir=right
 page 3:1

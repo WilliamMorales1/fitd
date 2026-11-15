@@ -85,7 +85,7 @@ pub fn lex(text: &str) -> (Vec<Token>, Vec<Diag>) {
                 i += 1;
             }
             push(&mut toks, Tok::Color, i);
-        } else if c == '#' {
+        } else if c == '/' && at(i + 1) == Some('/') {
             while at(i).is_some_and(|c| c != '\n') {
                 i += 1;
             }
@@ -216,7 +216,7 @@ mod tests {
     fn numbers_colors_comments_bodies() {
         use Tok::*;
         assert_eq!(
-            kinds("font 7pt..48pt # c"),
+            kinds("font 7pt..48pt // c"),
             vec![Ident, Num, DotDot, Num, Newline, Eof]
         );
         assert_eq!(
@@ -224,8 +224,8 @@ mod tests {
             vec![Ident, Ident, Eq, Color, Newline, Eof]
         );
         assert_eq!(
-            kinds("| a = b # not a comment"),
-            vec![Body("a = b # not a comment".into()), Newline, Eof]
+            kinds("| a = b // not a comment"),
+            vec![Body("a = b // not a comment".into()), Newline, Eof]
         );
         assert_eq!(kinds("page 2296x1524pt"), vec![Ident, Num, Newline, Eof]);
     }

@@ -1,4 +1,4 @@
-# Entity-relationship diagram (Nickerson: ERD, static structure).
+// Entity-relationship diagram (Nickerson: ERD, static structure).
 include "er"
 layout layered dir=right
 page 3:1

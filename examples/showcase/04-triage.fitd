@@ -1,4 +1,4 @@
-# A triage guide: a decision tree whose leaves hand off to flowchart steps.
+// A triage guide: a decision tree whose leaves hand off to flowchart steps.
 include "tree"
 include "flow"
 title "Bug triage"

@@ -1,4 +1,4 @@
-# Swimlane activity diagram (Reggio et al.). Each group is a lane, in declaration order.
+// Swimlane activity diagram (Reggio et al.). Each group is a lane, in declaration order.
 include "flow"
 layout lanes
 page 4:3

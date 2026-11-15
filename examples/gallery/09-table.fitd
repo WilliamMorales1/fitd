@@ -1,4 +1,4 @@
-# Results table (DocFigure, ACL-Fig: tables).
+// Results table (DocFigure, ACL-Fig: tables).
 include "grid"
 page 4:3
 font 9pt..28pt

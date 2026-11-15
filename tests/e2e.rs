@@ -1642,7 +1642,7 @@ fn figure_rows_draw_cells_and_need_a_node() {
     let grid = tmp("figgrid.fitd");
     std::fs::write(
         &grid,
-        "node a \"A\"\n~ # . _ GLU\n~ #\"two words\" . . .\nnode b\na -> b\n",
+        "node a \"A\"\n~ %100 . _ GLU\n~ %100\"two words\" . . .\nnode b\na -> b\n",
     )
     .unwrap();
     let count = |src: &std::path::Path, out: &str| {
@@ -1670,7 +1670,7 @@ fn figure_rows_draw_cells_and_need_a_node() {
     assert!(std::fs::read_to_string(&tex).unwrap().contains("GLU"));
 
     let orphan = tmp("figorphan.fitd");
-    std::fs::write(&orphan, "~ # .\nnode a\nnode b\na -> b\n").unwrap();
+    std::fs::write(&orphan, "~ %100 .\nnode a\nnode b\na -> b\n").unwrap();
     let (ok, log) = fitd(&[
         orphan.to_str().unwrap(),
         "-o",
@@ -1696,7 +1696,7 @@ fn shaded_cells_span_columns_and_nodes_stack() {
             .collect();
         (svg, w)
     };
-    let (svg, _) = widths("node a \"A\"\n~ %60 %0 #\n node b\na -> b\n", "figshade");
+    let (svg, _) = widths("node a \"A\"\n~ %60 %0 %100\n node b\na -> b\n", "figshade");
     assert!(svg.contains("fill-opacity=\"0.60\""), "no 60% cell\n{svg}");
     assert!(
         svg.contains("fill-opacity=\"1.00\""),
@@ -1704,7 +1704,7 @@ fn shaded_cells_span_columns_and_nodes_stack() {
     );
 
     let (_, wide) = widths(
-        "node a \"A\"\n~ . . .\n~ #\"x\"*3\nnode b\na -> b\n",
+        "node a \"A\"\n~ . . .\n~ %100\"x\"*3\nnode b\na -> b\n",
         "figspan",
     );
     let cell = wide.iter().copied().fold(f64::NAN, f64::min);
@@ -1789,7 +1789,7 @@ fn user_libraries_are_included_beside_the_file() {
     // A library calls templates it includes by their module name, and a shared library splices once.
     write(
         "shapes.fitd",
-        "# shapes: boxes for tests\ninclude \"user/base\"\ndef pill(id, name)\nbase.tag ${id} ${name}\nend\n",
+        "// shapes: boxes for tests\ninclude \"user/base\"\ndef pill(id, name)\nbase.tag ${id} ${name}\nend\n",
     );
     write(
         "base.fitd",

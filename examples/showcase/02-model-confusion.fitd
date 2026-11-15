@@ -1,4 +1,4 @@
-# A results page: model diagram, confusion matrix, and a Venn of error overlap together.
+// A results page: model diagram, confusion matrix, and a Venn of error overlap together.
 include "nn"
 include "grid"
 title "Classifier and its errors"

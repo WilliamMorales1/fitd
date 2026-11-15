@@ -5,35 +5,35 @@ Book:   fitd A.fitd B.fitd -o out.pdf
 Stdin:  fitd - -o out.svg <<'EOF' ... EOF
 Exit 0: written; errors on stderr.
 
-Syntax: one statement per line, # comment.
-  ID "Title" row=1 col=2        # ID: letters digits _ inner -; keyword: node ID
-    KID "Kid"                   # child: ID->KID (radial --)
-    -> x "label"                # edge from ID; lone ID reopens it
-  STYLE                         # lines indented under: STYLE (or nn.block)
-  | body line                   # under node; lead spaces indent; **bold**
-  ~ # %60 . _ LBL "two words"   # figure row: # solid %NN shade . outline _ gap, else label
-                                #   LBL*3: 3 columns; rows grid up: strips, heatmaps
-  ~ image "plot.png" width=10em # PNG/JPEG
-  a, b -> c, d "label" -> e     # flow edge (-- undirected); chains
-  a ..> b "label"               # cross link, dashed (.. undirected)
+Syntax: one statement per line, // comment.
+  ID "Title" row=1 col=2       // ID: letters digits _ inner -; keyword: node ID
+    KID "Kid"                  // child: ID->KID (radial --)
+    -> x "label"               // edge from ID; lone ID reopens it
+  STYLE                        // lines indented under: STYLE (or nn.block)
+  | body line                  // under node; lead spaces indent; **bold**
+  ~ %60 . _ LBL "two words"    // figure row: %NN shade (%100 solid) . outline _ gap, else label
+                               //   LBL*3: 3 columns; rows grid up: strips, heatmaps
+  ~ image "plot.png" width=10em // PNG/JPEG
+  a, b -> c, d "label" -> e    // flow edge (-- undirected); chains
+  a ..> b "label"              // cross link, dashed (.. undirected)
   title "Text"
-  layout radial root=ID         # default: mind map
-  layout layered dir=down|right bands=N order=source # flowchart; source order
-  layout lanes dir=down|right order=source # groups are lanes; node lane=HEAD: lifeline
-  layout venn                   # groups: set circles (<=3)
-  page a0..a4|WxHmm|16:9 portrait|landscape margin=1cm # 16:9 tightest
+  layout radial root=ID        // default: mind map
+  layout layered dir=down|right bands=N order=source // flowchart; source order
+  layout lanes dir=down|right order=source // groups are lanes; node lane=HEAD: lifeline
+  layout venn                  // groups: set circles (<=3)
+  page a0..a4|WxHmm|16:9 portrait|landscape margin=1cm // 16:9 tightest
   font 8pt..30pt wrap=16em
   theme paper|light|dark|mono
   style NAME color=#1565C0 fill=#hex text=#hex shape=box|circle|diamond|none stack=N copies
-        wrap=24em place=aside (layered: strip after flow, ..> to flow)
-  group G "Title" a, b color=#hex times=N # G optional, edge end; times: dashed `Nx`
-  require REL                   # must hold, else E0110
-  prefer REL weight=2           # soft; W0205 if unmet
-  include "a.fitd"|"user/L"|"uml" # L.f x; std: nn flow palette grid arch uml er tree time model seq venn algo
-  uml.class a A "x: int"        # lone uml.class: rows under; nested=child
+        wrap=24em place=aside (layered: strip after flow)
+  group G "Title" a, b color=#hex times=N // G optional, edge end; times: dashed `Nx`
+  require REL                  // must hold, else E0110
+  prefer REL weight=2          // soft; W0205 if unmet
+  include "a.fitd"|"user/L"|"uml" // L.f x; std: nn flow palette grid arch uml er tree time model seq venn algo
+  uml.class a A "x: int"       // lone uml.class: rows under; nested=child
   for i in 1..3 / if X / def f(a)...end; f 1; ${i}; count(s,";") part(s,";",i)
 REL:
-  a left-of b gap=2em | right-of | above | below   # chains: a above b above c
+  a left-of b gap=2em | right-of | above | below  // chains: a above b above c
   a near b within=4em
   a at top-left|top|top-right|left|center|right|bottom-left|bottom|bottom-right
   align row(a, b) | column(a, b) | top(..) | bottom(..) | left(..) | right(..)

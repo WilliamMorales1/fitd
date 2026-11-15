@@ -86,7 +86,7 @@ Node, edge, and group attributes include `color`, `fill`, and `text` where suppo
 `fitd lsp` speaks the Language Server Protocol over standard input and output. Positions count UTF-16 units; edits sync incrementally. Features:
 
 - Diagnostics from the front end on every edit, and from a full layout run on save. Diagnostics in included files appear in those files. Unused styles are marked unnecessary.
-- Hover: nodes and styles show their declaration (with body lines); templates show their signature and the `#` comment above `def`; keywords, attribute keys, attribute values, relations, edge operators, and `include` targets show their documentation. Hovering a diagnostic adds its `fitd explain` text.
+- Hover: nodes and styles show their declaration (with body lines); templates show their signature and the `//` comment above `def`; keywords, attribute keys, attribute values, relations, edge operators, and `include` targets show their documentation. Hovering a diagnostic adds its `fitd explain` text.
 - Go to definition, find references, and document highlight for nodes, styles, and templates, across includes. Definition on an `include` path opens the file; bundled `std/` modules open as read-only copies.
 - Rename for nodes, styles, and templates, across included files. Names defined in the bundled library are not renamed.
 - Document symbols: styles, nodes, keys, groups, and templates.

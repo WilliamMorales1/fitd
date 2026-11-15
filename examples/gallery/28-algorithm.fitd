@@ -1,4 +1,4 @@
-# Algorithm block (DocFigure and ACL-Fig: "algorithm" class).
+// Algorithm block (DocFigure and ACL-Fig: "algorithm" class).
 include "algo"
 layout layered
 page 4:3

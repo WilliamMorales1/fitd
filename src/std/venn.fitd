@@ -1,16 +1,16 @@
-# Venn diagrams: items in the regions of two or three sets. Pair with `layout venn`.
+// Venn diagrams: items in the regions of two or three sets. Pair with `layout venn`.
 style venn.a color=#E69F00
 style venn.b color=#0072B2
 style venn.c color=#009E73
 
-# venn.items id items: one node per `;`-separated item, with ids id1, id2, ...
+// venn.items id items: one node per `;`-separated item, with ids id1, id2, ...
 def items(id, items)
 for i in 1..count(items, ";")
 node ${id}${i} "${part(items, ";", i)}"
 end
 end
 
-# venn.set title style ids: a set holding the `,`-separated ids, blanks skipped.
+// venn.set title style ids: a set holding the `,`-separated ids, blanks skipped.
 def set(title, style, ids)
 set_acc ${title} ${style} "" ${ids} 1
 end
@@ -28,7 +28,7 @@ set_acc ${title} ${style} ${acc + ", " + part(ids, ",", i)} ${ids} ${i + 1}
 end
 end
 
-# venn.two a b only_a both only_b: two sets with `;`-separated items per region.
+// venn.two a b only_a both only_b: two sets with `;`-separated items per region.
 def two(a, b, xa, xab, xb)
 items venn_a ${xa}
 items venn_b ${xb}
@@ -37,7 +37,7 @@ set ${a} venn.a ${names("venn_a", 1, count(xa, ";")) + "," + names("venn_ab", 1,
 set ${b} venn.b ${names("venn_b", 1, count(xb, ";")) + "," + names("venn_ab", 1, count(xab, ";"))}
 end
 
-# venn.three a b c only_a only_b only_c ab ac bc abc: three sets with `;`-separated items per region.
+// venn.three a b c only_a only_b only_c ab ac bc abc: three sets with `;`-separated items per region.
 def three(a, b, c, xa, xb, xc, xab, xac, xbc, xabc)
 items venn_a ${xa}
 items venn_b ${xb}

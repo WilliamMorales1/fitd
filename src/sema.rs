@@ -418,7 +418,7 @@ fn image_row(line: &str) -> Option<Result<(String, f64), String>> {
     Some(Ok((path.to_string(), width)))
 }
 
-/// cells splits one `~` figure row into cells: `#` solid, `%NN` shaded, `.` outlined, `_` gap.
+/// cells splits one `~` figure row into cells: `%NN` shaded (`%100` solid), `.` outlined, `_` gap.
 fn cells(line: &str) -> Vec<Cell> {
     let mut out = Vec::new();
     let mut it = line.chars().peekable();
@@ -428,10 +428,7 @@ fn cells(line: &str) -> Vec<Cell> {
             continue;
         }
         let mut shade = 0.0;
-        if c == '#' {
-            it.next();
-            shade = 1.0;
-        } else if c == '%' {
+        if c == '%' {
             let mut look = it.clone();
             look.next();
             let mut n = String::new();
@@ -1685,7 +1682,7 @@ mod tests {
 
     #[test]
     fn image_rows_hold_one_image_cell() {
-        let (g, d) = run("node a\n~ image \"p.png\" width=6em\n~ # .\n");
+        let (g, d) = run("node a\n~ image \"p.png\" width=6em\n~ %100 .\n");
         assert!(d.is_empty());
         let im = g.nodes[0].figure[0][0].image.as_ref().unwrap();
         assert_eq!((im.path.as_str(), im.width_em), ("p.png", 6.0));

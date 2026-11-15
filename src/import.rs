@@ -155,7 +155,7 @@ impl Doc {
     fn write(mut self) -> (String, Vec<String>) {
         let names: Vec<&str> = self.nodes.iter().map(|n| n.id.as_str()).collect();
         let ids = fitd_ids(&names);
-        let mut o = String::from("# Imported by `fitd import`; positions come from the solver.\n");
+        let mut o = String::from("// Imported by `fitd import`; positions come from the solver.\n");
         match self.down {
             Some(true) => o += "layout layered\n",
             Some(false) => o += "layout layered dir=right\n",

@@ -1,5 +1,5 @@
-# The Collatz sequence from 6, as a while loop: a template that calls itself until k reaches 1.
-# Nobody has proved that this recursion stops for every start, so expansion needs a budget.
+// The Collatz sequence from 6, as a while loop: a template that calls itself until k reaches 1.
+// Nobody has proved that this recursion stops for every start, so expansion needs a budget.
 layout layered dir=right bands=2
 page a4 landscape
 

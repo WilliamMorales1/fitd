@@ -1,5 +1,5 @@
-# UML class and state diagrams. Relations use UML heads; uml.key names them.
-# Member and action lists split on `;`: "id: int; name: str; save()".
+// UML class and state diagrams. Relations use UML heads; uml.key names them.
+// Member and action lists split on `;`: "id: int; name: str; save()".
 style uml.class color=#0072B2 shape=box
 style uml.iface color=#56B4E9 shape=box
 style uml.state color=#009E73 shape=box
@@ -8,58 +8,58 @@ style uml.is head=triangle
 style uml.has tail=diamond
 style uml.uses line=dashed
 
-# uml.class id name members: a class box listing its members.
+// uml.class id name members: a class box listing its members.
 def class(id, name, members)
 uml.class
   node ${id} "${name}"
 lines ${members}
 end
 
-# uml.iface id name members: an interface, titled with its stereotype.
+// uml.iface id name members: an interface, titled with its stereotype.
 def iface(id, name, members)
 uml.iface
   node ${id} "«interface» ${name}"
 lines ${members}
 end
 
-# uml.state id name actions: a state listing its entry, do, and exit actions.
+// uml.state id name actions: a state listing its entry, do, and exit actions.
 def state(id, name, actions)
 uml.state
   node ${id} "${name}"
 lines ${actions}
 end
 
-# uml.start id: the initial pseudostate.
+// uml.start id: the initial pseudostate.
 def start(id)
 uml.mark
   node ${id} "start"
 end
 
-# uml.final id: the final state.
+// uml.final id: the final state.
 def final(id)
 uml.mark
   node ${id} "end"
 end
 
-# uml.is a b: a inherits from or implements b.
+// uml.is a b: a inherits from or implements b.
 def is(a, b)
 uml.is
   ${a} -> ${b}
 end
 
-# uml.has a b mult: a is composed of b, with b's multiplicity such as "1..*".
+// uml.has a b mult: a is composed of b, with b's multiplicity such as "1..*".
 def has(a, b, mult)
 uml.has
   ${a} -- ${b} "${mult}"
 end
 
-# uml.uses a b: a depends on b.
+// uml.uses a b: a depends on b.
 def uses(a, b)
 uml.uses
   ${a} ..> ${b}
 end
 
-# uml.key: a legend for the three relation heads.
+// uml.key: a legend for the three relation heads.
 def key()
 key "inherits" line=solid head=triangle
 key "has" line=solid head=diamond

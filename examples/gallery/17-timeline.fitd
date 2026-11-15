@@ -1,4 +1,4 @@
-# Timeline (history, project reports).
+// Timeline (history, project reports).
 include "time"
 layout layered dir=right
 page 16:9

@@ -1,4 +1,4 @@
-# Research model with hypotheses (Nickerson: models, 101 of 983).
+// Research model with hypotheses (Nickerson: models, 101 of 983).
 include "model"
 layout layered dir=right
 page 16:9

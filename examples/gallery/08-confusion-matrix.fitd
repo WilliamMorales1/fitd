@@ -1,4 +1,4 @@
-# Confusion matrix / heat map (DocFigure: confusion matrix, heat map; ACL-Fig: confusion matrix).
+// Confusion matrix / heat map (DocFigure: confusion matrix, heat map; ACL-Fig: confusion matrix).
 include "grid"
 page 1:1
 font 9pt..28pt

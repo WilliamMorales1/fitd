@@ -734,7 +734,7 @@ mod tests {
 
     #[test]
     fn modern_requests_answer() {
-        let text = "style hot color=#C62828\n# Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nhot\n  node a \"A\"\nnode b\na -> b\npair c d\n";
+        let text = "style hot color=#C62828\n// Pair two nodes.\ndef pair(x, y)\n  node ${x}\n  node ${y}\nend\nhot\n  node a \"A\"\nnode b\na -> b\npair c d\n";
         let none = |_: &str| None;
         let d = doc("file:///x.fitd", "/x.fitd", text, &none);
         let at = |s: &str| position(text, text.rfind(s).unwrap());

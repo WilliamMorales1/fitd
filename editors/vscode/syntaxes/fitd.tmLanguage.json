@@ -63,8 +63,8 @@
       ]
     },
     "comment": {
-      "comment": "`#` right after `=` is a color, anywhere else a comment.",
-      "match": "(?<!=)#.*$",
+      "comment": "`//` starts a comment; `#` right after `=` is a color.",
+      "match": "//.*$",
       "name": "comment.line.number-sign.fitd"
     },
     "declaration": {
@@ -88,7 +88,7 @@
         },
         {
           "comment": "A lone name, or `mod.name`, opens a style block over the lines indented under it, or reopens a node.",
-          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def)\\b)([A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)?)\\s*(?=#|$)",
+          "match": "^\\s*(?!(?:title|root|layout|page|font|theme|style|node|key|group|require|prefer|include|for|if|else|end|def)\\b)([A-Za-z_][\\w-]*(?:\\.[A-Za-z_][\\w-]*)?)\\s*(?=//|$)",
           "captures": { "1": { "name": "entity.name.type.style.fitd" } }
         },
         {

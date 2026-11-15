@@ -1,4 +1,4 @@
-# Styles for the self-describing example; an included style is never reported unused.
+// Styles for the self-describing example; an included style is never reported unused.
 style io color=#00838F shape=circle
 style stage color=#1565C0
 style macro color=#8E24AA fill=#F3E5F5

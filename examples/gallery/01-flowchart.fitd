@@ -1,4 +1,4 @@
-# Flowchart (DocFigure, Nickerson: tight genre). std/flow gives the role colours.
+// Flowchart (DocFigure, Nickerson: tight genre). std/flow gives the role colours.
 include "flow"
 layout layered
 page 3:4

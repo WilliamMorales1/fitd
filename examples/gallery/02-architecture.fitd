@@ -1,4 +1,4 @@
-# Architecture / block diagram (Nickerson: 212 of 983, the largest genre; DocFigure block diagram).
+// Architecture / block diagram (Nickerson: 212 of 983, the largest genre; DocFigure block diagram).
 include "arch"
 layout layered dir=right
 page 16:9

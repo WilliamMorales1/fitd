@@ -1,4 +1,4 @@
-# A domain model: UML classes, inheritance and composition, persisted into an arch store.
+// A domain model: UML classes, inheritance and composition, persisted into an arch store.
 include "uml"
 include "arch"
 title "Orders domain"

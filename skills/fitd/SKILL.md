@@ -46,7 +46,7 @@ Syntax details are in `fitd guide`; `docs/language.md` is the full reference. Wh
 
 - Nodes: `ID "Title"`, `| body line` under it (leading spaces indent, `**bold**`), `wrap=24em`, `shape=box|circle|diamond|none`, `stack=N` (N copies, e.g. repeated layers), `color= fill= text=`, `row= col=` (grid placement: squares, 2x2 matrices, commutative diagrams), `place=aside` (layered: note strip beside the flow).
 - Children by indent: parent links to each indented node (`--` radial, `->` layered). Under a node, `-> x "label"` is an edge from it; a lone declared id reopens it.
-- Figure rows: `~ # %60 . _ LBL "two words" #X*3` draws a grid of cells below the node text (strips, masks, heat maps, tensor bars, unit bars). `~ image "plot.png" width=10em` embeds PNG/JPEG, for plots inside diagrams.
+- Figure rows: `~ %100 %60 . _ LBL "two words" %100X*3` draws a grid of cells below the node text (strips, masks, heat maps, tensor bars, unit bars). `~ image "plot.png" width=10em` embeds PNG/JPEG, for plots inside diagrams.
 - Edges: `->` flow, `--` undirected, `..>` dashed cross link that does not shape the layout, `..` undirected cross link. Chains and fans: `a, b -> c, d "label" -> e`. Attributes `color=`, `line=solid|dashed|dotted`, `head=` and `tail=` (`arrow|triangle|diamond|odiamond|crow|none`).
 - Groups: `group G "Title" a, b color=#hex` draws a frame; list inner members in the outer group to nest. A named group is an edge end (`x -> G`). `times=N` draws a dashed frame titled `Nx`.
 - Keys: `key "Label" color=... line=dashed head=...` adds a legend row at the bottom; `page ... keysize=20pt`.

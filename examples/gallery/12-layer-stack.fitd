@@ -1,4 +1,4 @@
-# Layer / stack diagram (Nickerson: layers).
+// Layer / stack diagram (Nickerson: layers).
 include "arch"
 page 3:4
 font 9pt..28pt

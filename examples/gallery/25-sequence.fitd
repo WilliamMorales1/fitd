@@ -1,4 +1,4 @@
-# UML sequence diagram (Reggio et al., Nickerson: second UML type). Lanes keep message order.
+// UML sequence diagram (Reggio et al., Nickerson: second UML type). Lanes keep message order.
 include "seq"
 layout lanes order=source
 page 4:3

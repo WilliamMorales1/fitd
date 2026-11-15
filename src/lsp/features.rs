@@ -89,8 +89,8 @@ fn module_doc(target: &str) -> Option<String> {
     let text = crate::stdlib::get(target)?;
     let head: Vec<&str> = text
         .lines()
-        .take_while(|l| l.starts_with('#'))
-        .map(|l| l.trim_start_matches('#').trim())
+        .take_while(|l| l.starts_with("//"))
+        .map(|l| l.trim_start_matches('/').trim())
         .collect();
     let mut defs = Vec::new();
     let mut styles = Vec::new();
@@ -454,12 +454,12 @@ pub fn folds(text: &str) -> Value {
         if !body && let Some(n) = node.take() {
             push(n, i - 1, None);
         }
-        if t.starts_with('#') {
+        if t.starts_with("//") {
             comment.get_or_insert(i);
         } else if let Some(c) = comment.take() {
             push(c, i - 1, Some("comment"));
         }
-        if !t.is_empty() && !t.starts_with('#') {
+        if !t.is_empty() && !t.starts_with("//") {
             let col = l.len() - l.trim_start().len();
             while let Some(&(lo, true, c)) = open.last()
                 && c >= col
@@ -497,7 +497,7 @@ pub fn folds(text: &str) -> Value {
                 open.push((i, true, l.len() - l.trim_start().len()))
             }
             // Any other line may own the body lines after it, as `node a` or `step a` does.
-            _ if !w.is_empty() && !body && !t.starts_with('#') => node = Some(i),
+            _ if !w.is_empty() && !body && !t.starts_with("//") => node = Some(i),
             _ => {}
         }
     }
@@ -536,7 +536,7 @@ pub fn colors(text: &str) -> Value {
     let mut out = Vec::new();
     for (n, line) in text.lines().enumerate() {
         let t = line.trim_start();
-        if t.starts_with('#') || t.starts_with('|') {
+        if t.starts_with("//") || t.starts_with('|') {
             continue;
         }
         let b = line.as_bytes();
@@ -594,7 +594,7 @@ fn call(line: &str) -> Option<Call> {
             i += 1;
             continue;
         }
-        if b[i] == b'#' {
+        if b[i..].starts_with(b"//") {
             break;
         }
         let lo = i;
@@ -720,7 +720,7 @@ fn top_level(text: &str, line: usize) -> usize {
             let l = lines[i];
             !l.starts_with([' ', '\t'])
                 && !l.trim().is_empty()
-                && !l.starts_with('#')
+                && !l.starts_with("//")
                 && !l.starts_with("end")
                 || i == 0
         })
@@ -729,7 +729,7 @@ fn top_level(text: &str, line: usize) -> usize {
             matches!(w, "def" | "for" | "if")
         })
         .map(|mut i| {
-            while i > 0 && lines[i - 1].starts_with('#') {
+            while i > 0 && lines[i - 1].starts_with("//") {
                 i -= 1;
             }
             i
@@ -916,7 +916,7 @@ pub fn completion(doc: &Doc, p: &Value, snippets: bool) -> Value {
     let first = words.first().copied().unwrap_or("");
     let stmt = statement(first);
     let quotes = head.matches('"').count() - head.matches("\\\"").count();
-    if t.starts_with('#') || t.starts_with('|') || t.starts_with('~') {
+    if t.starts_with("//") || t.starts_with('|') || t.starts_with('~') {
         return json!([]);
     }
     if stmt == "include" && quotes % 2 == 1 {

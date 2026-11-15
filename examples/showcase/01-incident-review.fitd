@@ -1,4 +1,4 @@
-# Incident review: arch (the system), time (the outage), flow (the response) in one page.
+// Incident review: arch (the system), time (the outage), flow (the response) in one page.
 include "arch"
 include "time"
 include "flow"

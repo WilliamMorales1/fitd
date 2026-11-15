@@ -368,17 +368,17 @@ pub fn split(path: &str, text: &str, stem: &str) -> Result<Split, String> {
     let mut files = vec![(
         format!("{stem}-shared.fitd"),
         format!(
-            "# Settings and styles shared by every page of {from}, written by `fitd split`.\n{shared}"
+            "// Settings and styles shared by every page of {from}, written by `fitd split`.\n{shared}"
         ),
     )];
     let page = |p: Page, title: String, root: usize| {
         let mut s = format!(
-            "# Written by `fitd split` from {from}.\ninclude \"{stem}-shared.fitd\"\n{title}\nroot {}\n\n",
+            "// Written by `fitd split` from {from}.\ninclude \"{stem}-shared.fitd\"\n{title}\nroot {}\n\n",
             g.nodes[root].id
         );
         s += &blocks(&[&body[slot(p)][..], &rest[slot(p)][..]].concat());
         if !stubs[slot(p)].is_empty() {
-            s += "\n# Nodes on other pages that edges here reach.\n";
+            s += "\n// Nodes on other pages that edges here reach.\n";
         }
         let mut stub = Vec::new();
         for &v in &stubs[slot(p)] {
@@ -475,11 +475,11 @@ mod tests {
         assert!(
             a.contains("a1 ..> b1\n")
                 && a.ends_with(
-                    "\n# Nodes on other pages that edges here reach.\nnode b1\n| see page m-b\n"
+                    "\n// Nodes on other pages that edges here reach.\nnode b1\n| see page m-b\n"
                 ),
             "{a}"
         );
-        assert!(get("m-b.fitd").ends_with("a1 ..> b1\n\n# Nodes on other pages that edges here reach.\nnode a1\n| see page m-a\n"), "{}", get("m-b.fitd"));
+        assert!(get("m-b.fitd").ends_with("a1 ..> b1\n\n// Nodes on other pages that edges here reach.\nnode a1\n| see page m-a\n"), "{}", get("m-b.fitd"));
         assert_eq!(out.dropped, ["require a1 near b1"]);
     }
 

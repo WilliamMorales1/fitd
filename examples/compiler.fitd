@@ -1,4 +1,4 @@
-# The fitd pipeline itself, as a layered flowchart with layout constraints.
+// The fitd pipeline itself, as a layered flowchart with layout constraints.
 title "How fitd compiles a diagram"
 layout layered dir=down
 page 240x360mm margin=1cm

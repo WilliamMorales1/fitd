@@ -1,4 +1,4 @@
-# UML state machine (Reggio et al.: state machine among the core UML diagrams).
+// UML state machine (Reggio et al.: state machine among the core UML diagrams).
 include "uml"
 layout layered dir=right
 page 16:9

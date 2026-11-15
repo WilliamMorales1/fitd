@@ -1,4 +1,4 @@
-# Mixed figure: a plot inside a pipeline (Viziometrics, DocFigure, ACL-Fig mix plots and diagrams).
+// Mixed figure: a plot inside a pipeline (Viziometrics, DocFigure, ACL-Fig mix plots and diagrams).
 layout layered dir=right
 page 16:9
 data "Corpus"

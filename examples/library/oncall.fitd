@@ -1,4 +1,4 @@
-# On-call flow built from a user library beside this file.
+// On-call flow built from a user library beside this file.
 include "user/runbook"
 title "Database latency page"
 layout layered

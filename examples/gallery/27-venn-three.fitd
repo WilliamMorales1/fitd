@@ -1,4 +1,4 @@
-# Venn diagram of three sets, every overlap labelled (skills, feature comparisons).
+// Venn diagram of three sets, every overlap labelled (skills, feature comparisons).
 include "venn"
 layout venn
 page 1:1

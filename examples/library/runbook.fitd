@@ -1,30 +1,30 @@
-# runbook: on-call steps, included by oncall.fitd as `include "user/runbook"`.
+// runbook: on-call steps, included by oncall.fitd as `include "user/runbook"`.
 style runbook_alert color=#D55E00
 style runbook_check color=#E69F00 shape=diamond
 style runbook_act color=#0072B2
 style runbook_ok color=#009E73
 
-# runbook.alert(id, name, source): a page that starts an incident
+// runbook.alert(id, name, source): a page that starts an incident
 def alert(id, name, source)
 runbook_alert
   node ${id} "${name}"
   | from ${source}
 end
 
-# runbook.check(id, question): a yes/no question the responder answers
+// runbook.check(id, question): a yes/no question the responder answers
 def check(id, question)
 runbook_check
   node ${id} "${question}"
 end
 
-# runbook.act(id, name, owner): a step and who does it
+// runbook.act(id, name, owner): a step and who does it
 def act(id, name, owner)
 runbook_act
   node ${id} "${name}"
   | ${owner}
 end
 
-# runbook.resolved(id): the end state
+// runbook.resolved(id): the end state
 def resolved(id)
 runbook_ok
   node ${id} "Resolved"

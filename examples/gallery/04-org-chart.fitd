@@ -1,4 +1,4 @@
-# Tree / hierarchy, here an org chart (DocFigure tree diagram; ACL-Fig trees).
+// Tree / hierarchy, here an org chart (DocFigure tree diagram; ACL-Fig trees).
 include "tree"
 layout layered order=source
 page 16:9

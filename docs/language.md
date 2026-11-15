@@ -16,7 +16,7 @@ Grammar uses Extended Backus-Naur Form (EBNF). Terminals appear in double quotes
 
 A newline terminates a statement. End-of-file terminates final statement, if present. Blank lines and lines containing only comments are ignored. Statements do not continue across physical lines.
 
-A `#` character begins a comment unless it immediately follows `=`; in that position it begins a color token. A line whose first non-whitespace character is `|` is a body line, and a line whose first non-whitespace character is `~` is a figure row; `#` has no comment meaning within either. Body lines and figure rows are associated with most recently declared node.
+`//` begins a comment that runs to the end of the line. `#` only begins a color token, written immediately after `=`. A line whose first non-whitespace character is `|` is a body line, and a line whose first non-whitespace character is `~` is a figure row; `//` has no comment meaning within either. Body lines and figure rows are associated with most recently declared node.
 
 Includes are expanded before macro processing. Included paths are resolved relative to including file. Diagnostics retain source locations through both preprocessing stages where available. A parser error is recovered at next line, allowing subsequent statements to be checked.
 
@@ -90,7 +90,7 @@ The lexer recognizes numeric tokens permissively; semantic analysis determines v
 
 Identifiers contain Unicode alphanumeric characters and underscores, with internal hyphens allowed when followed by an alphanumeric character or underscore. Identifiers are case-sensitive. ASCII digit-leading tokens are lexed as numbers rather than identifiers.
 
-Strings use double quotes. A backslash escapes the following non-newline character; `\n` is converted to a newline character. An unterminated string is an error. Comments begin with `#` except for color tokens immediately following `=`. Comments continue to end of line.
+Strings use double quotes. A backslash escapes the following non-newline character; `\n` is converted to a newline character. An unterminated string is an error. Comments begin with `//` and continue to end of line.
 
 Whitespace separates tokens. Spaces and tabs may appear between tokens. Whitespace inside a quoted string or body line is retained subject to trailing whitespace removal from body content.
 
@@ -139,13 +139,12 @@ Cells are whitespace-separated. Each cell is `[SHADE][LABEL][*SPAN]`:
 
 | Cell                        | Meaning                                                      |
 | --------------------------- | ------------------------------------------------------------ |
-| `#`                         | Solid cell                                                   |
-| `%NN`                       | Cell shaded at NN percent of the accent color (`%0`..`%100`) |
+| `%NN`                       | Cell shaded at NN percent of the accent color (`%0`..`%100`); `%100` is solid |
 | `.`                         | Outlined cell                                                |
 | `_`                         | Gap: column advances, nothing is drawn                       |
 | `NAME` or `"two words"`     | Outlined cell carrying that label                            |
-| `#NAME` or `%60"two words"` | Shaded cell carrying that label                              |
-| `#NAME*3`                   | Cell spanning three columns                                  |
+| `%100NAME` or `%60"two words"` | Shaded cell carrying that label                              |
+| `%100NAME*3`                | Cell spanning three columns                                  |
 
 A `*N` suffix is recognized only when digits end the cell, so a label such as `a*t` is kept intact. Labels on shaded cells are drawn in the page background color once shading reaches 55 percent, and in the text color below it.
 
@@ -153,14 +152,14 @@ Column width is the widest single-column cell in that column; a spanning cell th
 
 ```fitd
 mask "Causal mask"
-~ # . . .
-~ # # . .
-~ # # # .
-~ # # # #
+~ %100 . . .
+~ %100 %100 . .
+~ %100 %100 %100 .
+~ %100 %100 %100 %100
 
 bar "Attention weights"
 ~ %90 %55 %20 %5
-~ #"d_model = 64"*4
+~ %100"d_model = 64"*4
 ```
 
 An image row, `~ image "PATH" width=Nem`, puts a PNG or JPEG in the figure instead of cells. It is drawn the full figure width, centered, and its height follows the picture's pixel aspect ratio. `width=` takes an em length and defaults to `10em`, so the picture scales with the body font like everything else. The path is relative to the main file, even inside an included file; a file that cannot be read or is not a PNG or JPEG is error E0014. SVG output embeds the bytes as a data URI, PDF and PNG draw them, and TikZ writes `\includegraphics{PATH}`. This is how a plot from a plotting library goes inside a diagram.
@@ -176,7 +175,7 @@ eval "Validation"
 
 ```fitd
 enc "Encoder layer" stack=4
-~ #"d 64"*4
+~ %100"d 64"*4
 ```
 
 ### Per-node wrap and aside placement

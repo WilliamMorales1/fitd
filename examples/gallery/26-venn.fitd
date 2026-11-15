@@ -1,4 +1,4 @@
-# Venn diagram of two sets (concept overlap, comparisons).
+// Venn diagram of two sets (concept overlap, comparisons).
 include "venn"
 layout venn
 page 4:3

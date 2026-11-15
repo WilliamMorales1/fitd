@@ -1,8 +1,8 @@
-# Algorithm and pseudocode blocks. Lines split on `;`; spaces past the one after `;` indent.
-# Write keywords in `**`: "**for** v **in** V **do**;   d[v] = inf".
+// Algorithm and pseudocode blocks. Lines split on `;`; spaces past the one after `;` indent.
+// Write keywords in `**`: "**for** v **in** V **do**;   d[v] = inf".
 style algo.block color=#0072B2 shape=box wrap=40em
 
-# algo.block id title lines: a titled pseudocode block whose lines keep their indent.
+// algo.block id title lines: a titled pseudocode block whose lines keep their indent.
 def block(id, title, lines)
 algo.block
   node ${id} "${title}"

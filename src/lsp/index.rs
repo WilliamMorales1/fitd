@@ -573,7 +573,7 @@ fn macro_lines(b: &mut Builder<'_, '_, '_>, path: &str, text: &str) {
                 .unwrap_or_default();
             let mut doc = Vec::new();
             for prev in lines[..i].iter().rev() {
-                match prev.trim_start().strip_prefix('#') {
+                match prev.trim_start().strip_prefix("//") {
                     Some(c) => doc.push(c.strip_prefix(' ').unwrap_or(c).to_string()),
                     None => break,
                 }

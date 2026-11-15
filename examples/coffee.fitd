@@ -1,4 +1,4 @@
-# From cherry to cup: a radial map whose center fitd picks, colored by a custom palette.
+// From cherry to cup: a radial map whose center fitd picks, colored by a custom palette.
 title "Coffee"
 page 280x190mm
 font 9pt..32pt wrap=15em
@@ -53,7 +53,7 @@ espresso ..> body color=#AD1457
 
 group "Methods" espresso, filter, press color=#1565C0
 
-# Hard placements in a radial map cost search; preferences keep it fast.
+// Hard placements in a radial map cost search; preferences keep it fast.
 prefer taste at right weight=3
 prefer light left-of dark
 prefer align row(washed, natural)

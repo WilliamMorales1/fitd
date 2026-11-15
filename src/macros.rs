@@ -71,7 +71,7 @@ fn tokens(s: &str) -> Result<Vec<T>, String> {
         let c = cs[i];
         if c.is_whitespace() {
             i += 1;
-        } else if c == '#' {
+        } else if c == '/' && cs.get(i + 1) == Some(&'/') {
             break;
         } else if c.is_ascii_digit() {
             let lo = i;
@@ -369,7 +369,7 @@ fn comment_start(line: &str) -> usize {
                 depth += 1;
             }
             '}' if depth > 0 && !in_str => depth -= 1,
-            '#' if !in_str && depth == 0 && prev != '=' => return i,
+            '/' if !in_str && depth == 0 && prev == '/' => return i - 1,
             _ => {}
         }
         prev = c;
@@ -483,7 +483,7 @@ fn row_words(t: &str) -> Result<Vec<(bool, String)>, String> {
         let c = cs[i];
         if c.is_whitespace() {
             i += 1;
-        } else if c == '#' {
+        } else if c == '/' && cs.get(i + 1) == Some(&'/') {
             break;
         } else if c == '"' {
             let mut w = String::new();
@@ -524,7 +524,7 @@ fn row_words(t: &str) -> Result<Vec<(bool, String)>, String> {
 fn classify(line: &str) -> Result<Line, String> {
     let t = line.trim();
     let verbatim = t.starts_with('|') || t.starts_with('~');
-    if t.starts_with('#') || verbatim && !t.contains("${") {
+    if t.starts_with("//") || verbatim && !t.contains("${") {
         return Ok(Line::Item(Kind::Plain));
     }
     let Some((w, rest)) = is_kw_line(t) else {
@@ -629,7 +629,7 @@ fn list(s: &str) -> Result<Vec<Val>, String> {
         let c = cs[i];
         if c.is_whitespace() || c == ',' {
             i += 1;
-        } else if c == '#' {
+        } else if c == '/' && cs.get(i + 1) == Some(&'/') {
             break;
         } else if c == '"' {
             let mut s = String::new();
@@ -652,7 +652,11 @@ fn list(s: &str) -> Result<Vec<Val>, String> {
             out.push(Val::Str(s));
         } else {
             let lo = i;
-            while i < cs.len() && !(cs[i].is_whitespace() || cs[i] == ',' || cs[i] == '#') {
+            while i < cs.len()
+                && !(cs[i].is_whitespace()
+                    || cs[i] == ','
+                    || cs[i] == '/' && cs.get(i + 1) == Some(&'/'))
+            {
                 i += 1;
             }
             let w: String = cs[lo..i].iter().collect();
@@ -831,7 +835,7 @@ impl Builder<'_> {
             let l = self.lines[k];
             let t = l.trim();
             k += 1;
-            if t.is_empty() || t.starts_with('#') {
+            if t.is_empty() || t.starts_with("//") {
                 continue;
             }
             let c = indent(l);
@@ -930,7 +934,7 @@ impl Expander<'_> {
         let first = body
             .iter()
             .map(|it| self.lines[it.lo])
-            .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
+            .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with("//"))
             .map(indent)
             .min()
             .unwrap_or(0);
@@ -1659,13 +1663,13 @@ mod tests {
     fn comments_are_not_interpolated() {
         let l = run("node a \"$${x} ${1 + 1}\"\n| $${y}\n");
         assert_eq!(visible(&l), ["node a \"${x} 2\"", "| ${y}"]);
-        let l = run("for i in 1..1\n  node a${i} \"#${i}\" color=#123  # ${nope}\nend\n");
+        let l = run("for i in 1..1\n  node a${i} \"#${i}\" color=#123  // ${nope}\nend\n");
         assert!(
             l.diags.is_empty(),
             "{:?}",
             l.diags.iter().map(|d| &d.msg).collect::<Vec<_>>()
         );
-        assert_eq!(visible(&l), ["node a1 \"#1\" color=#123  # ${nope}"]);
+        assert_eq!(visible(&l), ["node a1 \"#1\" color=#123  // ${nope}"]);
     }
 
     #[test]

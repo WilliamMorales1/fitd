@@ -2,14 +2,14 @@
 Every statement kind
 ================================================================================
 
-title "Map"   # comment
+title "Map"   // comment
 layout radial root=core
 page a3 portrait margin=1cm
 font 7pt..40pt wrap=16em
 theme dark link=#FFD54F
 style stage color=#1565C0 shape=box
 node lex "Lexer" color=#fff
-| tokens with byte spans # not a comment
+| tokens with byte spans // not a comment
 lex -> parse, sema "label"
 core ..> sema
 group fe "Front end" lex, parse color=#1565C0
@@ -115,10 +115,10 @@ include "parts/x.fitd"
     path: (string)))
 
 ================================================================================
-Hash after equals is a color, elsewhere a comment
+Hash after equals is a color, slashes start a comment
 ================================================================================
 
-node a color=#fff # accent
+node a color=#fff // accent
 node b "x"
 
 --------------------------------------------------------------------------------
@@ -218,7 +218,7 @@ nn.block
 flow.key
 font -> csp
 a, b -> c
-~ # %60 . "x y"
+~ %100 %60 . "x y"
 
 --------------------------------------------------------------------------------
 

@@ -54,7 +54,7 @@ In `~/.config/helix/languages.toml` (give `command` a full path if `fitd` is not
 name = "fitd"
 scope = "source.fitd"
 file-types = ["fitd"]
-comment-token = "#"
+comment-token = "//"
 indent = { tab-width = 2, unit = "  " }
 language-servers = ["fitd"]
 

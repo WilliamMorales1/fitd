@@ -138,7 +138,7 @@ fn run(args: &[String]) -> FitdResult<ExitCode> {
                 ),
                 None => {
                     for (name, text) in stdlib::MODULES {
-                        let what = text.lines().next().unwrap_or("").trim_start_matches("# ");
+                        let what = text.lines().next().unwrap_or("").trim_start_matches("// ");
                         println!("{name:8} {what}");
                     }
                 }

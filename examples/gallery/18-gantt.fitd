@@ -1,4 +1,4 @@
-# Gantt chart (project plans, grant proposals).
+// Gantt chart (project plans, grant proposals).
 include "grid"
 page 16:9
 font 9pt..28pt

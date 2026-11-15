@@ -1,4 +1,4 @@
-# Neural-network architecture (ACL-Fig: neural networks, architecture diagram).
+// Neural-network architecture (ACL-Fig: neural networks, architecture diagram).
 include "nn"
 layout layered
 page 3:4

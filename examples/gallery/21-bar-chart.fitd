@@ -1,4 +1,4 @@
-# Unit bar chart (DocFigure: bar plot). Only small counts; real plots belong to a plotting tool.
+// Unit bar chart (DocFigure: bar plot). Only small counts; real plots belong to a plotting tool.
 include "grid"
 page 4:3
 font 9pt..28pt

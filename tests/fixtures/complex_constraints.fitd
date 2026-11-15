@@ -1,4 +1,4 @@
-# Test complex soft constraints and alignment.
+// Test complex soft constraints and alignment.
 title "Complex Constraints Test"
 layout layered
 page a4
@@ -14,13 +14,13 @@ node e "End"
 
 a -> b -> c -> d -> e
 
-# Align the highlighted steps in a row
+// Align the highlighted steps in a row
 require align row(b, c, d)
 require b left-of c left-of d
 
-# Test weights: prefer d at bottom-right strongly, but e at bottom-right weakly
+// Test weights: prefer d at bottom-right strongly, but e at bottom-right weakly
 prefer d at bottom-right weight=10
 prefer e at bottom-right weight=1
 
-# Test gap constraints
+// Test gap constraints
 require a left-of b gap=50pt
