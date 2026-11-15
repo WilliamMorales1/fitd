@@ -78,11 +78,6 @@ impl Doc {
     }
 }
 
-const KEYWORDS: &[&str] = &[
-    "title", "root", "layout", "page", "font", "theme", "style", "node", "group", "require",
-    "prefer", "include",
-];
-
 fn fitd_ids(names: &[&str]) -> Vec<String> {
     let mut used = BTreeSet::new();
     names
@@ -101,7 +96,7 @@ fn fitd_ids(names: &[&str]) -> Vec<String> {
             id = id.trim_matches('-').to_string();
             if id.is_empty()
                 || id.starts_with(|c: char| c.is_ascii_digit())
-                || KEYWORDS.contains(&id.as_str())
+                || crate::parse::KEYWORDS.contains(&id.as_str())
             {
                 id = format!("n_{id}");
             }
@@ -235,7 +230,7 @@ impl Doc {
             }
             o += &format!(" {}\n", members.join(", "));
         }
-        (o, self.dropped.into_iter().collect())
+        (crate::fmt::fmt(&o), self.dropped.into_iter().collect())
     }
 }
 
@@ -247,51 +242,122 @@ enum DTok {
     Punct(&'static str),
 }
 
-fn dot_lex(text: &str) -> Result<Vec<DTok>, String> {
-    let cs: Vec<char> = text.chars().collect();
-    let (mut out, mut i) = (Vec::new(), 0);
-    let at_line_start = |i: usize| {
-        cs[..i]
+/// Scanner walks source characters for the DOT and D2 readers, which share comment and string rules.
+struct Scanner {
+    cs: Vec<char>,
+    i: usize,
+    line: usize,
+}
+
+impl Scanner {
+    fn new(text: &str) -> Scanner {
+        Scanner {
+            cs: text.chars().collect(),
+            i: 0,
+            line: 1,
+        }
+    }
+
+    fn peek(&self) -> Option<char> {
+        self.cs.get(self.i).copied()
+    }
+
+    fn at(&self, k: usize) -> Option<char> {
+        self.cs.get(self.i + k).copied()
+    }
+
+    fn starts(&self, s: &str) -> bool {
+        s.chars().enumerate().all(|(k, c)| self.at(k) == Some(c))
+    }
+
+    fn bump(&mut self) -> Option<char> {
+        let c = self.peek()?;
+        self.i += 1;
+        self.line += usize::from(c == '\n');
+        Some(c)
+    }
+
+    /// line_start tells whether only blanks precede the cursor on its line.
+    fn line_start(&self) -> bool {
+        self.cs[..self.i]
             .iter()
             .rev()
             .take_while(|&&c| c != '\n')
             .all(|c| c.is_whitespace())
-    };
-    while i < cs.len() {
-        let c = cs[i];
-        if c.is_whitespace() {
-            i += 1;
-        } else if c == '/' && cs.get(i + 1) == Some(&'/') || c == '#' && at_line_start(i) {
-            while i < cs.len() && cs[i] != '\n' {
-                i += 1;
-            }
-        } else if c == '/' && cs.get(i + 1) == Some(&'*') {
-            i += 2;
-            while i < cs.len() && !(cs[i] == '*' && cs.get(i + 1) == Some(&'/')) {
-                i += 1;
-            }
-            i += 2;
-        } else if c == '"' {
-            let mut s = String::new();
-            i += 1;
-            while i < cs.len() && cs[i] != '"' {
-                if cs[i] == '\\' && i + 1 < cs.len() {
-                    match cs[i + 1] {
-                        '"' => s.push('"'),
-                        'n' | 'l' | 'r' => s.push('\n'),
-                        '\n' => {}
-                        o => {
-                            s.push('\\');
-                            s.push(o);
-                        }
-                    }
-                    i += 2;
-                } else {
-                    s.push(cs[i]);
-                    i += 1;
+    }
+
+    /// skip_line moves to the end of the line, leaving the newline.
+    fn skip_line(&mut self) {
+        while self.peek().is_some_and(|c| c != '\n') {
+            self.bump();
+        }
+    }
+
+    /// skip_past moves past the next `close`, or to the end.
+    fn skip_past(&mut self, close: &str) {
+        while self.peek().is_some() && !self.starts(close) {
+            self.bump();
+        }
+        for _ in close.chars() {
+            self.bump();
+        }
+    }
+
+    /// quoted reads a string from its opening quote and gives the raw text inside, escapes kept, and whether it closed.
+    fn quoted(&mut self, multiline: bool) -> (String, bool) {
+        let q = self.bump().unwrap_or('"');
+        let mut raw = String::new();
+        loop {
+            match self.bump() {
+                None => return (raw, false),
+                Some(c) if c == q => return (raw, true),
+                Some('\n') if !multiline => return (raw, false),
+                Some('\\') => {
+                    raw.push('\\');
+                    raw.extend(self.bump());
                 }
+                Some(c) => raw.push(c),
             }
-            i += 1;
+        }
+    }
+}
+
+fn dot_unescape(raw: &str) -> String {
+    let mut s = String::new();
+    let mut it = raw.chars();
+    while let Some(c) = it.next() {
+        if c != '\\' {
+            s.push(c);
+            continue;
+        }
+        match it.next() {
+            Some('"') => s.push('"'),
+            Some('n' | 'l' | 'r') => s.push('\n'),
+            Some('\n') => {}
+            Some(o) => {
+                s.push('\\');
+                s.push(o);
+            }
+            None => s.push('\\'),
+        }
+    }
+    s
+}
+
+fn dot_lex(text: &str) -> Result<Vec<DTok>, String> {
+    let mut sc = Scanner::new(text);
+    let mut out = Vec::new();
+    let id_char = |c: char| c.is_alphanumeric() || c == '_' || c == '.' || !c.is_ascii();
+    while let Some(c) = sc.peek() {
+        if c.is_whitespace() {
+            sc.bump();
+        } else if sc.starts("//") || c == '#' && sc.line_start() {
+            sc.skip_line();
+        } else if sc.starts("/*") {
+            sc.skip_past("*/");
+        } else if c == '"' {
+            // A string left open runs to the end of the file.
+            let s = dot_unescape(&sc.quoted(true).0);
             match out.last_mut() {
                 Some(DTok::Punct("+")) => {
                     out.pop();
@@ -303,33 +369,33 @@ fn dot_lex(text: &str) -> Result<Vec<DTok>, String> {
             }
         } else if c == '<' {
             let (mut depth, mut s) = (0, String::new());
-            while i < cs.len() {
-                match cs[i] {
+            while let Some(c) = sc.bump() {
+                match c {
                     '<' => depth += 1,
                     '>' => depth -= 1,
                     _ => {}
                 }
-                s.push(cs[i]);
-                i += 1;
+                s.push(c);
                 if depth == 0 {
                     break;
                 }
             }
-            out.push(DTok::Html(s[1..s.len().saturating_sub(1)].to_string()));
-        } else if c == '-' && matches!(cs.get(i + 1), Some('>' | '-')) {
-            out.push(DTok::Punct(if cs[i + 1] == '>' { "->" } else { "--" }));
-            i += 2;
-        } else if c.is_alphanumeric() || c == '_' || c == '.' || c == '-' || !c.is_ascii() {
+            let inner: String = s.chars().skip(1).collect();
+            let inner = inner.strip_suffix('>').unwrap_or(&inner).to_string();
+            out.push(DTok::Html(inner));
+        } else if sc.starts("->") || sc.starts("--") {
+            out.push(DTok::Punct(if sc.at(1) == Some('>') { "->" } else { "--" }));
+            sc.bump();
+            sc.bump();
+        } else if id_char(c) || c == '-' {
             let mut s = String::new();
-            while i < cs.len()
-                && (cs[i].is_alphanumeric()
-                    || cs[i] == '_'
-                    || cs[i] == '.'
-                    || !cs[i].is_ascii()
-                    || (cs[i] == '-' && !matches!(cs.get(i + 1), Some('>' | '-'))))
-            {
-                s.push(cs[i]);
-                i += 1;
+            while let Some(c) = sc.peek() {
+                let dash = c == '-' && !matches!(sc.at(1), Some('>' | '-'));
+                if !(id_char(c) || dash) {
+                    break;
+                }
+                s.push(c);
+                sc.bump();
             }
             out.push(DTok::Id(s));
         } else {
@@ -346,7 +412,7 @@ fn dot_lex(text: &str) -> Result<Vec<DTok>, String> {
                 _ => return Err(format!("unexpected `{c}`")),
             };
             out.push(DTok::Punct(p));
-            i += 1;
+            sc.bump();
         }
     }
     Ok(out)
@@ -948,58 +1014,57 @@ enum D2Seg {
 }
 
 fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
+    let mut sc = Scanner::new(text);
     let mut out = Vec::new();
-    let (mut buf, mut line, mut quote, mut depth) = (String::new(), 1, None, 0usize);
-    let mut it = text.chars().peekable();
+    let (mut buf, mut depth) = (String::new(), 0usize);
     let flush = |buf: &mut String, out: &mut Vec<D2Seg>, line: usize, opens: bool| {
         if !buf.trim().is_empty() || opens {
             out.push(D2Seg::Stmt(buf.trim().to_string(), line, opens));
         }
         buf.clear();
     };
-    while let Some(c) = it.next() {
-        if let Some(q) = quote {
-            buf.push(c);
-            if c == '\\' {
-                buf.extend(it.next());
-            } else if c == q {
-                quote = None;
-            } else if c == '\n' {
-                return Err(format!("line {line}: unterminated string"));
-            }
-            continue;
-        }
+    while let Some(c) = sc.peek() {
+        let line = sc.line;
         match c {
             '"' | '\'' => {
-                quote = Some(c);
+                let (raw, closed) = sc.quoted(false);
+                if !closed {
+                    return Err(format!("line {line}: unterminated string"));
+                }
                 buf.push(c);
+                buf += &raw;
+                buf.push(c);
+                continue;
             }
-            '$' if it.peek() == Some(&'{') => {
-                buf.push(c);
-                for c in it.by_ref() {
+            '$' if sc.at(1) == Some('{') => {
+                while let Some(c) = sc.bump() {
                     buf.push(c);
                     if c == '}' {
                         break;
                     }
                 }
+                continue;
             }
             '#' => {
-                while it.peek().is_some_and(|&c| c != '\n') {
-                    it.next();
-                }
+                sc.skip_line();
+                continue;
             }
+            _ => {}
+        }
+        sc.bump();
+        match c {
             '|' if buf.trim_end().ends_with(':') => {
                 let mut n = 1;
-                while it.next_if_eq(&'|').is_some() {
+                while sc.peek() == Some('|') {
+                    sc.bump();
                     n += 1;
                 }
                 let close = "|".repeat(n);
                 let mut body = String::new();
                 while !body.ends_with(&close) {
-                    let Some(c) = it.next() else {
-                        return Err(format!("line {line}: unterminated block string"));
+                    let Some(c) = sc.bump() else {
+                        return Err(format!("line {}: unterminated block string", sc.line));
                     };
-                    line += usize::from(c == '\n');
                     body.push(c);
                 }
                 body.truncate(body.len() - n);
@@ -1032,7 +1097,6 @@ fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
             '\n' | ';' => {
                 depth = 0;
                 flush(&mut buf, &mut out, line, false);
-                line += usize::from(c == '\n');
             }
             '{' => flush(&mut buf, &mut out, line, true),
             '}' => {
@@ -1042,7 +1106,7 @@ fn d2_lex(text: &str) -> Result<Vec<D2Seg>, String> {
             _ => buf.push(c),
         }
     }
-    flush(&mut buf, &mut out, line, false);
+    flush(&mut buf, &mut out, sc.line, false);
     Ok(out)
 }
 
@@ -1705,7 +1769,7 @@ mod tests {
             subgraph cluster_front { label="Front end"; lex; "parse" [label="Parser\nwith recovery"]; }
             lex -> parse -> sema [label="ast"];
             sema -> out [style=dashed, color="#C62828", penwidth=2];
-            "2nd" -> "node";
+            "2nd" -> "for";
         }"##;
         let (out, dropped) = import("x.dot", dot).unwrap();
         assert!(out.contains("layout layered [dir=right]\n"), "{out}");
@@ -1716,7 +1780,7 @@ mod tests {
         );
         assert!(out.contains("sema ..> out [color=#C62828]\n"), "{out}");
         assert!(
-            out.contains("n_2nd \"2nd\"\n") && out.contains("n_node \"node\"\n"),
+            out.contains("n_2nd \"2nd\"\n") && out.contains("n_for \"for\"\n"),
             "{out}"
         );
         assert!(out.contains("group \"Front end\" lex, parse\n"), "{out}");
